@@ -26,6 +26,28 @@ Three operating modes controlled by `FPL_MODE`:
 
 ---
 
+## Source Authority Hierarchy
+
+FPL Skill implements a **7-level source authority hierarchy (L0-L6)** where L0 is the highest authority (official/most reliable) and L6 is the lowest (community/signal-only):
+
+| Level | Authority | Examples |
+|-------|-----------|----------|
+| **L0** | Official FPL / Premier League data & rules | FPL API, league rulebook, official announcements |
+| **L1** | Official Premier League / Opta-derived data | BPS, defensive contributions, Opta statistics |
+| **L2** | Official club/player communications | Club statements, verified player social media |
+| **L3** | Reputable sports news | Established journalists, major sports outlets |
+| **L4** | FPL expert analysis | FPL analysts, written/video commentary, expert blogs |
+| **L5** | Podcasts / YouTube / fan analyst channels | Community analysis, creator commentary (signal-only) |
+| **L6** | Social posts / community signals | Twitter, Reddit, fan forums (signal-only) |
+
+### Policy
+
+**L5–L6 evidence is informational only** and never sufficient alone to trigger material decisions (transfers, captain selection, chip plays). All material recommendations require corroboration from L0-L4 sources.
+
+**Lower authority never silently overrides higher authority.** When L0 and L6 claim conflict, L0 wins.
+
+Full specification: [contracts/source-contract.md](contracts/source-contract.md)
+
 ## Modules
 
 | Module | Purpose |

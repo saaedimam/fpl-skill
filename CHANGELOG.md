@@ -1,6 +1,33 @@
 # Changelog — FPL Skill
 
 ## v1.1.0 — DRAFT (pending freeze sign-off)
+### Added
+- Forecast Calibration Engine: bias detection, sample-gate enforcement (6 GW minimum)
+- Forecast Scorecard module (`fpl_skill/forecast_scorecard.py`): MAE, RMSE, Brier, log_loss metrics
+- CLI `/calibrate` command: reports metric state (NO_TRACK_RECORD_YET / INSUFFICIENT_SAMPLE / READY)
+- Live API verification harness (`tests/verify_live_api.py`): field-name variance detection
+- Data Adapter field-name fallback: handles events[] (live API) and gameweeks[] (contract)
+- Evidence policy tests (structural): L0-L6 hierarchy validation
+- 7-level source authority hierarchy (L0-L6): official FPL/PL data down to social signals
+
+### Changed
+- CLI refactored to click group: `verify` and `calibrate` as click commands
+- Release hash recomputed post-Phase-1 additions: `7384d198...`
+
+### Unchanged
+- v1.0.0 frozen (aeb89348...)
+- All v1.0.0 squad/formation/transfer/captain/chip rules remain canonical
+
+### Status
+**DRAFT - NOT READY FOR FREEZE**
+
+Unresolved gates blocking freeze sign-off:
+- Live API field verification: bootstrap-static confirmed using events[] (verified via harness); gameweeks[] fallback in place
+- Entry picks auth model: structured failure contract documented; behavior recorded (HTTP 200, 15 picks without auth)
+- Data Adapter schema: contract complete; live verification evidence recorded in evidence/api-verification-2026-09-05.json
+
+See MANIFEST.json for release hash + file inventory. See contracts/ for full specifications (runtime, data-adapter, 4d-prediction, counterfactual, calibration).
+
 
 **Parent:** v1.0.0 (FROZEN). v1.0.0 was not modified.
 
@@ -8,7 +35,7 @@
 - Merged two conflicting, independently-drafted v1.1.0 candidates into one canonical release:
   - **Draft A** contributed: source/news intelligence layer, evidence record format (`source_type/publisher/source_title/published_at/retrieved_at/status/confidence`), YouTube/podcast policy, `/news` command.
   - **Draft B** contributed: RUMOUR→REPORTED→ADVANCED→AGREED→OFFICIAL and REPORTED→CLUB_CONFIRMED→VERIFIED_CURRENT_STATE state machines, freshness windows, transfer/injury intelligence protocols.
-  - **Conflict resolution:** both drafts proposed overlapping but differently-shaped evidence records. Canonical record (below, `evidence/evidence-policy.md`) is the superset: `source_type, publisher, source_title, claim, published_at, retrieved_at, confidence, corroboration, contradictions, FPL_impact`. Both drafts' source hierarchies were compatible (6–7 levels, same ordering); canonicalized to the L0–L6 scale used by v1.1.0.
+  - **Conflict resolution:** both drafts proposed overlapping but differently-shaped evidence records. Canonical record (below, `evidence/evidence-policy.md`) is the superset: `source_type, publisher, source_title, claim, published_at, retrieved_at, confidence, corroboration, contradictions, FPL_impact`. Both drafts' source hierarchies were compatible (6–7 levels, same ordering); canonicalized to the L0–L6 scale used by v1.1.0. Canonical: 7-level source authority hierarchy (L0-L6): official FPL/PL data down to social signals.
   - Both drafts are marked `archived`/DEPRECATED and point to this release. Neither is used as an operating skill.
 - Both drafts' independent restatements of unchanged v1.0.0 material (rules baseline, squad/formation/transfer/captain/chip algorithms, trajectory) were dropped from v1.1.0's own body; v1.1.0 references v1.0.0 directly instead of duplicating it, to avoid drift between two copies of the same rules.
 
