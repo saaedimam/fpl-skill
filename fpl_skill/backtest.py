@@ -43,6 +43,9 @@ class CaptainDecision:
     recommended_vice_name: str
     squad_ids: List[int]
     reasoning: str  # "highest_ep", "fixture_swing", "role_secure"
+    # FIX-02: snapshot EP at decision time to avoid look-ahead bias in backtest
+    captain_ep_at_decision: float = 0.0
+    vice_ep_at_decision: float = 0.0
 
 
 @dataclass
@@ -92,6 +95,17 @@ class CaptainBacktest:
         captain = xi_res.get("captain", {})
         vice = xi_res.get("vice_captain", {})
 
+        # FIX-02: capture EP at decision time. compute_backtest reads these
+        # stored values instead of recomputing with post-season data (look-ahead).
+        cap_ep = 0.0
+        vice_ep = 0.0
+        cap_player = self.elements.get(captain.get("player_id", 0))
+        vice_player = self.elements.get(vice.get("player_id", 0))
+        if cap_player:
+            cap_ep = calculate_player_gw_ep(cap_player, gw, self.fixture_map)
+        if vice_player:
+            vice_ep = calculate_player_gw_ep(vice_player, gw, self.fixture_map)
+
         decision = CaptainDecision(
             gw=gw,
             recommended_captain_id=captain.get("player_id", 0),
@@ -99,7 +113,9 @@ class CaptainBacktest:
             recommended_vice_id=vice.get("player_id", 0),
             recommended_vice_name=vice.get("web_name", "Unknown"),
             squad_ids=squad_ids,
-            reasoning=reasoning
+            reasoning=reasoning,
+            captain_ep_at_decision=cap_ep,
+            vice_ep_at_decision=vice_ep,
         )
         self.decisions.append(decision)
         return decision
@@ -110,16 +126,17 @@ class CaptainBacktest:
 
         Args:
             actuals_by_gw: {gw: {player_id: actual_points}}
+
+        FIX-02: uses stored decision-time EP (captain_ep_at_decision, vice_ep_at_decision)
+        instead of recomputing with post-season data (look-ahead bias).
         """
         records = []
         for dec in self.decisions:
             actuals = actuals_by_gw.get(dec.gw, {})
             cap_actual = actuals.get(dec.recommended_captain_id, 0.0)
-            vice_actual = actuals.get(dec.recommended_vice_id, 0.0)
 
-            # What we predicted for captain (EP)
-            cap_player = self.elements.get(dec.recommended_captain_id)
-            cap_predicted = calculate_player_gw_ep(cap_player, dec.gw, self.fixture_map) if cap_player else 0.0
+            # FIX-02: use decision-time EP, not post-hoc recomputation
+            cap_predicted = dec.captain_ep_at_decision
 
             records.append(CalibrationRecord(
                 gw=dec.gw,

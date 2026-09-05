@@ -147,9 +147,14 @@ def normalize_dataset(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def build_fixture_map(fixtures: List[Dict[str, Any]]) -> Dict[int, Dict[str, Dict[str, Any]]]:
-    """Build lookup: fixture_map[gameweek][team_name] -> {opp, is_home, fdr}."""
-    team_gw_info = {gw: {} for gw in range(1, 39)}
+def build_fixture_map(fixtures: List[Dict[str, Any]]) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
+    """Build lookup: fixture_map[gameweek][team_name] -> list of {opp, is_home, fdr}.
+
+    Stores a LIST per (gw, team) so that Double Gameweek fixtures are both
+    preserved. Blank Gameweek teams have an empty list ([] → EP = 0).
+    Single GW teams have a one-element list (standard behaviour).
+    """
+    team_gw_info: Dict[int, Dict[str, List[Dict[str, Any]]]] = {gw: {} for gw in range(1, 39)}
     for f in fixtures:
         gh = f.get("gameweek_history") or f.get("fixture_details")
         if isinstance(gh, str):
@@ -161,8 +166,8 @@ def build_fixture_map(fixtures: List[Dict[str, Any]]) -> Dict[int, Dict[str, Dic
             h_diff = f.get("team_h_difficulty", 3)
             a_diff = f.get("team_a_difficulty", 3)
             if gw and ht and at:
-                team_gw_info[gw][ht] = {"opp": at, "is_home": True, "fdr": h_diff}
-                team_gw_info[gw][at] = {"opp": ht, "is_home": False, "fdr": a_diff}
+                team_gw_info[gw].setdefault(ht, []).append({"opp": at, "is_home": True, "fdr": h_diff})
+                team_gw_info[gw].setdefault(at, []).append({"opp": ht, "is_home": False, "fdr": a_diff})
     return team_gw_info
 
 
@@ -171,12 +176,28 @@ def build_fixture_map(fixtures: List[Dict[str, Any]]) -> Dict[int, Dict[str, Dic
 # ---------------------------------------------------------------------------
 
 def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optional[Dict[int, Dict[str, Any]]] = None) -> float:
+    """Compute expected points for a player in a given gameweek.
+
+    Handles:
+    - Blank GW: team has no fixtures → returns 0.0
+    - Single GW: one fixture → standard EP
+    - Double GW: two fixtures → sum of both (DGW assets correctly valued 2×)
+
+    FIX-01 applied: reads 'fdr' key (was 'difficulty') matching build_fixture_map output.
+    FIX-03 applied: iterates over fixture list to support DGW.
+    """
     if fixture_map is None:
         fixture_map = player.get("fixture_map", {})
     team = player.get("team")
-    fix = fixture_map.get(gw, {}).get(team)
-    if not fix:
-        return 0.0
+
+    # FIX-03: fixture_map now stores a list of fixtures per (gw, team)
+    fixtures = fixture_map.get(gw, {}).get(team)
+
+    # Backward compat: handle old dict-style entries from cached data
+    if isinstance(fixtures, dict):
+        fixtures = [fixtures]
+    elif not fixtures:
+        return 0.0  # BGW or unknown team — correct: 0 EP
 
     pos = player.get("position", "MID")
     mins = player.get("minutes", 0)
@@ -191,19 +212,6 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     if cop is not None:
         mins_prob *= float(cop) / 100.0
 
-    fdr = fix.get("difficulty", 3)
-    # STEADY EXPONENTIAL CURVE
-    fdr_curve = {1: 1.40, 2: 1.25, 3: 1.00, 4: 0.85, 5: 0.70}
-    fdr_mult = fdr_curve.get(fdr, 1.0)
-    
-    # HEAVY H2H MISMATCH MODIFIER 
-    cost = float(player.get("now_cost", 50) or 50)
-    is_home = fix.get("is_home", True)
-    if is_home and fdr <= 2 and cost >= 100:
-        fdr_mult *= 1.25  # Big bump for premium home bullies
-
-    home_mult = 1.10 if is_home else 0.90
-    
     xg = float(player.get("expected_goals", 0.0) or 0.0)
     xa = float(player.get("expected_assists", 0.0) or 0.0)
     form = float(player.get("form", 0.0) or 0.0)
@@ -220,8 +228,26 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     else:
         base_ep = 2.0
 
-    ep = base_ep * mins_prob * fdr_mult * home_mult
-    return round(ep, 2)
+    # FDR curve
+    fdr_curve = {1: 1.40, 2: 1.25, 3: 1.00, 4: 0.85, 5: 0.70}
+
+    total_ep = 0.0
+    for i, fix in enumerate(fixtures):
+        # FIX-01: key is 'fdr', not 'difficulty'
+        fdr = fix.get("fdr", 3)
+        fdr_mult = fdr_curve.get(fdr, 1.0)
+
+        is_home = fix.get("is_home", True)
+        home_mult = 1.10 if is_home else 0.90
+
+        # DGW rotation dampener: second fixture has slight minutes-probability reduction
+        # for rotation-risk players (mins < 90 per game suggests not guaranteed starter)
+        rotation_damp = 0.90 if (i > 0 and mins < 90) else 1.0
+
+        ep = base_ep * mins_prob * fdr_mult * home_mult * rotation_damp
+        total_ep += ep
+
+    return round(total_ep, 2)
 
 
 
