@@ -56,7 +56,7 @@ Three operating modes controlled by `FPL_MODE`:
 ### Install
 
 ```bash
-git clone https://github.com/saaedimam/fpl-skill.git
+git clone https://github.com/YOUR_USERNAME/fpl-skill.git
 cd fpl-skill
 python3 -m venv .venv
 source .venv/bin/activate
@@ -78,7 +78,7 @@ Get the cookie from your browser DevTools after logging into the FPL website (`p
 ### Environment
 
 ```bash
-export FPL_TEAM_ID=1512229        # your FPL entry ID
+export FPL_TEAM_ID=YOUR_TEAM_ID        # your FPL entry ID
 export FPL_MODE=advisory          # advisory | approval | autonomous
 ```
 
@@ -97,7 +97,7 @@ python -m fpl_skill.cli account verify
 ```python
 from fpl_skill.prediction_engine import PredictionEngine
 
-engine = PredictionEngine(team_id="1512229")
+engine = PredictionEngine(team_id="YOUR_TEAM_ID")
 print(engine.run(target_gw=5))
 ```
 
@@ -113,7 +113,7 @@ python -m fpl_skill.optimizer
 ```python
 from fpl_skill.transfer_intelligence import TransferIntelligence
 
-ti = TransferIntelligence(team_id="1512229")
+ti = TransferIntelligence(team_id="YOUR_TEAM_ID")
 print(ti.evaluate_transfers(target_gw=5))
 ```
 
@@ -123,10 +123,10 @@ print(ti.evaluate_transfers(target_gw=5))
 from fpl_skill.execution_sandbox import ExecutionSandbox
 from fpl_skill.account_adapter import FPLAccountAdapter
 
-adapter = FPLAccountAdapter("1512229")
+adapter = FPLAccountAdapter("YOUR_TEAM_ID")
 state   = adapter.get_state(adapter.get_active_event_id())
 
-sandbox = ExecutionSandbox("1512229")
+sandbox = ExecutionSandbox("YOUR_TEAM_ID")
 result  = sandbox.simulate(state, {"sell": 496, "buy": 2})
 print(result)  # {"status": "SIMULATION_COMPLETE", "evidence_gap": [...]}
 ```

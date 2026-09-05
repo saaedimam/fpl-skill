@@ -4,7 +4,7 @@ import os
 
 class TestFPLAdapter(unittest.TestCase):
     def setUp(self):
-        self.team_id = "1512229"
+        self.team_id = "YOUR_TEAM_ID"
         self.adapter = FPLAccountAdapter(self.team_id)
 
     def test_state_integrity(self):
