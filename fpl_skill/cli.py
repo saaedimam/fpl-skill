@@ -2,6 +2,7 @@ import os
 import sys
 import click
 from fpl_skill.account_adapter import FPLAccountAdapter
+from fpl_skill.backtest import CaptainBacktest, BenchBacktest, TransferBacktest
 
 
 @click.group()
@@ -79,6 +80,91 @@ def calibrate(gw, by_category):
 
     click.echo()
     click.echo("✅ Calibration data available. Use `/predict <player> <horizon>` for live forecasts.")
+
+
+@cli.command()
+@click.option("--gw", default=None, type=int, help="Target gameweek for the decision snapshot.")
+def backtest_captain(gw):
+    """Backtest captain recommendations against actual outcomes."""
+    team_id = os.environ.get("FPL_TEAM_ID")
+    if not team_id:
+        click.echo("Error: FPL_TEAM_ID not set.")
+        sys.exit(1)
+    try:
+        bt = CaptainBacktest(team_id)
+        state = bt.adapter.get_state(gw or bt.adapter.get_active_event_id())
+        if state["optimization_state"] != "OPTIMIZATION_READY":
+            click.echo(f"⛔  State not ready: {state['optimization_state']}")
+            sys.exit(1)
+        target_gw = gw or state["target_gameweek"]
+        dec = bt.record_decision(target_gw, state["squad_ids"])
+        click.echo("CAPTAIN RECOMMENDATION\n----------------------")
+        click.echo(f"GW{target_gw} Captain : {dec.recommended_captain_name}")
+        click.echo(f"GW{target_gw} Vice    : {dec.recommended_vice_name}")
+        click.echo()
+        click.echo("ℹ️  Backtest certificate generated after GW results are final.")
+        click.echo("    Run `/backtest-captain --gw <N>` with actuals to calibrate.")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--gw", default=None, type=int, help="Target gameweek for the decision snapshot.")
+def backtest_bench(gw):
+    """Backtest bench-order recommendations against actual minutes."""
+    team_id = os.environ.get("FPL_TEAM_ID")
+    if not team_id:
+        click.echo("Error: FPL_TEAM_ID not set.")
+        sys.exit(1)
+    try:
+        bt = BenchBacktest(team_id)
+        state = bt.adapter.get_state(gw or bt.adapter.get_active_event_id())
+        if state["optimization_state"] != "OPTIMIZATION_READY":
+            click.echo(f"⛔  State not ready: {state['optimization_state']}")
+            sys.exit(1)
+        target_gw = gw or state["target_gameweek"]
+        dec = bt.record_decision(target_gw, state["squad_ids"])
+        click.echo("BENCH ORDER\n-----------")
+        for rank, pid in enumerate(dec.bench_order):
+            p = bt.elements.get(pid, {})
+            click.echo(f"  Sub {rank + 1}: {p.get('web_name', pid)}")
+        click.echo()
+        click.echo("ℹ️  Backtest certificate generated after GW results are final.")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--gw", default=None, type=int, help="Target gameweek for the decision snapshot.")
+@click.option("--bank", default=0.0, type=float, help="Bank in £m (e.g. 0.5).")
+def backtest_transfer(gw, bank):
+    """Backtest 1-FT transfer recommendations against actual EP gains."""
+    team_id = os.environ.get("FPL_TEAM_ID")
+    if not team_id:
+        click.echo("Error: FPL_TEAM_ID not set.")
+        sys.exit(1)
+    try:
+        bt = TransferBacktest(team_id)
+        state = bt.adapter.get_state(gw or bt.adapter.get_active_event_id())
+        if state["optimization_state"] != "OPTIMIZATION_READY":
+            click.echo(f"⛔  State not ready: {state['optimization_state']}")
+            sys.exit(1)
+        target_gw = gw or state["target_gameweek"]
+        dec = bt.record_decision(target_gw, state["squad_ids"], bank=bank)
+        if dec is None:
+            click.echo("ℹ️  No transfer improves EP by the 1-point threshold. Hold.")
+            return
+        click.echo("TRANSFER RECOMMENDATION\n-----------------------")
+        click.echo(f"OUT : {dec.player_out_name}")
+        click.echo(f"IN  : {dec.player_in_name}")
+        click.echo(f"Projected EP gain (GW3–6): +{dec.ep_gain_projected:.2f}")
+        click.echo()
+        click.echo("ℹ️  Backtest certificate generated after GW results are final.")
+    except Exception as e:
+        click.echo(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
