@@ -1,0 +1,47 @@
+{
+  "skill": "FPL skill",
+  "version": "1.1.0",
+  "season": "2026/27",
+  "status": "DRAFT",
+  "parent": {
+    "skill": "FPL skill",
+    "version": "1.0.0",
+    "status": "FROZEN",
+    "sha256": "aeb89348aa39f9baaa005c792a94a23b39415031636f31d7147234490a17e070"
+  },
+  "canonical_files": [
+    "SKILL.md",
+    "VERSION",
+    "CHANGELOG.md",
+    "contracts/runtime-contract.md",
+    "contracts/source-contract.md",
+    "contracts/prediction-contract.md",
+    "contracts/decision-contract.md",
+    "contracts/calibration-contract.md",
+    "schemas/player-state.schema.json",
+    "schemas/prediction.schema.json",
+    "schemas/decision.schema.json",
+    "schemas/calibration-record.schema.json",
+    "evidence/evidence-policy.md",
+    "tests/validation-suite.md",
+    "tests/run_validation.py"
+  ],
+  "file_hashes": {
+    "SKILL.md": "fc6d69cb398d9159658dec4707b3d23149720e6e091bed870b9fa8b1850c39c7",
+    "VERSION": "1575e1af4a95f12f70b4ee6a6adce8160953d93ea17dc2611b90883ccc3ad3b8",
+    "CHANGELOG.md": "2775280cc9c37d76395b840a8280249d26205394175f87b491fb56852def469a",
+    "contracts/runtime-contract.md": "cd2cc21fbda28757df251b311233e4fd7237b624609150b4c38ca85fe107b344",
+    "contracts/source-contract.md": "bfb0b34254867d5224b977015d8736d439b53e58fb8b10588fc92f96646bebb0",
+    "contracts/prediction-contract.md": "72d84dee4e289441248931c5b05ef5181aed9284a3b155d6ea4ae448b31610e8",
+    "contracts/decision-contract.md": "2a6a98a45b8b4286ff1555f7f877edb181102295d675aea8c161317ef3b74e2b",
+    "contracts/calibration-contract.md": "613e28c9944a5ad57f4c649ef3b0c46cdd76648ac28461208b3993c661d5d8ee",
+    "schemas/player-state.schema.json": "176a74fa28fa0d7c18c0a2f2e53dc5a2b6a08ca2156e5e7ec467527f06cf69a3",
+    "schemas/prediction.schema.json": "9ea8b4f5431ce763222de53a2055f9e2496bab93ca3f195f87eb067ebff2c6b4",
+    "schemas/decision.schema.json": "7fda88ad5e3cfa77985be95af0a3e5644a59e096211d3576791463a66d2a6f6d",
+    "schemas/calibration-record.schema.json": "d22fd6c8baca14ccd1299c00a75365b3d44ab1420371533804344f7a4269c619",
+    "evidence/evidence-policy.md": "fe88c66992d6309700b453fd613bae938742e790536bd1ba8b2105bfeba4218b",
+    "tests/validation-suite.md": "17d214222fe1725858814733deb27b390d0f3da024fc6b6f9bdb27bc247a8bfa",
+    "tests/run_validation.py": "f5dff7e32f5292ebd3b3989e9c1b2b26c1a8304c454a512aabb97b8e4be6fd38"
+  },
+  "release_hash": "523b6992c110c4434f7c9228530d773fd9e3000a0d205c233b33be860727ee62"
+}
