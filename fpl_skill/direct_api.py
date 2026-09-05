@@ -11,6 +11,81 @@ import time
 import urllib.request
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class FieldNotFoundError(Exception):
+    """Raised when expected FPL API response field is missing."""
+    pass
+
+
+class DirectFPLClient:
+    """
+    Minimal FPL API client with field-name-variance handling.
+    """
+
+    def _get(self, path: str):
+        """GET an FPL API path. Raises on failure (fetch_url returns None on error)."""
+        if not path.startswith("/"):
+            path = "/" + path
+        result = fetch_url(BOOTSTRAP_URL if path == "/bootstrap-static/" else
+                           "https://fantasy.premierleague.com/api" + path)
+        if result is None:
+            raise RuntimeError(f"Failed to fetch {path}")
+        return result
+
+    def fetch_master(self):
+        """
+        Fetch master data (bootstrap-static).
+
+        Handles field-name variance: tries 'events' first (live 2026/27 FPL API field name),
+        falls back to 'gameweeks' for compatibility with contract documentation.
+
+        Returns:
+            dict with keys: gameweeks, players, teams, game_settings, field_used
+
+        Raises:
+            FieldNotFoundError: if neither 'events' nor 'gameweeks' field present
+        """
+        try:
+            response = self._get("/bootstrap-static/")
+        except Exception as e:
+            logger.error(f"Failed to fetch bootstrap-static: {e}")
+            raise
+
+        # Handle field-name variance: events[] (live API) or gameweeks[] (contract)
+        gameweeks = None
+        field_used = None
+
+        if "events" in response:
+            gameweeks = response["events"]
+            field_used = "events"
+            logger.debug(f"bootstrap-static: using 'events[]' field ({len(gameweeks)} events)")
+        elif "gameweeks" in response:
+            gameweeks = response["gameweeks"]
+            field_used = "gameweeks"
+            logger.debug(f"bootstrap-static: using 'gameweeks[]' field ({len(gameweeks)} gameweeks)")
+        else:
+            available_keys = list(response.keys()) if isinstance(response, dict) else []
+            raise FieldNotFoundError(
+                f"bootstrap-static response missing both 'events' and 'gameweeks' fields. "
+                f"Available keys: {available_keys}"
+            )
+
+        # Extract other fields (field-name agnostic)
+        players = response.get("elements", [])
+        teams = response.get("teams", [])
+        game_settings = response.get("game_settings", {})
+
+        return {
+            "gameweeks": gameweeks,
+            "players": players,
+            "teams": teams,
+            "game_settings": game_settings,
+            "field_used": field_used  # metadata for debugging/logging
+        }
 
 ROOT = Path(__file__).parent
 DB_PATH = ROOT / "jervis.db"
