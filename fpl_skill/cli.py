@@ -19,7 +19,7 @@ def verify():
     adapter = FPLAccountAdapter(team_id)
     state = adapter.get_state(adapter.get_active_event_id())
     click.echo("FPL ACCOUNT\n-----------")
-    click.echo(f"Team ID: {state['target_gameweek']}")  # Simplified
+    click.echo(f"Team ID: {team_id}")
     click.echo("Identity: VERIFIED")
     click.echo("Auth: VALID")
 

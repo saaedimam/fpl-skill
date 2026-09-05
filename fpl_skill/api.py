@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FPL Skill v1.3.0 — Production-Grade Intelligence, Decision & Wildcard System
+FPL Skill v1.1.0 — Production-Grade Intelligence, Decision & Wildcard System
 
 Provides:
 - Canonical Current Squad resolution and validation

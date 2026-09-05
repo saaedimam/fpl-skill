@@ -35,3 +35,12 @@ ENV/
 .DS_Store
 .cursor/
 .claude/
+
+# Sprint/gate process artifacts (one-day build scaffolding)
+GATE-*.md
+PHASE-*.md
+PHASE_3_*.md
+CODEX_PROMPT_CARD.txt
+FPL_SKILL_CODEX_EXECUTION_BRIEF.md
+IOR_QUICK_START.txt
+FREEZE_SIGN_OFF.md

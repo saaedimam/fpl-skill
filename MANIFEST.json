@@ -2,7 +2,7 @@
   "skill": "FPL skill",
   "version": "1.1.0",
   "season": "2026/27",
-  "status": "DRAFT",
+  "status": "FROZEN",
   "parent": {
     "skill": "FPL skill",
     "version": "1.0.0",
@@ -27,9 +27,9 @@
     "tests/run_validation.py"
   ],
   "file_hashes": {
-    "SKILL.md": "fc6d69cb398d9159658dec4707b3d23149720e6e091bed870b9fa8b1850c39c7",
+    "SKILL.md": "47fcb6c4aa748b691a753b642d58ecb55e73ab917d76bf355a6dd7fe6d6e6880",
     "VERSION": "1575e1af4a95f12f70b4ee6a6adce8160953d93ea17dc2611b90883ccc3ad3b8",
-    "CHANGELOG.md": "2775280cc9c37d76395b840a8280249d26205394175f87b491fb56852def469a",
+    "CHANGELOG.md": "98bdf808cdb542936668ee58e1d8eac9c6f8cb50626873b6a85f83e00dfae5c0",
     "contracts/runtime-contract.md": "cd2cc21fbda28757df251b311233e4fd7237b624609150b4c38ca85fe107b344",
     "contracts/source-contract.md": "bfb0b34254867d5224b977015d8736d439b53e58fb8b10588fc92f96646bebb0",
     "contracts/prediction-contract.md": "72d84dee4e289441248931c5b05ef5181aed9284a3b155d6ea4ae448b31610e8",
@@ -41,7 +41,7 @@
     "schemas/calibration-record.schema.json": "d22fd6c8baca14ccd1299c00a75365b3d44ab1420371533804344f7a4269c619",
     "evidence/evidence-policy.md": "fe88c66992d6309700b453fd613bae938742e790536bd1ba8b2105bfeba4218b",
     "tests/validation-suite.md": "17d214222fe1725858814733deb27b390d0f3da024fc6b6f9bdb27bc247a8bfa",
-    "tests/run_validation.py": "f5dff7e32f5292ebd3b3989e9c1b2b26c1a8304c454a512aabb97b8e4be6fd38"
+    "tests/run_validation.py": "1a460310f026c340a280a6ace4ca0084446b835ba74bc8dfa53abdfd25fd54f0"
   },
-  "release_hash": "88015c3f6d9e1e6007861cb1c6ab06d8d7e4065863bc2e5803d3070cb0658ce7"
+  "release_hash": "63d93f89783282ed7522d94f6e991919139fdb56aa5abebc35e91569aa3750b5"
 }
