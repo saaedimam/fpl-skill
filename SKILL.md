@@ -502,3 +502,36 @@ Draft A and Draft B are historical/deprecated only and must never be executed.
 v1.0.0 remains frozen and untouched.
 
 This skill is global and user-agnostic. User-specific FPL state belongs in runtime state, not in SKILL.md.
+## 20. Execution Playbook
+
+Live execution knowledge. Not model rules; verified live GW4 2026/27 run.
+
+### 20.1 Live API endpoints (session-authenticated)
+- GET /api/my-team/{team_id}/ — current picks, bank, value
+- POST /api/my-team/{team_id}/ — apply full 15-pick state
+Modern React SPA does NOT use the legacy /api/entry/{tid}/event/{gw}/picks/ write path. SPA reads/writes /api/my-team/ only.
+
+### 20.2 Authoritative write = API POST, not DOM
+DOM checkbox/button clicks on the React 18 SPA are event-source no-ops for .click() and CDP mouse events in some states. When DOM interaction stalls, the authoritative non-destructive path is a same-origin fetch from the page context:
+    fetch('/api/my-team/{team_id}/', {method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({picks:[{element, position, is_captain, is_vice_captain}, ...], chip:null})})
+- 200/202 = applied. 400 includes field error bodies.
+- PATCH-style partial apply is not supported: payload is the complete 15-pick array, positions 1..15.
+- POST from page context inherits the browser session cookie; no separate auth needed.
+
+### 20.3 Bench/formation backend constraints (verified GW4)
+- GK locked to position 12 (first bench slot). GK at 13/14/15 rejected:
+      {"non_field_errors":[{"message":"Sub-position not allowed element type","code":"sub_position_not_allowed"}]}
+- Starting XI positions 1..11, bench 12..15. Formation derived from XI.
+- SKILL.md section 12 formation rules still govern optimizer output.
+
+### 20.4 Player card menu
+- Card click opens drawer (Full Profile / Substitute / Captain / Vice Captain).
+- Substitute swaps via drawer only in valid positional range; position 12 GK lock applies to the swap engine too (no GK-last bench).
+
+### 20.5 Element identity
+Player fpl_id from /bootstrap-static/ elements; web_name is display-only (accents/spaces vary: "Groß", "João Pedro"). Always key state by element id, never by name.
+
+### 20.6 Verified data freshness
+GW4 current. Deadline per event API; confirm before acting. Do not re-derive from page text; use /api/my-team/ for source of truth and page only for confirmation.
