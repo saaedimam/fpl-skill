@@ -121,8 +121,9 @@ class PlayerDistribution:
             "mean": self.mean, "variance": self.variance, "std_dev": self.std_dev,
             "skewness": self.skewness, "kurtosis": self.kurtosis,
             "p_zero": self.p_zero, "p_haul": self.p_haul, "p_bench": self.p_bench, "p_injured": self.p_injured,
-            
+
             "timestamp": self.data_timestamp, "notes": self.notes,
+            "confidence": self.confidence,
         }
 
 
@@ -298,10 +299,18 @@ class ProbabilisticEPEngine:
             return base, variance
     
     def _fixture_multiplier(self, inputs: DistributionModelInputs) -> float:
-        """Apply fixture difficulty and home/away multiplier."""
-        fdr_mult = self.FDR_MULTIPLIERS.get(inputs.fixture_difficulty, 1.0)
+        """Apply fixture difficulty and home/away multiplier.
+
+        Raise on invalid/missing fixture difficulty instead of silently
+        substituting a neutral multiplier (P0-BUG-002: silent fallback)."""
+        fdr = inputs.fixture_difficulty
+        if fdr not in self.FDR_MULTIPLIERS:
+            raise ValueError(
+                f"Invalid fixture_difficulty {fdr!r}: must be 1-5 on the FDR scale"
+            )
+        fdr_mult = self.FDR_MULTIPLIERS[fdr]
         home_mult = self.HOME_MULTIPLIER if inputs.is_home else self.AWAY_MULTIPLIER
-        
+
         return fdr_mult * home_mult
     
     def _minutes_probability_adjustment(self, inputs: DistributionModelInputs) -> Dict:
@@ -510,7 +519,15 @@ def replace_scalar_ep_with_distribution(
             team_conceded_per_gw=player_data.get("team_conceded_per_gw", 1.2),
         )
         
+        # P0-BUG-002: missing availability/location inputs must not silently
+        # assume favourable values (100% availability, home). Flag record.
+        missing_critical = [
+            k for k in ("status", "chance_of_playing_next_round", "is_home", "fixture_difficulty")
+            if k not in player_data
+        ]
         dist = engine.generate_distribution(inputs)
+        if missing_critical:
+            dist.confidence = "provisional"
         player_data["distribution"] = dist.to_dict()
         # Keep legacy field
         player_data["expected_points_legacy"] = player_data.get("expected_points", 0.0)

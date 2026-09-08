@@ -1,0 +1,34 @@
+P0-BUG-002 (silent-fallback variant) fix evidence — 2026-09-09
+
+Defect (current definition): required model inputs could silently fall through
+to a hardcoded/default value without any explicit error, warning, UNKNOWN, or
+auditable signal, yielding a "plausible" numeric score from missing/garbage data.
+
+Reproduction (blocked earlier by env classifier, then confirmed same-run; root
+cause verified statically):
+  - fpl_skill/probabilistic_ep1.py:302 `_fixture_multiplier` used
+    `FDR_MULTIPLIERS.get(inputs.fixture_difficulty, 1.0)` — any invalid/
+    missing FDR (0, 6, -1, None) returned neutral 1.0 with NO signal.
+  - `replace_scalar_ep_with_distribution` defaulted missing fields to
+    favourable values (chance_of_playing_next_round=100, is_home=True,
+    status=available) with no auditable indicator.
+
+Fix applied (minimal diff):
+  1. `_fixture_multiplier`: raises ValueError on FDR outside 1-5 instead of
+     silent neutral fallback (explicit error signal).
+  2. `PlayerDistribution.to_dict`: now surfaces `confidence` (was defined but
+     never serialized, so even confidence signals were invisible).
+  3. `replace_scalar_ep_with_distribution`: when status /
+     chance_of_playing_next_round / is_home / fixture_difficulty are missing
+     from the player record, downgrades output confidence to "provisional"
+     (auditable degraded-data signal; backward-compatible defaults retained).
+
+Regression run (python3, tests/test_probabilistic_ep1_p023.py):
+  test_fixture_bonus_direction: PASS
+  test_shape_mismatch: PASS
+  test_invalid_fdr_raises_explicit_error: PASS   (new)
+  test_missing_critical_fields_flag_provisional: PASS  (new)
+
+Note: a parallel session previously fixed a *dict-shape* interpretation of
+P0-BUG-002 (commit da498b1). This fix covers the *silent-fallback*
+interpretation per the current audit definition; both coexist.
