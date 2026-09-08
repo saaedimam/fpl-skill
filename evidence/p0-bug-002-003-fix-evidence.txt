@@ -1,0 +1,15 @@
+Pytest regression run after fixing P0-BUG-002 (dict shape mismatch) and P0-BUG-003 (inverted fixture_bonus) in probabilistic_ep1.py:
+
+$ python3 -m pytest tests/test_probabilistic_ep1_p023.py -v
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-8.3.4, pluggy-1.5.0
+cachedir: .pytest_cache
+rootdir: /Users/ioriimasu/dev/fpl-skill
+plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items                                                              
+
+tests/test_probabilistic_ep1_p023.py::test_shape_mismatch PASSED         [ 50%]
+tests/test_probabilistic_ep1_p023.py::test_fixture_bonus_direction PASSED [100%]
+
+============================== 2 passed in 0.05s ===============================
