@@ -1,5 +1,23 @@
 # Changelog — FPL Skill
 
+
+## v2.0 — Probabilistic + Rank-Aware Engine (BUILD → AUDIT → REPAIR → FREEZE)
+### Added
+- Observation layer `fpl_skill/observation/`: public-API elite-manager poller, diff, EventStore (thread-safe, dedup, crash-salvage), alerts, replay gate
+- Probabilistic EP engine `fpl_skill/probabilistic_ep1.py`: P10/P25/P50/P75/P90 distribution over scalar EP
+- Rank-aware objective `fpl_skill/rank_aware_objective1.py`: rank-class strategy (elite-safe/chase/competitive/aspirational), captain/chip/transfer value
+- Research contract `contracts/research-contract.md`: cohort/observation/backtest evidence policy (public data only)
+- Regression tests: `tests/test_observation.py` (17 adversarial), `tests/test_replay_gate.py`, p023 + rank-aware fuzz locks
+
+### Fixed (adversarial audit)
+- probabilistic_ep1: GKP/GK position dialect from FPL element_type 1 crashed KeyError → normalized at engine entry
+- probabilistic_ep1: `chance_of_playing_next_round=None` (FPL null for fit regulars) crashed TypeError → None-safe default 100
+- probabilistic_ep1: percentile clamp `max(0.0, …)` broke p10≤p25≤p50≤p75≤p90 ordering → monotone floor chain
+- probabilistic_ep1: p_zero=1.0 statuses (injured/suspended/unavailable) kept nonzero p75/p90 → collapse distribution to 0
+- observation/store: crash mid-write glued next record onto truncated line → lost valid event; JSON-scan salvage
+
+### Tests
+- 60 passed, 1 skipped (FPL_TEAM_ID), 3 xfailed (structural), 0 failures
 ## v1.1.0 — DRAFT (pending freeze sign-off)
 ### Added
 - Forecast Calibration Engine: bias detection, sample-gate enforcement (6 GW minimum)

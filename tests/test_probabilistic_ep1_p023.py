@@ -46,3 +46,39 @@ def test_fixture_bonus_direction():
     
     assert easy_scenarios["p_haul"] > hard_scenarios["p_haul"], "Easy fixture should have higher haul probability than hard fixture"
 
+
+
+def test_gkp_dialect_normalized():
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fpl_skill'))
+    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs
+    from probabilistic_ep1 import PlayerState
+    eng = ProbabilisticEPEngine()
+    kw = dict(player_id=1, status=PlayerState.AVAILABLE, team='ARS', opponent='CHE', gw=1,
+              minutes_played_last_3=270, chance_of_playing_next_round=100, form=5.0,
+              selected_by_percent=20.0, fixture_difficulty=3, is_home=True,
+              opponent_strength_attack=1050, opponent_strength_defence=900,
+              team_goals_per_gw=1.8, team_conceded_per_gw=1.1,
+              expected_goals=0.1, expected_assists=0.0)
+    for pos in ('GKP', 'GK'):
+        d = eng.generate_distribution(DistributionModelInputs(position=pos, **kw))
+        assert d.p10 <= d.p25 <= d.p50 <= d.p75 <= d.p90
+
+def test_none_chance_of_playing_safe():
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fpl_skill'))
+    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs
+    from probabilistic_ep1 import PlayerState
+    eng = ProbabilisticEPEngine()
+    kw = dict(player_id=2, position='FWD', status=PlayerState.AVAILABLE, team='ARS', opponent='CHE',
+              gw=1, minutes_played_last_3=270, chance_of_playing_next_round=None, form=5.0,
+              selected_by_percent=20.0, fixture_difficulty=3, is_home=True,
+              opponent_strength_attack=1050, opponent_strength_defence=900,
+              team_goals_per_gw=1.8, team_conceded_per_gw=1.1,
+              expected_goals=0.2, expected_assists=0.1)
+    d = eng.generate_distribution(DistributionModelInputs(**kw))
+    assert d.p10 <= d.p25 <= d.p50 <= d.p75 <= d.p90
+    inj = DistributionModelInputs(**{**kw, 'status': PlayerState.INJURED, 'minutes_played_last_3': 0,
+                                     'expected_goals': None, 'expected_assists': None})
+    d2 = eng.generate_distribution(inj)
+    assert d2.p50 == 0.0

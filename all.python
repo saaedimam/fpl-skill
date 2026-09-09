@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""
+all.python — FPL GOAT auto-applier (team 1512229, GW4)
+
+Applies in ONE official FPL SPA call:
+    POST /api/my-team/{entry}/
+    { "chip": null,
+      "picks": [ {element, position, is_captain, is_vice_captain}, ... ] }
+
+* Transfer   : committed by picks containing Mbeumo (427) and not Cherki (399)
+* Starting XI: position 1-11
+* Bench      : position 12-15 (GK last -> correct auto-sub)
+* Captain/Vice: is_captain / is_vice_captain (server derives the 2x multiplier)
+
+Auth: DEFAULT DRY-RUN. To apply you need a fresh browser cookie dump
+(Netscape format) containing at least `csrftoken` + a session cookie
+(sessionid / access_token / pl_profile). The stored keychain jar (auth/session)
+has no csrftoken and its SSO access token is expired -> FPL returns 403 for
+writes, so this script refuses to write without fresh cookies.
+
+Usage:
+    python3 all.python                          # dry-run (prints plan)
+    python3 all.python --apply --cookies ~/.fpl_cookies.txt
+"""
+import argparse, json, os, sys, urllib.request
+
+TEAM_ID = "1512229"
+GW      = 4
+
+# Recommended GW4 state (GOAT analysis, live API data)
+TRANSFER_IN  = {"element": 427, "web_name": "Mbeumo"}   # Man Utd MID 7.9
+TRANSFER_OUT = {"element": 399, "web_name": "Cherki"}   # Man City MID 7.8
+
+# Full 15 after the transfer: (element, web_name, position)
+SQUAD = [
+    (109, "Verbruggen",   1),   # GK
+    (115, "De Cuyper",    2),   # DEF
+    (8,   "Calafiori",    3),   # DEF
+    (388, "Guéhi",        4),   # DEF
+    (426, "B.Fernandes",  5),   # MID
+    (427, "Mbeumo",       6),   # MID  <- transfer in
+    (367, "Gakpo",        7),   # MID
+    (124, "Groß",         8),   # MID
+    (165, "João Pedro",   9),   # FWD  CAPTAIN
+    (411, "Haaland",     10),   # FWD
+    (249, "Barry",       11),   # FWD
+    (565, "M.Sangaré",   12),   # bench 1
+    (279, "Ajayi",       13),   # bench 2
+    (277, "Egan",        14),   # bench 3
+    (572, "Tzolakis",    15),   # bench 4 (GK last)
+]
+CAPTAIN = 165
+VICE    = 426
+CHIP    = None          # wildcard used GW3; save the rest
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true", help="write to FPL (needs fresh cookies)")
+    ap.add_argument("--cookies", default=os.environ.get("FPL_COOKIES_FILE"), help="Netscape cookie dump from a logged-in browser")
+    args = ap.parse_args()
+
+    plan = build_plan()
+    print(json.dumps(plan, indent=1))
+
+    if not args.apply:
+        print("\n[DRY-RUN] Nothing written. Re-run with --apply --cookies <file>.")
+        return 0
+
+    csrf, jar = load_cookies(args.cookies)
+    if not csrf or not jar:
+        print("\n[ERROR] Cookies must contain 'csrftoken' + session cookie. "
+              "Re-login at fantasy.premierleague.com, export cookies (Netscape format) to the file, retry.")
+        return 1
+
+    st, body = api_post(jar, csrf, f"/my-team/{TEAM_ID}/", {"chip": CHIP, "picks": plan["picks"]})
+    print(f"\n[save] POST /api/my-team/{TEAM_ID}/ status={st}")
+    if st < 400:
+        print(f"\n[DONE] Transfer ({TRANSFER_OUT['web_name']} OUT -> {TRANSFER_IN['web_name']} IN) "
+              "+ lineup + captain/vice applied for GW{GW}. Verify: https://fantasy.premierleague.com/my-team")
+        return 0
+    print(f"[BODY] {body[:500]}")
+    print("[ERROR] Save rejected. Re-export fresh cookies and retry.")
+    return 1
+
+def build_plan():
+    picks = []
+    for element, name, pos in SQUAD:
+        picks.append({
+            "element": element,
+            "position": pos,
+            "is_captain": element == CAPTAIN,
+            "is_vice_captain": element == VICE,
+        })
+    return {"chip": CHIP, "picks": picks}
+
+def load_cookies(path):
+    if not path:
+        return None, None
+    try:
+        txt = open(path, "r", encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None, None
+    csrf = None
+    pairs = []
+    for line in txt.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            name, value = parts[5], parts[6]
+            pairs.append((name, value))
+            if name == "csrftoken":
+                csrf = value
+    if not pairs:
+        return None, None
+    return csrf, " ".join(f"{n}={v}" for n, v in pairs)
+
+def api_post(jar, csrf, endpoint, payload):
+    req = urllib.request.Request(
+        "https://fantasy.premierleague.com/api" + endpoint,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Cookie": jar,
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrf,
+            "User-Agent": "Mozilla/5.0",
+        },
+        method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, r.read().decode()[:500]
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()[:500]
+
+if __name__ == "__main__":
+    sys.exit(main())

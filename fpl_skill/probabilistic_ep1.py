@@ -211,6 +211,13 @@ class ProbabilisticEPEngine:
         """
         Main entry point: convert FPL data to distribution.
         """
+        # FPL API position dialect ("GKP" = element_type 1) -> engine keys
+        if inputs.position in ("GKP", "GK"):
+            inputs.position = "GK"
+        # FPL API returns null chance_of_playing_next_round for fit regulars
+        if inputs.chance_of_playing_next_round is None:
+            inputs.chance_of_playing_next_round = 100.0
+
         # Step 1: Base distribution given status
         base_mean, base_variance = self._compute_base_distribution(inputs)
         
@@ -236,6 +243,12 @@ class ProbabilisticEPEngine:
         
         # Step 7: Determine confidence level
         confidence = self._confidence_level(inputs)
+        if scenarios['p_zero'] == 1.0:
+            # Player will definitely score 0: collapse the whole distribution.
+            adjusted_mean = 0.0
+            adjusted_variance = 0.0
+            for k in ('p10', 'p25', 'p50', 'p75', 'p90'):
+                percentiles[k] = 0.0
         
         # Create and return distribution
         dist = PlayerDistribution(
@@ -310,7 +323,7 @@ class ProbabilisticEPEngine:
         Returns: {"prob_plays": float, "variance_factor": float}
         """
         # Base from API chance_of_playing
-        prob_plays = inputs.chance_of_playing_next_round / 100.0
+        prob_plays = (inputs.chance_of_playing_next_round or 100.0) / 100.0
         
         # Adjust downward if recent minutes are low (rotation risk)
         if inputs.minutes_played_last_3 < 90:  # Less than 1 GW worth of minutes
@@ -342,15 +355,19 @@ class ProbabilisticEPEngine:
         z_scores = {"p10": -1.28, "p25": -0.67, "p50": 0.0, "p75": 0.67, "p90": 1.28}
         
         percentiles = {}
+        prev_label = None
+        for label, z in z_scores.items():
+            # Skewness adjustment: positive skewness shifts tails to the right (upside)
+            adjusted_z = z + (skewness * 0.1)  # Conservative skewness weight
+            val = mean + adjusted_z * std_dev
+            floor = percentiles[prev_label] if prev_label else 0.0
+            percentiles[label] = max(0.0, floor, val)
+            prev_label = label
         for label, z in z_scores.items():
             # Skewness adjustment: positive skewness shifts tails right (upside)
             adjusted_z = z + (skewness * 0.1)  # Conservative skewness weight
-            percentiles[label] = max(0.0, mean + adjusted_z * std_dev)
-        
-        percentiles["skewness"] = skewness
-        
+            val = mean + adjusted_z * std_dev
         return percentiles
-    
     def _estimate_skewness(self, inputs: DistributionModelInputs) -> float:
         """
         Estimate distribution skewness (positive = upside, negative = downside).
