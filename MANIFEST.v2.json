@@ -10,9 +10,11 @@
   },
   "scope": "v2 upgrade program: probabilistic EP distribution engine, rank-aware objective, public-API observation layer, adversarial-audit repairs",
   "canonical_files": [
+    "CHANGELOG.md",
     "SKILL_V2.md",
     "all.python",
     "contracts/research-contract.md",
+    "evidence/v2-adversarial-audit-2026-09-09.json",
     "fpl_skill/observation/__init__.py",
     "fpl_skill/observation/alerts.py",
     "fpl_skill/observation/cli.py",
@@ -27,16 +29,16 @@
     "fpl_skill/probabilistic_ep1.py",
     "fpl_skill/rank_aware_objective1.py",
     "tests/test_observation.py",
-    "tests/test_replay_gate.py",
     "tests/test_probabilistic_ep1_p023.py",
     "tests/test_rank_aware_objective1.py",
-    "evidence/v2-adversarial-audit-2026-09-09.json",
-    "CHANGELOG.md"
+    "tests/test_replay_gate.py"
   ],
   "file_hashes": {
+    "CHANGELOG.md": "89c4633ce2eb0067bfcbfd4a9b623506347aad1001d954eac10ae16a55ebc3da",
     "SKILL_V2.md": "5b1e2b8ec17712f9f6d177c707ec17e1a45f930651e52161c61f9fba1e02a547",
     "all.python": "154e30658774e8955837ee7d9dd5040282e137909542b1e786f89ce203fb1647",
     "contracts/research-contract.md": "168d9b12441f72be09b28b6d78abe338f850838bed1831c1d4680e871c19e49e",
+    "evidence/v2-adversarial-audit-2026-09-09.json": "bce1897e5253a206af6bdff2e191ec2346bd05909b6bffa7099c654831dc8780",
     "fpl_skill/observation/__init__.py": "21c42cf5ccc060395857ecee52ba4a44538d8178a4ba973710f4e279ce7d47e8",
     "fpl_skill/observation/alerts.py": "9537130aac74e50d8ec78eb8868ce744747af0398395206b62b2ff42c36f492d",
     "fpl_skill/observation/cli.py": "b95a6be1325491056e38b6776a514701d317de6ca4eac9e88fe25f0915043921",
@@ -51,12 +53,10 @@
     "fpl_skill/probabilistic_ep1.py": "eb30fbb62fe7efaba9f2172cf5930513449615dbae11723148ad0611f9bc5e81",
     "fpl_skill/rank_aware_objective1.py": "296cff901b900fcb37c2ebed4962ab50dab2e0e4ccb15281fd61c5e38e0e566c",
     "tests/test_observation.py": "6fa1304b932fa86065a06154407e1abc40c8183785b035cba799dc2d570a992c",
-    "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28",
     "tests/test_probabilistic_ep1_p023.py": "8e3f7fb063409c9a562de94747a775791aa8a5962b75eb3c2d87ad531434cfc8",
     "tests/test_rank_aware_objective1.py": "ecfd331add1fa807eee09d1878cdf7e438ba577c2721bc8126e63a9182379f35",
-    "evidence/v2-adversarial-audit-2026-09-09.json": "bce1897e5253a206af6bdff2e191ec2346bd05909b6bffa7099c654831dc8780",
-    "CHANGELOG.md": "89c4633ce2eb0067bfcbfd4a9b623506347aad1001d954eac10ae16a55ebc3da"
+    "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28"
   },
-  "release_hash": "0afe628e72b528622e29f84b7f77c12981d9b4b6869ef8b4b41260e817535ffa",
+  "release_hash": "7e3155845409b636fec4a74cdd46357722c7ce77128a7691074f2df3999785c9",
   "freeze_updated": "2026-09-10T14:15:00.875941+00:00"
 }

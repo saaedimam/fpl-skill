@@ -117,7 +117,7 @@ Every tactical action in FPL is isolated into a discrete **Decision Card** gover
 | **1-Free Transfer** | Multi-GW Marginal Gain vs Option-Value Threshold | Multi-GW (GW3–6) | **Empirical Backtest** — Realized post-transfer points vs rolling option value ($1.5\,\text{pts}$ FT / $5.5\,\text{pts}$ Hit) | `CALIBRATED` (Sample Gate Tracked) |
 
 ### The Deterministic vs Stochastic Boundary
-* **Deterministic Optimization (Wildcard):** Squad composition under known budget, position constraints, club limits, and projected point matrices is a combinatorial optimization problem. Given a frozen projection dataset, the globally optimal squad is mathematically provable upfront.
+* **Deterministic Optimization (Wildcard):** Squad composition under known budget, position constraints, club limits, and projected point matrices is a combinatorial optimization problem. Given a frozen projection dataset, the constrained optimization under rank-aware objective.
 * **Stochastic Calibration (Captain, Bench, Transfer):** Realized points depend on exogenous match variances, in-game injuries, tactical red cards, and variance. These selections are tracked via pre-GW immutable decision snapshots, scored against post-GW actuals, and certified via the **Sample Gate** ($\ge 6\text{ completed GWs or }\ge 20\text{ player-forecast pairs}$).
 
 ---
