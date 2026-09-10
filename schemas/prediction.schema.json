@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fpl-skill/schemas/prediction.schema.json",
+  "title": "Prediction",
+  "type": "object",
+  "required": [
+    "player_id", "horizon", "expected_points",
+    "P10", "P25", "P50", "P75", "P90",
+    "minutes_probability", "role_probability", "injury_probability",
+    "confidence", "evidence"
+  ],
+  "properties": {
+    "player_id": { "type": "integer" },
+    "horizon": {
+      "type": "string",
+      "enum": ["GW+1", "GW+2", "GW+3", "GW+4", "GW+5", "GW+6", "GW+7", "GW+8"]
+    },
+    "expected_points": { "type": "number" },
+    "P10": { "type": "number" },
+    "P25": { "type": "number" },
+    "P50": { "type": "number" },
+    "P75": { "type": "number" },
+    "P90": { "type": "number" },
+    "floor_scenario": { "type": ["string", "null"] },
+    "ceiling_scenario": { "type": ["string", "null"] },
+    "minutes_probability": {
+      "type": "object",
+      "required": ["start", "sixty_plus", "thirty_to_59", "one_to_29", "zero"],
+      "properties": {
+        "start": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sixty_plus": { "type": "number", "minimum": 0, "maximum": 1 },
+        "thirty_to_59": { "type": "number", "minimum": 0, "maximum": 1 },
+        "one_to_29": { "type": "number", "minimum": 0, "maximum": 1 },
+        "zero": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "role_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "injury_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "goal_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "assist_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "clean_sheet_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "bonus_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low", "provisional"] },
+    "risk": { "type": ["string", "null"] },
+    "minutes_double_count_check": {
+      "type": "string",
+      "enum": ["folded_into_expected_points", "applied_once_separately"],
+      "description": "Explicit record of where minutes probability was applied, to make double-counting auditable."
+    },
+    "evidence": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fpl-skill/schemas/decision.schema.json",
+  "title": "Decision",
+  "type": "object",
+  "required": [
+    "action", "horizon", "expected_delta", "downside", "upside",
+    "transfer_cost", "opportunity_cost", "risk", "confidence",
+    "counterfactual", "evidence", "unknowns", "rationale"
+  ],
+  "properties": {
+    "action": { "type": "string", "enum": ["KEEP", "BUY", "SELL", "HIT", "NO_ACTION"] },
+    "player_out": { "type": ["integer", "null"] },
+    "player_in": { "type": ["integer", "null"] },
+    "horizon": { "type": "string" },
+    "expected_delta": { "type": "number" },
+    "downside": { "type": "number" },
+    "upside": { "type": "number" },
+    "transfer_cost": { "type": "number", "minimum": 0 },
+    "opportunity_cost": { "type": "number" },
+    "risk": { "type": "string", "enum": ["high", "medium", "low"] },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low", "provisional"] },
+    "counterfactual": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["option", "decision_value"],
+        "properties": {
+          "option": { "type": "string" },
+          "expected_points_distribution": { "type": ["object", "null"] },
+          "decision_value": { "type": "number" }
+        }
+      },
+      "description": "Must include the KEEP option for any transfer decision, not only the recommended option."
+    },
+    "evidence": { "type": "array", "items": { "type": "string" } },
+    "unknowns": { "type": "array", "items": { "type": "string" } },
+    "rationale": { "type": "string" },
+    "trajectory_effect": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

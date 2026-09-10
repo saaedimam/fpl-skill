@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fpl-skill/schemas/event.schema.json",
+  "title": "ObservationEvent",
+  "description": "Closed 13-key contract for fpl_skill observation layer (model.py EVENT_KEYS).",
+  "type": "object",
+  "required": [
+    "Event_id",
+    "Manager_id",
+    "Event_type",
+    "Old_state",
+    "New_state",
+    "Event_time",
+    "Detected_at",
+    "Source_endpoint",
+    "Source_observed_at",
+    "Content_hash",
+    "Schema_version",
+    "Provenance",
+    "Confidence"
+  ],
+  "properties": {
+    "Event_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{24}$",
+      "description": "Content_hash[:24]"
+    },
+    "Manager_id": {
+      "type": "string"
+    },
+    "Event_type": {
+      "type": "string",
+      "enum": [
+        "TRANSFER",
+        "CAPTAINCY",
+        "CHIP",
+        "SQUAD",
+        "BENCH",
+        "MANAGER_JOINED",
+        "FINANCIAL_CHANGE",
+        "MISSING_MANAGER",
+        "SCHEMA_CHANGE",
+        "STALE_RESPONSE",
+        "POLL_RECOVERY"
+      ]
+    },
+    "Old_state": {},
+    "New_state": {},
+    "Event_time": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Manager action time when public API exposes it; else null (UNKNOWN downstream)"
+    },
+    "Detected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Source_endpoint": {
+      "type": "string"
+    },
+    "Source_observed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "Content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "Schema_version": {
+      "type": "string",
+      "const": "obs.0.1.0"
+    },
+    "Provenance": {
+      "type": "string",
+      "enum": [
+        "public_api",
+        "picks_delta_verified",
+        "transfers_endpoint_only",
+        "conflicted"
+      ]
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "provisional"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

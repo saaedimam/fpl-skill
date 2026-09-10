@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fpl-skill/schemas/player-state.schema.json",
+  "title": "PlayerState",
+  "type": "object",
+  "required": ["player_id", "gw", "position", "team_id", "status", "state_source", "retrieved_at"],
+  "properties": {
+    "player_id": { "type": "integer" },
+    "gw": { "type": "integer", "minimum": 1, "maximum": 38 },
+    "position": { "type": "string", "enum": ["GK", "DEF", "MID", "FWD"] },
+    "team_id": { "type": "integer" },
+    "status": { "type": "string", "enum": ["a", "d", "i", "s", "u", "unknown"] },
+    "now_cost": { "type": ["number", "null"] },
+    "selected_by_percent": { "type": ["number", "null"] },
+    "role": {
+      "type": "string",
+      "enum": ["STARTER", "ROTATION", "BENCHED", "ADVANCED_ROLE", "DEEPER_ROLE", "UNKNOWN"]
+    },
+    "minutes_trend": { "type": ["string", "null"] },
+    "tactical_context": { "type": ["string", "null"] },
+    "injury_state": {
+      "type": "string",
+      "enum": ["FIT", "REPORTED", "CLUB_CONFIRMED", "VERIFIED_CURRENT_STATE", "RETURNING", "UNKNOWN"]
+    },
+    "transfer_state": {
+      "type": "string",
+      "enum": ["NONE", "RUMOUR", "REPORTED", "ADVANCED", "AGREED", "OFFICIAL"]
+    },
+    "state_source": {
+      "type": "string",
+      "enum": ["official-fpl-api", "user-provided", "model-inference", "unknown"]
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "conflicted": { "type": "boolean", "default": false },
+    "conflict_notes": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

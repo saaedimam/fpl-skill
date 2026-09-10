@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fpl-skill/schemas/calibration-record.schema.json",
+  "title": "CalibrationRecord",
+  "type": "object",
+  "required": [
+    "gw", "player_id", "forecast_type",
+    "predicted_expected_points", "predicted_distribution", "predicted_probabilities",
+    "actual_points", "absolute_error", "signed_error", "within_P10_P90", "calibration_bucket"
+  ],
+  "properties": {
+    "gw": { "type": "integer", "minimum": 1, "maximum": 38 },
+    "player_id": { "type": "integer" },
+    "forecast_type": { "type": "string", "enum": ["expected_points", "probability", "ranking"] },
+    "predicted_expected_points": { "type": "number" },
+    "predicted_distribution": {
+      "type": "object",
+      "required": ["P10", "P25", "P50", "P75", "P90"],
+      "properties": {
+        "P10": { "type": "number" },
+        "P25": { "type": "number" },
+        "P50": { "type": "number" },
+        "P75": { "type": "number" },
+        "P90": { "type": "number" }
+      }
+    },
+    "predicted_probabilities": {
+      "type": "object",
+      "properties": {
+        "start": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sixty_plus": { "type": "number", "minimum": 0, "maximum": 1 },
+        "goal": { "type": "number", "minimum": 0, "maximum": 1 },
+        "assist": { "type": "number", "minimum": 0, "maximum": 1 },
+        "clean_sheet": { "type": "number", "minimum": 0, "maximum": 1 },
+        "bonus": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "actual_points": { "type": "number" },
+    "actual_events": { "type": ["object", "null"] },
+    "absolute_error": { "type": "number", "minimum": 0 },
+    "signed_error": { "type": "number" },
+    "within_P10_P90": { "type": "boolean" },
+    "calibration_bucket": { "type": "string" }
+  },
+  "additionalProperties": false
+}

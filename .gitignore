@@ -25,6 +25,8 @@ wheels/
 *.db-wal
 *.json
 !MANIFEST.json
+!schemas/*.json
+!tests/release_hash.json
 
 # Environment & IDE
 .env
