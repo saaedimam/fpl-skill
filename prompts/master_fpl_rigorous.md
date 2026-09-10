@@ -112,7 +112,7 @@ CERTIFICATION: GLOBAL_OPTIMUM_CERTIFIED TRUE/FALSE (if FALSE, explain why)
 Diagnostic feature (H2H, form bucket, etc.) → attach as evidence layer (`fpl_history_evidence.py` style) → gate on predictive lift (backtest) → only then promote to production. Until then: display alongside, never override `gw_ep` leader.
 
 ## IMPLEMENTATION POINTERS (this repo)
-- Production objective: `fpl_apify_skill.calculate_player_gw_ep` + `fixture_map` from `fpl_direct_api` (bootstrap-static + fixtures, all 380).
-- Squad optimizer: `fpl_exact_milp.py` encodes exact MILP (squad + per-GW XI/formation/captain + budget/club + GW3 locks). CBC `Optimal` → global. Legacy `optimize_wildcard_squad` in `fpl_apify_skill.py` had `[:10]/[:30]/[:40]` truncation — heuristic only; do not claim global from it.
+- Production objective: `fpl_skill.api.calculate_player_gw_ep` + `fixture_map` via `fpl_skill.api.build_fixture_map` (bootstrap-static fixtures, all 380).
+- Squad optimizer: `fpl_skill.optimizer.build_and_solve` encodes exact MILP (squad + per-GW XI/formation/captain + budget/club + GW3 locks). CBC `Optimal` -> global. `optimize_wildcard_squad` in `fpl_skill/api.py` uses branch-and-bound over full positional pools (no `[:10]/[:30]/[:40]` truncation).
 - Bench invariant: recalculate `gw_ep` via `calculate_player_gw_ep(gw, fm)`, not stale `p['gw_ep']` (Gomez 359 Liverpool contaminant precedent).
 - Contracts: `contracts/GLOBAL15_CONTRACT.md`, `certification/NOTICE.md`.

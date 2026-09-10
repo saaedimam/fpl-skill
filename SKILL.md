@@ -436,6 +436,8 @@ Never:
 
 ## 17. Commands
 
+> `FPL /xxx` are agent-invocation commands (user speaks natural language, agent executes the workflow). NOT CLI subcommands. Live-monitoring infrastructure is exposed via the observation CLI (see README, Observation layer): `monitor` starts the adaptive poller, `gate` runs the deterministic replay-gate scenario.
+
 ```text
 FPL /build
 FPL /audit

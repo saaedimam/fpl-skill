@@ -1,7 +1,7 @@
 {
-  "release_hash": "7e3155845409b636fec4a74cdd46357722c7ce77128a7691074f2df3999785c9",
-  "files_hashed": 22,
+  "release_hash": "c4ed43c59332b9cdd4ab2deeb54fdd6b52bfa97a408f4640a8d0ea728367805b",
+  "files_hashed": 41,
   "reproducible": true,
-  "method": "SHA256 over sorted {path:sha256} of v2 canonical files",
-  "timestamp": "2026-09-10T14:43:07.277764+00:00"
+  "method": "SHA256 over sorted canonical files (fpl_skill/, contracts/, schemas/)",
+  "timestamp": "2026-09-10T20:32:55.587460"
 }

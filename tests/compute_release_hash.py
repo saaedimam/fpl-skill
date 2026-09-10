@@ -37,6 +37,9 @@ def collect_canonical_files():
             # Include: .py, .md, .json (except MANIFEST which changes)
             if fpath.name == "MANIFEST.json":
                 continue
+            # Exclude mutable runtime cache (gitignored, regenerated): breaks reproducibility
+            if fpath.name == "fpl_cache.json":
+                continue
 
             rel_path = str(fpath.relative_to(root))
             with open(fpath, "rb") as f:
