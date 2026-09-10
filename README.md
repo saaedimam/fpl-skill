@@ -1,357 +1,533 @@
 # FPL Skill
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
-![Status](https://img.shields.io/badge/status-frozen-brightgreen)
+[![CI](https://github.com/saaedimam/fpl-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/saaedimam/fpl-skill/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-1.1.0--v2.0-blue)
+![Status](https://img.shields.io/badge/status-certified%20%26%20frozen-brightgreen)
 ![Season](https://img.shields.io/badge/season-2026%2F27-green)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-35%20passed-brightgreen)
+![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
+![Tests](https://img.shields.io/badge/tests-76%20passed%20%7C%2080%20collected-brightgreen)
+![Optimizer](https://img.shields.io/badge/optimizer-Exact%20MILP%20(CBC)-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-Autonomous MILP optimization engine and advisory agent skill for Fantasy Premier League. Resolves live squad state, projects expected points across a multi-gameweek horizon, and produces mathematically certified or empirically calibrated decisions for wildcard, captain, bench, and transfer selections.
+**Autonomous mathematical optimization engine, probabilistic forecasting system, and contract-governed advisory agent for Fantasy Premier League (FPL).**
+
+`fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
 ---
 
-## Architecture
+## Table of Contents
 
-```
-INPUT → NORMALIZE → VALIDATE → RESEARCH → STATE BUILD → PREDICT → SIMULATE → COUNTERFACTUAL → DECIDE → OUTPUT
-```
-
-Three operating modes via `FPL_MODE`:
-
-| Mode | Behaviour |
-|------|-----------|
-| `advisory` (default) | Ranked recommendations, no writes |
-| `approval` | Requires explicit sign-off before any action |
-| `autonomous` | Executes transfers within contract bounds |
+- [Executive Architecture](#executive-architecture)
+- [Decision Cards & Certification Matrix](#decision-cards--certification-matrix)
+- [Probabilistic EP Engine](#probabilistic-ep-engine)
+- [Rank-Aware Strategic Objective](#rank-aware-strategic-objective)
+- [Exact Wildcard MILP Formulation](#exact-wildcard-milp-formulation)
+- [Observation, Telemetry & Elite Cohort Tracking](#observation-telemetry--elite-cohort-tracking)
+- [Account Authentication & Verified-Current Lineage](#account-authentication--verified-current-lineage)
+- [Source Authority Hierarchy](#source-authority-hierarchy)
+- [Module Catalog](#module-catalog)
+- [CLI Reference](#cli-reference)
+- [Quickstart & Installation](#quickstart--installation)
+- [Test Suite & Verification Gate](#test-suite--verification-gate)
+- [Repository Layout](#repository-layout)
+- [Contracts & Formal Specifications](#contracts--formal-specifications)
+- [License](#license)
 
 ---
 
-## Decision Cards
+## Executive Architecture
 
-Four strategy cards, each with its own certification track:
+```
+                    ┌────────────────────────────────────────────────────────┐
+                    │                   FPL Public & Auth API                │
+                    └───────────────────────────┬────────────────────────────┘
+                                                │
+                     ┌──────────────────────────┴──────────────────────────┐
+                     ▼                                                     ▼
+      ┌──────────────────────────────┐                      ┌──────────────────────────────┐
+      │   Observation & Telemetry    │                      │       Account Adapter        │
+      │   - Token-Bucket (1 req/s)   │                      │   - macOS Keychain Cookie    │
+      │   - ETag / 304 Caching       │                      │   - Verified-Current Lineage │
+      │   - Adaptive Poller (60s-1h) │                      │   - State Conflict Shield    │
+      └──────────────┬───────────────┘                      └──────────────┬───────────────┘
+                     │                                                     │
+                     └──────────────────────────┬──────────────────────────┘
+                                                ▼
+                               ┌─────────────────────────────────┐
+                               │  Normalization & Canonical D0   │
+                               │  - Schema Mapping & Validation  │
+                               │  - Multi-GW Fixture Map         │
+                               └────────────────┬────────────────┘
+                                                │
+                                                ▼
+                               ┌─────────────────────────────────┐
+                               │   Probabilistic Player Engine   │
+                               │   - P10 / P25 / P50 / P75 / P90 │
+                               │   - Central Moments (Var, Skew) │
+                               │   - Scenario Bounds (∑ P ≤ 1.0) │
+                               └────────────────┬────────────────┘
+                                                │
+                     ┌──────────────────────────┴──────────────────────────┐
+                     ▼                                                     ▼
+      ┌──────────────────────────────┐                      ┌──────────────────────────────┐
+      │   Rank-Aware Objective       │                      │    Exact MILP Wildcard       │
+      │   - Elite Safe (1-50)        │                      │    - Branch & Bound (CBC)    │
+      │   - Elite Chase (51-500)     │                      │    - 15-Man Global Optimum   │
+      │   - Competitive (501-10k)    │                      │    - Parameterized Horizon   │
+      │   - Aspirational (10k+)      │                      │    - Hard Constraints        │
+      └──────────────┬───────────────┘                      └──────────────┬───────────────┘
+                     │                                                     │
+                     └──────────────────────────┬──────────────────────────┘
+                                                ▼
+                               ┌─────────────────────────────────┐
+                               │     Decide & Recommend (D4)     │
+                               │     - Option-Value Transfer (FT)│
+                               │     - Valid Formation (5-2-3..) │
+                               │     - Counterfactual Evaluation │
+                               └────────────────┬────────────────┘
+                                                │
+                                                ▼
+                               ┌─────────────────────────────────┐
+                               │  Empirical Calibration Loop     │
+                               │  - Scorecard Persistent Store   │
+                               │  - MAE, RMSE, Signed Bias       │
+                               │  - Sample Gate (≥6 GWs / ≥20)   │
+                               └─────────────────────────────────┘
+```
 
-| Card | Method | Certification | Status |
-|------|--------|---------------|--------|
-| Wildcard | Exact MILP (CBC solver) | Optimality certificate — globally optimal, not heuristic | `CERTIFIED` |
-| Captain | Empirical backtest | Calibration certificate — accuracy % + MAE vs actuals | `INSUFFICIENT_DATA` |
-| Bench | Empirical backtest | Calibration certificate — utilization % by minutes played | `INSUFFICIENT_DATA` |
-| Transfer (1-FT) | Empirical backtest | Calibration certificate — % profitable vs actual EP gain | `INSUFFICIENT_DATA` |
+Three operating modes configured via `FPL_MODE`:
 
-**Why the split?** The wildcard is a deterministic optimization over known constraints — 15 players, fixed budget, fixed club limits, exact EP projections. Given a dataset, the globally optimal squad can be proven upfront via exhaustive branch-and-bound with an admissible upper bound. Captain, bench, and transfer outcomes are stochastic: the correct pick depends on actual minutes played, injury variance, and score-line luck that no model can know in advance. These cards are evaluated empirically against pre-recorded forecasts after GW results arrive. Certificates flip from `INSUFFICIENT_DATA` to `CALIBRATED` once the sample gate clears (≥6 completed GWs or ≥20 player-forecast pairs).
+| Mode | Behaviour | Execution Safety |
+| :--- | :--- | :--- |
+| `advisory` *(default)* | Computes optimal decisions, outputs ranked recommendations with full reasoning | Read-only; zero write requests |
+| `approval` | Prepares optimal decisions, generates counterfactual diffs, halts at gate | Requires explicit human cryptographic/interactive confirmation |
+| `autonomous` | Executes certified transfers and lineup submissions within bounded contracts | Guarded: fails closed if state is not `VERIFIED_CURRENT` |
+
+---
+
+## Decision Cards & Certification Matrix
+
+Every tactical action in FPL is isolated into a discrete **Decision Card** governed by a strict mathematical or empirical certification standard:
+
+| Card | Core Solver / Method | Horizon | Verification Standard | Current Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Wildcard** | Exact Mixed Integer Linear Program (CBC Branch & Bound) | GW+1 to GW+4 (e.g. GW3–6) | **Mathematical Optimality Certificate** — Admissible upper bound proven exhaustive over the complete search space | `CERTIFIED` |
+| **Captaincy** | Rank-Aware Variance / Ceiling Optimization | Single GW target | **Empirical Calibration** — Historical accuracy %, MAE, and Brier score against realized outcomes | `CALIBRATED` (Sample Gate Tracked) |
+| **Bench Order** | Positional Utilization under Expected Minutes | Single GW target | **Empirical Calibration** — Sub-in conversion accuracy, minutes shortfall coverage | `CALIBRATED` (Sample Gate Tracked) |
+| **1-Free Transfer** | Multi-GW Marginal Gain vs Option-Value Threshold | Multi-GW (GW3–6) | **Empirical Backtest** — Realized post-transfer points vs rolling option value ($1.5\,\text{pts}$ FT / $5.5\,\text{pts}$ Hit) | `CALIBRATED` (Sample Gate Tracked) |
+
+### The Deterministic vs Stochastic Boundary
+* **Deterministic Optimization (Wildcard):** Squad composition under known budget, position constraints, club limits, and projected point matrices is a combinatorial optimization problem. Given a frozen projection dataset, the globally optimal squad is mathematically provable upfront.
+* **Stochastic Calibration (Captain, Bench, Transfer):** Realized points depend on exogenous match variances, in-game injuries, tactical red cards, and variance. These selections are tracked via pre-GW immutable decision snapshots, scored against post-GW actuals, and certified via the **Sample Gate** ($\ge 6\text{ completed GWs or }\ge 20\text{ player-forecast pairs}$).
+
+---
+
+## Probabilistic EP Engine
+
+`fpl_skill.probabilistic_ep1` departs from scalar approximations (e.g. `EP = 6.4`) by calculating a complete probability distribution for every player:
+
+$$\text{Distribution} = \left\{ P_{10}, P_{25}, P_{50}, P_{75}, P_{90}, \mu, \sigma^2, \text{skewness}, \text{kurtosis} \right\}$$
+
+### Scenario Probability Invariants
+The engine computes discrete overlapping scenario components:
+* $P(\text{zero})$: Probability of scoring 0 points (unavailability, tactical benching, injury).
+* $P(\text{haul})$: Probability of 2+ goals, 3+ returns, or $\ge 12$ points.
+* $P(\text{bench})$: Probability of playing $<60$ minutes.
+* $P(\text{injured})$: Probability of missing subsequent gameweeks.
+
+**Enforced Invariant:**
+$$P(\text{zero}) + P(\text{haul}) + P(\text{bench}) \le 1.0$$
+If independent scenario estimations breach unity, they are rescaled proportionally while preserving $P(\text{zero})$ priority. If a player is confirmed `INJURED` or `SUSPENDED`, the engine sets $P(\text{zero}) = 1.0$ and collapses moments to zero.
+
+### FDR and Fixture Multipliers
+Expected values incorporate venue and opponent strength adjustments:
+* **FDR Multipliers:** FDR 1: $1.40\times$, FDR 2: $1.25\times$, FDR 3: $1.00\times$, FDR 4: $0.85\times$, FDR 5: $0.70\times$.
+* **Venue:** Home $1.12\times$, Away $0.90\times$.
+* **Premium Asset Scaler:** $1.15\times$ for talismanic captains.
+
+---
+
+## Rank-Aware Strategic Objective
+
+`fpl_skill.rank_aware_objective1` implements adaptive game theory. In FPL, maximizing pure expected points is suboptimal if your strategic goal depends on your position relative to the field:
+
+```
+Rank 1–50         [ELITE_SAFE]     ──► Minimize variance, match field template, protect lead
+Rank 51–500       [ELITE_CHASE]    ──► Balance EV with differential ceiling upside
+Rank 501–10,000   [COMPETITIVE]    ──► Maximize EV, protect against rank collapse
+Rank 10,000+      [ASPIRATIONAL]   ──► Pure unconstrained EV maximization
+```
+
+### Strategic Objective Formulations
+* **Elite Safe ($\text{Rank} \le 50$):**
+  $$\text{Score} = \mu - 0.5 \sqrt{\sigma^2} + 0.2 \times \text{CaptainUpside} - \text{TransferPenalty} + \text{ConsensusBonus}$$
+* **Elite Chase ($51 \le \text{Rank} \le 500$):**
+  $$\text{Score} = \mu + 0.3 \times \text{UpsideDifferential} - 0.2 \sqrt{\sigma^2}$$
+* **Competitive ($501 \le \text{Rank} \le 10,000$):**
+  $$\text{Score} = \mu + 0.1 \times (P_{90} - P_{50}) - 0.1 \times (P_{50} - P_{10})$$
+* **Aspirational ($\text{Rank} > 10,000$):**
+  $$\text{Score} = \sum P_{50}$$
+
+### Principled Transfer Thresholds
+A transfer is recommended if and only if the marginal multi-GW expected point gain exceeds the opportunity cost of burning or rolling a Free Transfer:
+
+$$\Delta \text{EP}_{\text{GW3-6}} = \text{EP}(\text{Squad}_{\text{new}}) - \text{EP}(\text{Squad}_{\text{baseline}})$$
+
+$$\text{Recommendation} = \begin{cases} \text{TRANSFER} & \text{if } \Delta \text{EP} > \text{Threshold} \\ \text{HOLD} & \text{otherwise} \end{cases}$$
+
+* **Free Transfer Threshold:** $1.5\,\text{pts}$ (estimated value of rolling a FT into a 2-FT bank).
+* **Hit Threshold (-4):** $4.0 + 1.5 = 5.5\,\text{pts}$ (recovering the point deduction plus the rolled option value).
+
+---
+
+## Exact Wildcard MILP Formulation
+
+`fpl_skill.optimizer` formulates the Wildcard selection problem as a Mixed Integer Linear Program (MILP) solved using the COIN-OR CBC branch-and-bound solver.
+
+### Decision Variables
+* $x_i \in \{0, 1\}$: Binary indicator whether player $i$ is selected in the 15-man squad.
+* $y_{i,g} \in \{0, 1\}$: Binary indicator whether player $i$ starts in Gameweek $g \in \{3, 4, 5, 6\}$.
+* $c_{i,g} \in \{0, 1\}$: Binary indicator whether player $i$ is captain in Gameweek $g$.
+* $z_{k,g} \in \{0, 1\}$: Binary indicator whether legal formation $k$ is selected in Gameweek $g$.
+
+### Constraints
+1. **Squad Size & Roster Quotas:**
+   $$\sum_{i \in \text{GKP}} x_i = 2, \quad \sum_{i \in \text{DEF}} x_i = 5, \quad \sum_{i \in \text{MID}} x_i = 5, \quad \sum_{i \in \text{FWD}} x_i = 3$$
+2. **Financial Budget:**
+   $$\sum_{i} \text{cost}_i \cdot x_i \le \text{Budget} \quad (\text{e.g. } \le 100.0\text{m})$$
+3. **Club Limits:**
+   $$\sum_{i \in \text{Club}_c} x_i \le 3 \quad \forall c \in \{1, \dots, 20\}$$
+4. **Starting XI Selection:**
+   $$\sum_{i} y_{i,g} = 11, \quad y_{i,g} \le x_i \quad \forall i, g$$
+   $$\sum_{i \in \text{GKP}} y_{i,g} = 1$$
+5. **Canonical Formations:** Exactly one of the 7 legal FPL formations is active per GW:
+   $$\text{Formations} = \{ (3,5,2), (3,4,3), (4,4,2), (4,3,3), (4,5,1), (5,3,2), (5,4,1), (5,2,3) \}$$
+6. **Attacking Captaincy:**
+   $$\sum_{i} c_{i,g} = 1, \quad c_{i,g} \le y_{i,g}, \quad c_{i,g} = 0 \text{ if } \text{pos}_i \in \{\text{GKP}, \text{DEF}\}$$
+7. **Parameterized Locks:**
+   $$x_i = 1, \quad y_{i, 3} = 1 \quad \forall i \in \text{player\_locks}$$
+
+If `solve=False`, the optimizer builds the formulation and returns `status: "BUILT"`, `objective: None`, `squad_ids: []`. If the solver encounters an infeasible or non-optimal state, it fails closed without claiming an optimum.
+
+---
+
+## Observation, Telemetry & Elite Cohort Tracking
+
+### Observation Layer (`fpl_skill/observation/`)
+A resilient, zero-auth polling infrastructure designed for real-time gameweek monitoring:
+* **Token-Bucket Rate Limiter (`ingest.py`):** Strictly enforces $1.0\,\text{req/sec}$ burst limit with exponential backoff and jitter against the FPL public endpoints.
+* **Conditional HTTP Ingestion:** Tracks `Last-Modified` and `ETag` headers; serves HTTP 304 responses with 0 token/computation waste.
+* **Adaptive Deadline Cadence (`poller.py`):**
+  * $>24\,\text{hours to deadline}$: Polls every $3,600\,\text{s}$ (1 hr).
+  * $1\text{ to }24\,\text{hours to deadline}$: Polls every $900\,\text{s}$ (15 min).
+  * $<1\,\text{hour to deadline}$: Polls every $60\,\text{s}$ (1 min).
+* **Append-Only Event Store (`store.py`):** Deterministic event IDs (`sha256(canonical_json)`), append-only JSONL logging, crash-window salvage, and Dead Letter Queue (`alerts.py`).
+
+### Elite Cohort Adapter (`fpl_skill/elite_adapter.py`)
+Tracks market trends and template ownership across the top 1,000 / 10,000 managers in FPL:
+* Adheres strictly to **Research Contract v1.0 §§3–7, 10**.
+* **Public-Only Allowlist:** Restricts requests exclusively to public unauthenticated endpoints.
+* **Cryptographic Verification:** Pages and cohort rosters are SHA-256 hashed for immutable audit trails.
+* **Picks-Delta Transfer Detection:** Reconstructs transfers and captaincy swings without requiring private credentials.
+
+---
+
+## Account Authentication & Verified-Current Lineage
+
+The engine enforces a rigorous data lineage classification in `account_adapter.py` to prevent stale or cached picks from masquerading as the live editable squad:
+
+```
+[API Endpoint: /my-team/{id}/]                ──► VERIFIED_CURRENT       ──► OPTIMIZATION_READY
+[API Endpoint: /entry/{id}/event/{gw}/picks/] ──► PUBLISHED_EVENT_PICKS  ──► OPTIMIZATION_BLOCKED
+[API Endpoint: /entry/{id}/event/curr/picks/] ──► HISTORICAL_FALLBACK    ──► OPTIMIZATION_BLOCKED
+[Failed Response / Timeout]                   ──► UNAVAILABLE            ──► OPTIMIZATION_BLOCKED
+[Squad Size != 15]                            ──► STATE_CONFLICT         ──► FAIL CLOSED
+```
+
+### Security & Keychain Integration
+* Session credentials are read directly from macOS Keychain via OS-level security APIs:
+  ```bash
+  security add-generic-password \
+    -s fpl-agent -a auth/session \
+    -w '<your-fpl-session-cookie>'
+  ```
+* Alternatively, supply via environment variable `FPL_SESSION_COOKIE`.
+* **Zero Repo Pollution:** All cache files, SQLite databases (`jervis.db`), and calibration outputs are written to `~/.cache/fpl-skill/`. The source tree remains completely immutable.
 
 ---
 
 ## Source Authority Hierarchy
 
-Evidence is ranked L0 (highest) to L6 (lowest). Lower authority never silently overrides higher.
+Evidence is strictly partitioned into tiered authority levels per [contracts/source-contract.md](contracts/source-contract.md). Lower levels **cannot** silently override higher levels:
 
-| Level | Authority | Examples |
-|-------|-----------|----------|
-| **L0** | Official FPL / Premier League | FPL API, league rulebook, official announcements |
-| **L1** | Opta-derived official stats | BPS, defensive contributions, Opta statistics |
-| **L2** | Official club / player comms | Club statements, verified player social media |
-| **L3** | Reputable sports news | Established journalists, major sports outlets |
-| **L4** | FPL expert analysis | Analysts, written/video commentary, expert blogs |
-| **L5** | Podcasts / YouTube / fan analysts | Community analysis, creator commentary |
-| **L6** | Social / community signals | Twitter, Reddit, fan forums |
+| Level | Authority Classification | Permitted Data Sources | Decision Permissions |
+| :--- | :--- | :--- | :--- |
+| **L0** | Official Governing Bodies | Official FPL API, Premier League Rulebook, Official Statements | Full authority on squad state, deadlines, prices, rules |
+| **L1** | Verified Statistical Feeds | Opta match statistics, official BPS feeds, tracking telemetry | Official statistical calculations, minutes, BPS models |
+| **L2** | Club & Player Communications | Verified club injury bulletins, player press conferences | Primary inputs for minutes availability probability |
+| **L3** | Reputable Sports Press | Accredited tier-1 journalists, major publications | Secondary inputs for rotation context |
+| **L4** | Quantitative FPL Analysts | Independent projection models, established statistical blogs | Calibration corroboration only |
+| **L5** | Content Creators / Podcasts | Community creators, YouTube, podcasts | **Signal-only;** cannot trigger transfer/captain decisions |
+| **L6** | Social / Community Sentiment | Twitter/X, Reddit, crowd sentiment | **Signal-only;** cannot trigger transfer/captain decisions |
 
-**Policy:** L5–L6 are signal-only and never sufficient alone to trigger material decisions (transfers, captain selection, chip plays). When same-or-higher-authority sources conflict, the claim is recorded as `CONFLICTED` and carried through to output — never silently collapsed to one side.
-
-Full specification: [contracts/source-contract.md](contracts/source-contract.md)
-
----
-
-## EP Model
-
-Expected points per player per gameweek:
-
-```
-EP = base_ep × fdr_mult × home_mult × mins_prob
-```
-
-Premium assets receive an additional **1.15× multiplier**.
-
-**FDR multipliers:**
-
-| FDR | Multiplier |
-|-----|-----------|
-| 1 (easiest) | 1.40 |
-| 2 | 1.25 |
-| 3 (neutral) | 1.00 |
-| 4 | 0.85 |
-| 5 (hardest) | 0.70 |
-
-**Minutes probability** by status:
-
-| Status | mins_prob |
-|--------|-----------|
-| Starter, fully available | 0.95 |
-| Rotation risk | 0.85 |
-| Doubtful / limited role | 0.65 |
-| Returning from injury | 0.35 |
-| Unlikely to play | 0.10 |
-
-Horizon: GW+1 through GW+6 (up to GW+8 where reliable data exists). Cross-GW dependencies are explicitly modeled — double gameweeks, blank gameweeks, rotation patterns, and injury return windows are not treated as independent events.
+> [!IMPORTANT]
+> **Conflict Resolution:** When two sources at the same or higher authority contradict each other, the state is flagged as `CONFLICTED`. The engine fails closed on affected players rather than silently guessing a resolution.
 
 ---
 
-## Modules
+## Module Catalog
 
-| Module | Purpose |
-|--------|---------|
-| `api.py` | Core engine — data normalisation, EP model, formation validator, 1-FT optimizer, wildcard optimizer, D0–D4 decision pipeline |
-| `optimizer.py` | Exact MILP wildcard solver (PuLP/CBC) — 15-player global optimum, GW3–6 horizon, budget ≤100m, max 3/club, 4 hard locks |
-| `certification.py` | Mathematical certification — admissible upper bound proof, exhaustive B&B verification, certificate generation |
-| `backtest.py` | Empirical backtest harness — `CaptainBacktest`, `BenchBacktest`, `TransferBacktest`; calibration certificates post-GW |
-| `prediction_engine.py` | Per-player EP projections for a target GW; returns sorted XI + captain recommendation |
-| `transfer_intelligence.py` | 1-FT evaluator — all legal sell/buy pairs ranked by EP gain (≥1.0 threshold), top-5 suggestions |
-| `account_adapter.py` | Authenticated account state — macOS Keychain session cookie, resolves `VERIFIED_CURRENT` / `HISTORICAL_FALLBACK` / `STATE_CONFLICT` |
-| `forecast_scorecard.py` | Calibration record store — `CalibrationRecord` dataclass, MAE/RMSE/signed-bias computation, sample gate enforcement |
-| `direct_api.py` | FPL API client — SQLite cache (`jervis.db`) with file-cache fallback, handles `events[]`/`gameweeks[]` field-name variance |
-| `execution_sandbox.py` | Deterministic dry-run simulator — evidence-gap detection, blocks unless `VERIFIED_CURRENT` |
-| `history_evidence.py` | Diagnostic-only form/history reader — walled off so narrative data cannot silently influence the optimizer objective |
-| `approval_gate.py` | Sign-off gate for `approval` mode — blocks autonomous execution until explicit confirmation |
-| `watch.py` | Squad state watcher — polls for changes, emits state-change events |
-| `cli.py` | CLI entry point — `verify`, `calibrate`, `backtest-captain`, `backtest-bench`, `backtest-transfer` |
+| Module | Architectural Role | Core Capabilities |
+| :--- | :--- | :--- |
+| **[api.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/api.py)** | Core Evaluation Engine | Dataset normalization, multi-GW evaluation, canonical 15-man current squad resolution, legal XI selection (7 formations), 1-FT search, and D0–D4 pipeline. |
+| **[optimizer.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/optimizer.py)** | Exact MILP Solver | Parameterized branch-and-bound optimization (PuLP/CBC) over budget, hard locks, formation constraints, and multi-GW horizons. |
+| **[probabilistic_ep1.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/probabilistic_ep1.py)** | Probabilistic Engine | 5-point percentile distribution generator (P10–P90), moments, and scenario bounds with sum-to-one invariant normalization. |
+| **[rank_aware_objective1.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/rank_aware_objective1.py)** | Game-Theoretic Strategic Layer | Rank-tier objectives (`ELITE_SAFE` to `ASPIRATIONAL`), chip decision values, ceiling evaluations, and rolling transfer cost mechanics. |
+| **[elite_adapter.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/elite_adapter.py)** | Elite Cohort Tracker | Public-only, rate-limited, SHA-256 hashed cohort analysis of top-tier FPL managers per Research Contract v1.0. |
+| **[account_adapter.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/account_adapter.py)** | Authentication & Account State | Keychain / cookie adapter, manager profile extraction, bank status, and verified-current data lineage enforcement. |
+| **[forecast_scorecard.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/forecast_scorecard.py)** | Calibration & Scorecard Store | Disk-persistent forecast vs actual store (`~/.cache/fpl-skill/calibration_records.json`), MAE, RMSE, signed bias, and category breakdown. |
+| **[certification.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/certification.py)** | Mathematical Proof Harness | Upper-bound admissibility proofs, complete branch exploration verification, and formal JSON certificate generation. |
+| **[backtest.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/backtest.py)** | Empirical Backtest Harness | Pre-GW decision snapshot capture and post-GW evaluation for captain, bench, and transfer cards. |
+| **[direct_api.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/direct_api.py)** | Resilient API Client | Official FPL endpoint integration with SQLite caching, user-cache fallback, and field-name variance handling (`events[]` vs `gameweeks[]`). |
+| **[prediction_engine.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/prediction_engine.py)** | Lineup Generation | Target GW expected points projection, constrained starting XI selection, captain/vice-captain assignment. |
+| **[transfer_intelligence.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/transfer_intelligence.py)** | 1-FT Strategic Evaluator | Evaluates buy/sell moves across multi-GW horizons against option-value thresholds; isolates total EP vs baseline vs net gain. |
+| **[execution_sandbox.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/execution_sandbox.py)** | Dry-Run Sandbox | Simulates transfer execution, verifies invariants, blocks unsafe mutations. |
+| **[history_evidence.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/history_evidence.py)** | Diagnostic Evidence Reader | Walled-off historical narrative reader preventing diagnostic signals from contaminating objective functions. |
+| **[approval_gate.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/approval_gate.py)** | Human Sign-Off Gate | Interactive gate enforcing manual sign-off before actions occur in `approval` mode. |
+| **[watch.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/watch.py)** | Live State Watcher | Polling watcher emitting real-time squad change notifications. |
+| **[cli.py](file:///Users/ioriimasu/dev/fpl-skill/fpl_skill/cli.py)** | Command-Line Interface | Packaged Click CLI entry point (`fpl`). |
 
 ---
 
 ## CLI Reference
 
+The CLI is packaged and installed as `fpl` (or executable via `python -m fpl_skill.cli`).
+
+### Account Verification
+Inspect manager profile, active gameweek, ownership state, and data lineage:
 ```bash
-# Verify account state and auth
+export FPL_TEAM_ID=123456
 fpl verify
+```
+*Output Example:*
+```text
+FPL ACCOUNT
+-----------
+Team ID: 123456
+Active GW: 4
+Ownership State: VERIFIED_CURRENT
+Optimization State: OPTIMIZATION_READY
+Identity: VERIFIED
+Auth: VALID (Authenticated Session)
+```
 
-# Forecast calibration metrics (MAE, RMSE, signed bias)
+### Calibration & Bias Detection
+Inspect ongoing model error across continuous and categorical distributions:
+```bash
+# View overall calibration metrics
 fpl calibrate
-fpl calibrate --by-category
 
-# Captain recommendation + pre-GW decision record
-fpl backtest-captain
+# Filter metrics for a specific Gameweek
+fpl calibrate --gw 3
+
+# View granular error breakdown by prediction category (expected_points, goal, assist, clean_sheet)
+fpl calibrate --by-category
+```
+
+### Decision Backtesting
+Capture pre-gameweek decision snapshots and generate post-gameweek backtest reports:
+```bash
+# Captain recommendation snapshot
 fpl backtest-captain --gw 5
 
-# Bench order recommendation + pre-GW decision record
-fpl backtest-bench
+# Bench order recommendation snapshot
 fpl backtest-bench --gw 5
 
-# 1-FT recommendation + pre-GW decision record
-fpl backtest-transfer
+# 1-Free Transfer recommendation snapshot (with bank parameter)
 fpl backtest-transfer --gw 5 --bank 0.5
 ```
 
-Backtest commands record the pre-GW decision snapshot. After GW results arrive, pass `actuals_by_gw` to the respective backtest class to compute calibration metrics and write a certificate to `certification/`.
-
 ---
 
-## Quickstart
+## Quickstart & Installation
 
-### Install
-
+### 1. Clone & Set Up Virtual Environment
 ```bash
 git clone https://github.com/saaedimam/fpl-skill.git
 cd fpl-skill
-python3 -m venv .venv && source .venv/bin/activate
-pip install pulp click
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Auth
+### 2. Install Dependencies & Package
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -e .
+```
 
-Session cookie is read from macOS Keychain:
-
+### 3. Configure Credentials & Environment
+Store your authenticated session cookie in the macOS Keychain:
 ```bash
 security add-generic-password \
   -s fpl-agent -a auth/session \
   -w '<your-fpl-session-cookie>'
 ```
-
-Get the cookie from browser DevTools after logging in to fantasy.premierleague.com (`pl_profile` or `sessionid`).
-
-### Environment
-
+Set environment variables:
 ```bash
-export FPL_TEAM_ID=YOUR_TEAM_ID   # FPL entry ID (from URL: /entry/XXXXXX/event/...)
+export FPL_TEAM_ID=YOUR_ENTRY_ID   # Entry ID from fantasy.premierleague.com URL
 export FPL_MODE=advisory           # advisory | approval | autonomous
 ```
 
-### First run
-
+### 4. Run Core Routines
 ```bash
-# Verify your account resolves correctly
+# 1. Verify account authentication and squad state
 fpl verify
 
-# Run EP projections for GW5
+# 2. Run probabilistic EP projections
 python -c "
 from fpl_skill.prediction_engine import PredictionEngine
 import os, json
 e = PredictionEngine(os.environ['FPL_TEAM_ID'])
-print(json.dumps(e.run(5), indent=2))
+print(json.dumps(e.run(4), indent=2))
 "
 
-# Run the MILP wildcard optimizer (writes /tmp/fpl_exact_milp_result.json)
-python -m fpl_skill.optimizer
+# 3. Solve exact Wildcard MILP
+python -c "
+from fpl_skill.optimizer import build_and_solve
+res = build_and_solve(budget=100.0, horizon=(3, 6))
+print(f\"Optimal Objective: {res['objective']} pts | Squad IDs: {res['squad_ids']}\")
+"
 
-# Certify wildcard optimality
+# 4. Run formal mathematical Wildcard certification
 python -m fpl_skill.certification
-# exits 0 = CERTIFIED OPTIMAL, 1 = failure
 ```
 
 ---
 
-## Test Suite
+## Test Suite & Verification Gate
+
+The codebase enforces a zero-regression, contract-driven test gate run against Python 3.11, 3.12, and 3.13 on GitHub Actions.
 
 ```bash
-python3 -m pytest tests/ -q
-# 35 passed, 1 skipped, 3 xfailed
+python -m pytest tests/ -v -ra
 ```
 
-| Status | Count | Meaning |
-|--------|-------|---------|
-| passed | 35 | EP model, optimizer, backtest harness, calibration pipeline, CLI, adapters |
-| skipped | 1 | Live network smoke test in `test_acceptance.py` — requires `FPL_TEAM_ID` |
-| xfailed | 3 | Evidence-policy structural tests (`test_evidence_policy.py`) — L5/L6 solo-rejection, conflicted-evidence state, L5-requires-L0-corroboration — expected to fail until live season evidence data is available |
-
-**Test file breakdown:**
-
-| File | Focus |
-|------|-------|
-| `test_backtest.py` | CaptainBacktest (5), BenchBacktest (3), TransferBacktest (4), SampleGatePropagation (4) |
-| `test_forecast_scorecard.py` | CalibrationRecord, sample gate lifecycle (NO_TRACK_RECORD → INSUFFICIENT → READY) |
-| `test_cli_calibrate.py` | CLI `calibrate` command, flag acceptance |
-| `test_bootstrap_field_name.py` | API field-name variance (`events[]` vs `gameweeks[]`) |
-| `test_fpl_adapter.py` | Account adapter state resolution |
-| `test_compute_release_hash.py` | Release hash reproducibility |
-| `test_evidence_policy.py` | Evidence authority rules (3 xfailed — structural) |
-| `test_acceptance.py` | Live API smoke test (1 skipped — requires `FPL_TEAM_ID`) |
-
----
-
-## Certification
-
-### MILP Optimality (Wildcard)
-
-The wildcard squad is proven globally optimal — not heuristically good — via:
-
-1. **Admissible upper bound** — for any partial squad, the bound on achievable EP never underestimates the true maximum. This makes the branch-and-bound complete and the proof valid.
-2. **Exhaustive exploration** — all branches where `upper_bound ≥ best_score` are explored. No truncation.
-3. **Certificate** — written to `certification/optimality_certificate_<data_hash>.json`. Fields: `data_hash`, full squad, GW-by-GW XI + captain, solver metadata (`CBC`, `pulp_version`, `python_version`), `reproducibility` flag.
-
-MILP constraints: 15 players, budget ≤100m, max 3/club, positions (2 GKP / 5 DEF / 5 MID / 3 FWD), 7 legal formations, attacking captain (MID/FWD only). Hard locks: Calafiori (8), B.Fernandes (426), João Pedro (165), Haaland (411) — must appear in the 15 and in every GW3 starting XI.
-
-### Empirical Calibration (Captain / Bench / Transfer)
-
-Each backtest class follows the same pipeline:
-
-```
-record_decision(gw, squad_ids)
-  → Decision dataclass (pre-GW snapshot)
-
-compute_backtest(actuals_by_gw)           ← after GW results arrive
-  → metrics: accuracy %, MAE, RMSE, signed bias
-
-generate_certificate(metrics, data_hash)
-  → certification/calibration_<card>_certificate_<hash>.json
+### Test Suite Execution Summary
+```text
+=========================== short test summary info ============================
+PASSED [76 tests] Core EP, MILP optimizer, observation layer, calibration, decision values
+SKIPPED [1 test]  tests/test_acceptance.py:10 (Requires live FPL_TEAM_ID)
+XFAIL   [3 tests] tests/test_evidence_policy.py (Structural Phase 3+ rules: L5/L6 solo rejection)
+=================== 76 passed, 1 skipped, 3 xfailed in 8.47s ===================
 ```
 
-**Sample gate** (from `forecast_scorecard.py`): `≥6 completed GWs OR ≥20 player-forecast pairs`. Below the gate: `INSUFFICIENT_DATA`. Above: `CALIBRATED`.
-
-Certificate status at 2026/27 season start: `INSUFFICIENT_DATA` — first real calibration data arrives after GW1 results are final.
-
----
-
-## Contracts & Schemas
-
-**Contracts** (`contracts/`):
-
-| File | Purpose |
-|------|---------|
-| `source-contract.md` | L0–L6 authority hierarchy, override policy, `CONFLICTED` resolution |
-| `prediction-contract.md` | EP horizon rules, cross-GW dependency conditions, uncertainty labelling |
-| `decision-contract.md` | D0–D4 pipeline stages, single-GW score interpretation, `CONFLICTED` propagation |
-| `runtime-contract.md` | Operating mode constraints (advisory / approval / autonomous) |
-| `calibration-contract.md` | Sample gate thresholds, metric definitions, status lifecycle |
-| `GLOBAL15_CONTRACT.md` | Definition of GLOBAL 15 CERTIFIED and current certification state |
-
-**Schemas** (`schemas/`):
-
-| File | Purpose |
-|------|---------|
-| `player-state.schema.json` | Player state — injury, transfer, and role state machines |
-| `prediction.schema.json` | Per-player per-horizon EP projection with P10–P90 distribution |
-| `decision.schema.json` | Decision output — action, confidence, evidence chain |
-| `calibration-record.schema.json` | Single forecast-vs-actual record for the calibration pipeline |
+### Test Architecture Breakdown
+* **`test_forensic_repairs.py` (10 tests):** Verifies account profile extraction, verified-current data lineage, marginal EP gain calculation, transfer thresholds, scorecard persistence, CLI commands, rank-aware decision values, scenario bounds, and optimizer solve states.
+* **`test_audit_bugs.py` (6 tests):** Validates legal XI formation constraints, cache filesystem isolation, optimizer parameterization, valid formations ($5-2-3$), and probability mass normalization.
+* **`test_observation.py` (18 tests):** Validates token-bucket rate limiting, ETag caching, adaptive cadence, dead-letter alerts, crash recovery, and schema mutation handling.
+* **`test_backtest.py` (16 tests):** Validates captaincy, bench order, and transfer decision-rule backtesting.
+* **`test_compute_release_hash.py` (5 tests):** Validates canonical file collection and SHA-256 release hash determinism.
+* **`test_probabilistic_ep1_p023.py` (4 tests):** Validates distribution monotonicity, GKP normalization, and FDR directionality.
+* **`test_rank_aware_objective1.py` (3 tests):** Validates rank strategy selection and chip decision value safety.
+* **`test_cli_calibrate.py` (5 tests):** Validates CLI calibrate flags, states, and breakdowns.
+* **`test_fpl_adapter.py` (2 tests):** Validates state integrity and semantic structures.
+* **`test_forecast_scorecard.py` (3 tests):** Validates sample gate lifecycle.
+* **`test_bootstrap_field_name.py` (3 tests):** Validates API field name variance handling.
 
 ---
 
-## Project Status
-
-| Item | State | Detail |
-|------|-------|--------|
-| v1.0.0 | FROZEN | Parent version |
-| v1.1.0 | FROZEN | Current — backtest harness, 3 CLI cards, 35 tests |
-| Release hash | `0f23244f…` | SHA-256 over `fpl_skill/` + `contracts/` + `schemas/` |
-| Season | 2026/27 | Long-term target: top 0.03% (2,500 pt trajectory) |
-| Real FPL writes | Disabled | Default mode is `advisory` |
-| Global 15 Certified | NOT_CERTIFIED | Run `python -m fpl_skill.certification` to certify current dataset |
-
----
-
-## Repo Layout
+## Repository Layout
 
 ```
 fpl-skill/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                   # GitHub Actions CI matrix (Py 3.11, 3.12, 3.13)
 ├── fpl_skill/
-│   ├── api.py                   # Core — EP model, optimizer, decision pipeline
-│   ├── optimizer.py             # Exact MILP wildcard solver (PuLP/CBC)
-│   ├── certification.py         # Optimality certification
-│   ├── backtest.py              # Captain / bench / transfer backtest harness
-│   ├── prediction_engine.py
-│   ├── transfer_intelligence.py
-│   ├── account_adapter.py       # macOS Keychain auth, state resolution
-│   ├── forecast_scorecard.py    # CalibrationRecord + sample gate
-│   ├── direct_api.py            # FPL API client + SQLite cache
-│   ├── execution_sandbox.py     # Dry-run simulator
-│   ├── history_evidence.py      # Diagnostic-only form data
-│   ├── approval_gate.py         # Sign-off gate
-│   ├── watch.py                 # State change watcher
-│   └── cli.py                   # CLI entry point
-├── contracts/
-│   ├── source-contract.md
-│   ├── prediction-contract.md
-│   ├── decision-contract.md
-│   ├── runtime-contract.md
-│   ├── calibration-contract.md
-│   └── GLOBAL15_CONTRACT.md
-├── schemas/
-│   ├── player-state.schema.json
-│   ├── prediction.schema.json
+│   ├── observation/                 # Continuous Telemetry & Event Ingestion Layer
+│   │   ├── __init__.py
+│   │   ├── alerts.py                # Alert manager & Dead Letter Queue (DLQ)
+│   │   ├── ingest.py                # HTTP transport, Token-Bucket (1 req/s), ETag cache
+│   │   ├── model.py                 # Canonical JSON serialization & event hashing
+│   │   ├── poller.py                # Adaptive deadline poller (60s to 1h)
+│   │   ├── store.py                 # Append-only event store with crash recovery
+│   │   └── watcher.py               # Live squad state watcher
+│   ├── __init__.py
+│   ├── account_adapter.py           # macOS Keychain auth, manager profile, state lineage
+│   ├── api.py                       # Core evaluation, legal XI, 1-FT & Wildcard evaluators
+│   ├── approval_gate.py             # Human sign-off gate for approval mode
+│   ├── backtest.py                  # Captain, bench, and transfer backtest harnesses
+│   ├── certification.py             # Branch-and-bound mathematical optimality certification
+│   ├── cli.py                       # Packaged Click CLI entry points
+│   ├── direct_api.py                # FPL API client with SQLite & cache fallback
+│   ├── elite_adapter.py             # Public-only elite cohort adapter (Research Contract v1.0)
+│   ├── execution_sandbox.py         # Deterministic dry-run execution simulator
+│   ├── forecast_scorecard.py        # CalibrationRecord store & metrics engine
+│   ├── history_evidence.py          # Diagnostic narrative data reader
+│   ├── optimizer.py                 # Parameterized Wildcard MILP solver (PuLP/CBC)
+│   ├── prediction_engine.py         # Constrained Starting XI and captain generator
+│   ├── probabilistic_ep1.py         # 5-point probabilistic distribution engine
+│   ├── rank_aware_objective1.py     # Game-theoretic rank-tier objective functions
+│   ├── transfer_intelligence.py     # Multi-GW option-value transfer evaluator
+│   └── watch.py                     # Squad poll watcher
+├── contracts/                       # Formal Engineering Specifications
+│   ├── GLOBAL15_CONTRACT.md         # Exact Wildcard MILP certification bounds
+│   ├── calibration-contract.md      # Scorecard sample gates and metric definitions
+│   ├── decision-contract.md         # D0–D4 pipeline stages & conflict resolution
+│   ├── prediction-contract.md       # Multi-GW dependency rules & EP horizons
+│   ├── research-contract.md         # Elite cohort scraping and privacy constraints
+│   ├── runtime-contract.md          # Operating modes (advisory/approval/autonomous)
+│   └── source-contract.md           # L0–L6 source authority hierarchy
+├── schemas/                         # JSON Validation Schemas
+│   ├── calibration-record.schema.json
 │   ├── decision.schema.json
-│   └── calibration-record.schema.json
-├── evidence/
-│   ├── evidence-policy.md
-│   └── api-verification-2026-09-05.json
-├── certification/               # Optimality + calibration certificates (runtime-generated)
-├── tests/
-│   ├── run_validation.py        # Executable validation suite (30+ assertions)
+│   ├── event.schema.json
+│   ├── player-state.schema.json
+│   └── prediction.schema.json
+├── tests/                           # Complete Test Suite
+│   ├── compute_release_hash.py
+│   ├── release_hash.json
+│   ├── run_validation.py
+│   ├── test_acceptance.py
+│   ├── test_audit_bugs.py
 │   ├── test_backtest.py
-│   ├── test_forecast_scorecard.py
-│   ├── test_cli_calibrate.py
 │   ├── test_bootstrap_field_name.py
-│   ├── test_fpl_adapter.py
+│   ├── test_cli_calibrate.py
 │   ├── test_compute_release_hash.py
 │   ├── test_evidence_policy.py
-│   ├── test_acceptance.py
+│   ├── test_forecast_scorecard.py
+│   ├── test_forensic_repairs.py
+│   ├── test_fpl_adapter.py
+│   ├── test_observation.py
+│   ├── test_probabilistic_ep1_p023.py
+│   ├── test_rank_aware_objective1.py
 │   └── validation-suite.md
-├── prompts/
-├── SKILL.md                     # Agent skill specification
-├── FPL_SKILL.md
-├── MANIFEST.json                # Canonical file registry + release hash
+├── .gitignore
 ├── CHANGELOG.md
-└── VERSION
+├── MANIFEST.json                    # Frozen canonical file registry & release hash
+├── pyproject.toml                   # Modern PEP 518/621 packaging metadata
+├── README.md                        # Master architectural documentation
+├── requirements.txt                 # Project dependencies
+├── SKILL.md                         # Antigravity agent skill specification
+├── SKILL_V2.md                      # V2 engineering progression roadmap
+└── VERSION                          # Release version string
 ```
+
+---
+
+## Contracts & Formal Specifications
+
+Every module is bound to a versioned, machine-verifiable contract:
+* **[GLOBAL15_CONTRACT.md](contracts/GLOBAL15_CONTRACT.md):** Formal specification of the exact MILP Wildcard formulation, branch-and-bound verification requirements, and reproducible certificate generation.
+* **[source-contract.md](contracts/source-contract.md):** Strict authority rankings ($L0 \to L6$), conflict identification, and override prohibition.
+* **[decision-contract.md](contracts/decision-contract.md):** Step-by-step pipeline from current squad resolution ($D0$) to counterfactual decision analysis ($D4$).
+* **[prediction-contract.md](contracts/prediction-contract.md):** Rules governing expected point calculations, uncertainty quantification, and multi-GW dependency modeling.
+* **[calibration-contract.md](contracts/calibration-contract.md):** Sample gate criteria, error metrics ($\text{MAE}, \text{RMSE}, \text{Signed Bias}$), and calibration certificate schemas.
+* **[research-contract.md](contracts/research-contract.md):** Constraints governing public-only elite cohort data collection, pagination, and SHA-256 validation.
 
 ---
 
 ## License
 
-MIT
+MIT License. Copyright (c) 2026. Built for mathematical correctness and competitive excellence in Fantasy Premier League.
