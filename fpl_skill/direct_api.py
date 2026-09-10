@@ -6,6 +6,7 @@ Implements local SQLite caching (via jervis.db if present) or file cache.
 """
 
 import json
+import os
 import sqlite3
 import time
 import urllib.request
@@ -88,8 +89,12 @@ class DirectFPLClient:
         }
 
 ROOT = Path(__file__).parent
-DB_PATH = ROOT / "jervis.db"
-CACHE_FILE = ROOT / "fpl_cache.json"
+BUNDLED_CACHE_FILE = ROOT / "fpl_cache.json"
+
+CACHE_DIR = Path(os.path.expanduser("~/.cache/fpl-skill/"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = CACHE_DIR / "jervis.db"
+CACHE_FILE = CACHE_DIR / "fpl_cache.json"
 
 BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 FIXTURES_URL = "https://fantasy.premierleague.com/api/fixtures/"
@@ -163,17 +168,20 @@ def get_position_name(element_type: int) -> str:
     return mapping.get(element_type, "UNKNOWN")
 
 def init_db():
-    if DB_PATH.exists():
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS fpl_cache
                      (key TEXT PRIMARY KEY, data TEXT, timestamp REAL)''')
         conn.commit()
         return conn
-    return None
+    except Exception:
+        return None
 
 def save_to_cache(data: Dict[str, Any]):
     """Save to SQLite if exists, otherwise fallback to file."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     conn = init_db()
     if conn:
         c = conn.cursor()
@@ -197,8 +205,13 @@ def load_from_cache() -> Optional[Dict[str, Any]]:
             data = json.loads(row[0])
             data["cache_timestamp"] = row[1]
             return data
-    elif CACHE_FILE.exists():
+    if CACHE_FILE.exists():
         with open(CACHE_FILE, "r") as f:
+            data = json.load(f)
+            data["cache_timestamp"] = data.get("fetched_at", 0)
+            return data
+    elif BUNDLED_CACHE_FILE.exists():
+        with open(BUNDLED_CACHE_FILE, "r") as f:
             data = json.load(f)
             data["cache_timestamp"] = data.get("fetched_at", 0)
             return data

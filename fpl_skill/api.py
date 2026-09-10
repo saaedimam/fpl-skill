@@ -22,7 +22,7 @@ from itertools import combinations
 try:
     from fpl_skill.direct_api import get_fpl_data, load_from_cache
 except ImportError:
-    from .fpl_direct_api import get_fpl_data, load_from_cache
+    from .direct_api import get_fpl_data, load_from_cache
 
 DATA_FILE = Path(__file__).parent / "fpl_data.json"
 
@@ -36,6 +36,7 @@ VALID_FORMATIONS = [
     (4, 3, 3),
     (5, 4, 1),
     (5, 3, 2),
+    (5, 2, 3),
 ]
 
 # Authoritative Current 15-player Squad Specification
@@ -663,7 +664,7 @@ def fast_eval_squad_ep(gks: List[Dict[str, Any]], defs: List[Dict[str, Any]], mi
             # GW3: enumerate exactly the 5 feasible formations that can hold the 4 locks
             # Locks: 1 DEF + 1 MID + 2 FWD → feasible n_fwd >=2, n_mid >=1, n_def >=1
             best_gw = -1.0
-            for (n_def, n_mid, n_fwd) in [(3,5,2),(3,4,3),(4,4,2),(4,3,3),(5,3,2)]:
+            for (n_def, n_mid, n_fwd) in [(3,5,2),(3,4,3),(4,4,2),(4,3,3),(5,3,2),(5,2,3)]:
                 need_def_extra = n_def - len(locked_gw3_defs)
                 need_mid_extra = n_mid - len(locked_gw3_mids)
                 need_fwd_extra = n_fwd - len(locked_gw3_fwds)
@@ -711,8 +712,9 @@ def fast_eval_squad_ep(gks: List[Dict[str, Any]], defs: List[Dict[str, Any]], mi
         f_433 = g_val + sum(d_vals[:4]) + sum(m_vals[:3]) + sum(f_vals[:3])
         f_532 = g_val + sum(d_vals[:5]) + sum(m_vals[:3]) + sum(f_vals[:2])
         f_541 = g_val + sum(d_vals[:5]) + sum(m_vals[:4]) + sum(f_vals[:1])
+        f_523 = g_val + sum(d_vals[:5]) + sum(m_vals[:2]) + sum(f_vals[:3])
 
-        tot_score += max(f_352, f_343, f_442, f_451, f_433, f_532, f_541) + best_att
+        tot_score += max(f_352, f_343, f_442, f_451, f_433, f_532, f_541, f_523) + best_att
 
     return round(tot_score, 2)
 
