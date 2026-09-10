@@ -1,0 +1,69 @@
+{
+  "title": "v2.0 adversarial audit \u2014 findings + repairs + freeze evidence",
+  "timestamp": "2026-09-09T01:27:33.798737+00:00",
+  "baseline": {
+    "tests": "57 passed / 1 skipped / 3 xfailed (pre-audit)"
+  },
+  "findings": [
+    {
+      "id": "V2-AUDIT-001",
+      "module": "fpl_skill/probabilistic_ep1.py",
+      "severity": "HIGH",
+      "class": "GKP position dialect KeyError",
+      "detail": "FPL element_type 1 maps to 'GKP'; engine dicts use 'GK'. Crash on any GKP player."
+    },
+    {
+      "id": "V2-AUDIT-002",
+      "module": "fpl_skill/probabilistic_ep1.py",
+      "severity": "HIGH",
+      "class": "None chance_of_playing crash",
+      "detail": "FPL returns null for fit regulars; None/100 crashed TypeError in minutes adjustment, incl. injured/suspended."
+    },
+    {
+      "id": "V2-AUDIT-003",
+      "module": "fpl_skill/probabilistic_ep1.py",
+      "severity": "MEDIUM",
+      "class": "percentile ordering broken",
+      "detail": "max(0.0, ...) per percentile violated p10<=p25<=p50<=p75<=p90 for low-EP players."
+    },
+    {
+      "id": "V2-AUDIT-004",
+      "module": "fpl_skill/probabilistic_ep1.py",
+      "severity": "MEDIUM",
+      "class": "p_zero=1.0 nonzero tail",
+      "detail": "injured/suspended/unavailable kept nonzero p75/p90 though 100% chance of 0 points."
+    },
+    {
+      "id": "V2-AUDIT-005",
+      "module": "fpl_skill/observation/store.py",
+      "severity": "LOW",
+      "class": "crash-window event loss",
+      "detail": "truncated final line glued next valid record; reader skipped both. Salvage via JSON scan."
+    }
+  ],
+  "repairs": [
+    "position GKP/GK \u2192 GK at generate_distribution entry",
+    "chance_of_playing_next_round None \u2192 100.0 at entry + defensive (or 100.0) in minutes adjustment",
+    "percentiles floored by previous percentile (monotone chain, floor 0)",
+    "p_zero==1.0 collapses mean/variance/all percentiles to 0",
+    "store reader: on ValueError, JSONDecoder().raw_decode scan of the line salvages complete trailing objects"
+  ],
+  "regression_tests": [
+    "tests/test_probabilistic_ep1_p023.py::test_gkp_dialect_normalized",
+    "tests/test_probabilistic_ep1_p023.py::test_none_chance_of_playing_safe",
+    "tests/test_observation.py::test_store_salvages_crash_window"
+  ],
+  "verification": {
+    "fuzz": {
+      "cases": 5000,
+      "failures": 0,
+      "seed": 99,
+      "coverage": "GKP/GK/DEF/MID/FWD x all PlayerState x chance\u2208{None,0..100} x optional xG/xA"
+    },
+    "full_suite": "60 passed, 1 skipped, 3 xfailed"
+  },
+  "final_hashes": {
+    "fpl_skill/probabilistic_ep1.py": "eb30fbb62fe7efaba9f2172cf5930513449615dbae11723148ad0611f9bc5e81",
+    "fpl_skill/observation/store.py": "347536e30157993e98e6d853cb02a3eb4a8ff5c041011e4cb5512184eb27a161"
+  }
+}

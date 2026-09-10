@@ -46,3 +46,7 @@ CODEX_PROMPT_CARD.txt
 FPL_SKILL_CODEX_EXECUTION_BRIEF.md
 IOR_QUICK_START.txt
 FREEZE_SIGN_OFF.md
+
+# v2 freeze artifacts (manifest + evidence are canonical, must be tracked)
+!MANIFEST.v2.json
+!evidence/v2-adversarial-audit-2026-09-09.json
