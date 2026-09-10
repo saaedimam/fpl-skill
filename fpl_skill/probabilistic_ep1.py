@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Tuple, List
 from enum import Enum
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PlayerState(Enum):
@@ -62,7 +62,7 @@ class PlayerDistribution:
     p_injured: float = 0.0  # Probability unavailable next GW
     
     # Metadata
-    data_timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    data_timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     confidence: str = "high"  # high, medium, low, provisional
     source: str = "model"  # model, historical, consensus, blend
     notes: Optional[str] = None
@@ -211,9 +211,17 @@ class ProbabilisticEPEngine:
         """
         Main entry point: convert FPL data to distribution.
         """
-        # FPL API position dialect ("GKP" = element_type 1) -> engine keys
-        if inputs.position in ("GKP", "GK"):
-            inputs.position = "GK"
+        # Canonical position normalization: support FPL element_type (1-4, int or str) and text tokens
+        pos_map = {
+            1: "GK", "1": "GK", "GKP": "GK", "GK": "GK",
+            2: "DEF", "2": "DEF", "DEF": "DEF",
+            3: "MID", "3": "MID", "MID": "MID",
+            4: "FWD", "4": "FWD", "FWD": "FWD",
+        }
+        if inputs.position not in pos_map:
+            raise ValueError(f"Invalid position representation: {inputs.position!r}. Expected one of {list(pos_map.keys())}")
+        inputs.position = pos_map[inputs.position]
+
         # FPL API returns null chance_of_playing_next_round for fit regulars
         if inputs.chance_of_playing_next_round is None:
             inputs.chance_of_playing_next_round = 100.0

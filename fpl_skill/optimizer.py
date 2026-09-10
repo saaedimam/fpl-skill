@@ -56,11 +56,12 @@ def build_and_solve(
             raise KeyError(f"Locked player ID {pid} not found in player dataset")
 
     prob = pulp.LpProblem("FPL_Exact_Wildcard", pulp.LpMaximize)
-    x = {pid: pulp.LpVariable(f"x_{pid}", cat="Binary") for pid in by_id}
-    y = {(pid,g): pulp.LpVariable(f"y_{pid}_{g}", cat="Binary") for pid in by_id for g in gws}
-    c = {(pid,g): pulp.LpVariable(f"c_{pid}_{g}", cat="Binary") for pid in by_id for g in gws}
+    _add_var = prob.add_variable if hasattr(prob, "add_variable") else (lambda name, **kw: pulp.LpVariable(name, **kw))
+    x = {pid: _add_var(f"x_{pid}", cat="Binary") for pid in by_id}
+    y = {(pid,g): _add_var(f"y_{pid}_{g}", cat="Binary") for pid in by_id for g in gws}
+    c = {(pid,g): _add_var(f"c_{pid}_{g}", cat="Binary") for pid in by_id for g in gws}
     K = list(range(len(FORMATIONS)))
-    z = {(k,g): pulp.LpVariable(f"z_{k}_{g}", cat="Binary") for k in K for g in gws}
+    z = {(k,g): _add_var(f"z_{k}_{g}", cat="Binary") for k in K for g in gws}
 
     # Objective
     prob += pulp.lpSum(ep[pid][g] * y[(pid,g)] for pid in by_id for g in gws) + pulp.lpSum(ep[pid][g] * c[(pid,g)] for pid in by_id for g in gws)
@@ -125,7 +126,7 @@ def build_and_solve(
             "squad_ids": [],
             "prob": prob,
             "variables_count": len(prob.variables()),
-            "constraints_count": len(prob.constraints),
+            "constraints_count": len(prob.constraints() if callable(prob.constraints) else prob.constraints),
             "data_hash": data_hash,
             "players": players
         }

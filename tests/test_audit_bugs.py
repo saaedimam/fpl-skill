@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 import pytest
+from datetime import datetime
 
 # Ensure repo root and fpl_skill are in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -167,3 +168,62 @@ def test_p0_gap_004_probability_invariant_normalization():
     assert 0.0 <= scenarios["p_bench"] <= 1.0
     assert 0.0 <= scenarios["p_injured"] <= 1.0
     assert scenarios["p_zero"] + scenarios["p_haul"] + scenarios["p_bench"] <= 1.0 + 1e-6
+
+
+def test_finding_a_datetime_timezone_aware():
+    """FINDING A: PlayerDistribution data_timestamp must be ISO8601 UTC timezone-aware and not raise deprecation."""
+    engine = ProbabilisticEPEngine()
+    inputs = DistributionModelInputs(
+        player_id=10, position="MID", status=PlayerState.AVAILABLE, team="MCI", opponent="EVE", gw=1,
+        minutes_played_last_3=270, chance_of_playing_next_round=100, form=7.0, selected_by_percent=30.0,
+        fixture_difficulty=2, is_home=True, opponent_strength_attack=1000, opponent_strength_defence=1000,
+        team_goals_per_gw=2.2, team_conceded_per_gw=0.9
+    )
+    dist = engine.generate_distribution(inputs)
+    assert dist.data_timestamp is not None
+    # Parse ISO timestamp and verify offset
+    dt = datetime.fromisoformat(dist.data_timestamp)
+    assert dt.tzinfo is not None, "Timestamp must be timezone-aware"
+
+
+def test_finding_b_pulp_variable_and_constraint_compatibility():
+    """FINDING B: Optimizer constructs model with zero deprecation warnings and valid dimensions."""
+    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    assert res["status"] == "BUILT"
+    assert res["variables_count"] == 5927
+    assert res["constraints_count"] == 5318
+
+
+def test_finding_f_position_normalization_dialects():
+    """FINDING F: Engine accepts all official FPL integer and string dialects and rejects invalid values."""
+    engine = ProbabilisticEPEngine()
+    base_kw = dict(
+        player_id=25, status=PlayerState.AVAILABLE, team="ARS", opponent="CHE", gw=1,
+        minutes_played_last_3=270, chance_of_playing_next_round=100, form=5.0,
+        selected_by_percent=20.0, fixture_difficulty=3, is_home=True,
+        opponent_strength_attack=1050, opponent_strength_defence=900,
+        team_goals_per_gw=1.8, team_conceded_per_gw=1.1,
+    )
+    # Integer dialects: 1 (GK), 2 (DEF), 3 (MID), 4 (FWD)
+    d1 = engine.generate_distribution(DistributionModelInputs(position=1, **base_kw))
+    assert d1.position == "GK"
+    d2 = engine.generate_distribution(DistributionModelInputs(position=2, **base_kw))
+    assert d2.position == "DEF"
+    d3 = engine.generate_distribution(DistributionModelInputs(position=3, **base_kw))
+    assert d3.position == "MID"
+    d4 = engine.generate_distribution(DistributionModelInputs(position=4, **base_kw))
+    assert d4.position == "FWD"
+
+    # String numeric dialects: "1", "2", "3", "4"
+    assert engine.generate_distribution(DistributionModelInputs(position="1", **base_kw)).position == "GK"
+    assert engine.generate_distribution(DistributionModelInputs(position="2", **base_kw)).position == "DEF"
+
+    # Token dialects: "GKP", "GK", "DEF", "MID", "FWD"
+    assert engine.generate_distribution(DistributionModelInputs(position="GKP", **base_kw)).position == "GK"
+    assert engine.generate_distribution(DistributionModelInputs(position="GK", **base_kw)).position == "GK"
+
+    # Invalid representation must be rejected with ValueError
+    with pytest.raises(ValueError, match="Invalid position representation"):
+        engine.generate_distribution(DistributionModelInputs(position="STRIKER", **base_kw))
+    with pytest.raises(ValueError, match="Invalid position representation"):
+        engine.generate_distribution(DistributionModelInputs(position=99, **base_kw))
