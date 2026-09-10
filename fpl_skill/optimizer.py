@@ -121,6 +121,8 @@ def build_and_solve(
     if not solve:
         return {
             "status": "BUILT",
+            "objective": None,
+            "squad_ids": [],
             "prob": prob,
             "variables_count": len(prob.variables()),
             "constraints_count": len(prob.constraints),
@@ -133,7 +135,25 @@ def build_and_solve(
     prob.solve(solver)
     elapsed = time.time() - t0
     status = pulp.LpStatus[prob.status]
-    obj = pulp.value(prob.objective) if status in ("Optimal","Not Solved") else None
+
+    if status != "Optimal":
+        print(f"Status: {status} Objective: None Time: {elapsed:.1f}s", flush=True)
+        return {
+            "status": status,
+            "objective": None,
+            "elapsed": elapsed,
+            "squad_ids": [],
+            "by_gw_y": {},
+            "by_gw_c": {},
+            "by_gw_z": {},
+            "data_hash": data_hash,
+            "raw": raw,
+            "players": players,
+            "ep": ep,
+            "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None)
+        }
+
+    obj = pulp.value(prob.objective)
     print(f"Status: {status} Objective: {obj} Time: {elapsed:.1f}s", flush=True)
 
     squad_ids = [pid for pid in by_id if pulp.value(x[pid]) and pulp.value(x[pid]) > 0.5]

@@ -78,7 +78,9 @@ def get_rank_strategy(rank_context: RankContext) -> RankStrategy:
     """
     rank = rank_context.current_rank
     
-    if rank <= 50:
+    if rank <= 0:
+        return RankStrategy.ASPIRATIONAL
+    elif rank <= 50:
         return RankStrategy.ELITE_SAFE
     elif rank <= 500:
         return RankStrategy.ELITE_CHASE
@@ -280,8 +282,8 @@ class RankAwareObjective:
         
         new_score = self.compute_objective(new_squad, rank_context)
         
-        # Adjust for transfer cost
-        transfer_cost = 4 if rank_context.free_transfers <= 1 else 0
+        # Adjust for transfer cost: 1 FT is free, only <= 0 FT incurs a -4 hit
+        transfer_cost = 4 if rank_context.free_transfers <= 0 else 0
         
         return new_score - current_score - transfer_cost
     
@@ -309,7 +311,7 @@ class RankAwareObjective:
                 # Elite safe: protect lead, minimize variance
                 # Use expected value (P50) as base, penalize high variance
                 variance = dist.get("variance", 0.5)
-                variance_penalty = math.sqrt(variance) * 0.3  # Penalize volatility
+                variance_penalty = math.sqrt(max(0.0, variance)) * 0.3  # Penalize volatility
                 value = base_ep - variance_penalty  # Reduce for variance
                 
                 # Prefer consensus (high ownership) when protecting lead
@@ -319,12 +321,12 @@ class RankAwareObjective:
             elif strategy == RankStrategy.ELITE_CHASE:
                 # Elite chase: balanced upside + consistency
                 ceiling = (dist.get("p90", 0.0) - dist.get("p50", 0.0)) * 2.0
-                consistency_bonus = 1.0 - math.sqrt(dist.get("variance", 2.0)) / 10.0
+                consistency_bonus = 1.0 - math.sqrt(max(0.0, dist.get("variance", 2.0))) / 10.0
                 captain_values[player_id] = base_ep + ceiling * 0.2 + max(0, consistency_bonus) * 0.1
             
             elif strategy == RankStrategy.COMPETITIVE:
                 # Competitive: expected value with small consistency bonus
-                consistency = 1.0 - math.sqrt(dist.get("variance", 2.0)) / 10.0
+                consistency = 1.0 - math.sqrt(max(0.0, dist.get("variance", 2.0))) / 10.0
                 captain_values[player_id] = base_ep + max(0, consistency) * 0.2
             
             else:  # ASPIRATIONAL
@@ -358,10 +360,10 @@ class RankAwareObjective:
         
         elif chip_name == "triple_captain":
             # Triple captain: 3x captain multiplier
-            # Value = captain_ep * 2 (since normal is 2x, triple is +1x more)
+            # Value = captain_ep * 1 (since normal is 2x, triple is +1x more)
             best_captain_ep = max(
-                (player.get("distribution", {}).get("p50", 0.0) * 1.0)
-                for player in squad.values()
+                (player.get("distribution", {}).get("p50", 0.0) * 1.0 for player in squad.values()),
+                default=0.0
             )
             chip_value = best_captain_ep  # +1x of captain's points
         

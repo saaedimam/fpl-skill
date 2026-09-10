@@ -15,13 +15,13 @@
 ## What "GLOBAL 15 CERTIFIED" means
 A claim is GLOBAL if:
 1. The 15 was solved over the COMPLETE search space (no truncation — `[:10]/[:30]/[:40]` removed in this branch);
-2. The optimizer is an exact encoding of the proven production objective (the MILP at `fpl_exact_milp.py` does this: squad + per-GW XI (7 formations) + attacking captain + budget + club-max-3 + GW3 hard-XI locks, solved by CBC);
+2. The optimizer is an exact encoding of the proven production objective (the MILP in `fpl_skill/optimizer.py` does this: squad + per-GW XI (legal formations) + attacking captain + budget + club-max-3 + parameterized hard locks, solved by CBC);
 3. The solution is reproducible: dataset hash + squad IDs + GW-by-GW XI/captain are recorded.
 
 ## Current state
 - Branch-and-bound in `fpl_apify_skill.py` had `[:10]/[:30]/[:40]` truncation — heuristic best-effort, NOT globally optimal (fixed in this branch).
 - Local 1-/2-swap search on `fast_eval_squad_ep` is a local 2-optimum only (see `certification/NOTICE.md`).
-- An exact MILP (`fpl_exact_milp.py`) exists that encodes the full production objective. It must be run as the upgrade to claim GLOBAL.
+- An exact MILP (`fpl_skill/optimizer.py`) exists that encodes the full production objective over the parameterized domain.
 
 ## Evidence required for freeze
 - Deterministic squad: IDs, names, teams, costs, positions.

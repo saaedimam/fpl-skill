@@ -14,6 +14,7 @@ Unlike wildcard certification (exact MILP proof), these are empirical
 backtests against the decision-rule's historical recommendations.
 """
 
+import os
 import json
 import datetime
 import hashlib
@@ -29,8 +30,8 @@ from fpl_skill.api import (
 from fpl_skill.forecast_scorecard import ForecastScorecard, CalibrationRecord
 from fpl_skill.certification import get_data_hash
 
-BACKTEST_DIR = Path(__file__).parent / "certification"
-BACKTEST_DIR.mkdir(exist_ok=True)
+BACKTEST_DIR = Path(os.path.expanduser("~/.cache/fpl-skill/certification"))
+BACKTEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass

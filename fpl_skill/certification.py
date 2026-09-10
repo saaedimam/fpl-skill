@@ -16,6 +16,7 @@ Certification Strategy:
 4. Generate formal optimality certificate
 """
 
+import os
 import json
 import hashlib
 import math
@@ -31,8 +32,8 @@ from fpl_skill.api import (
     VALID_FORMATIONS, optimize_wildcard_squad, fast_eval_squad_ep
 )
 
-CERTIFICATION_DIR = Path(__file__).parent / "certification"
-CERTIFICATION_DIR.mkdir(exist_ok=True)
+CERTIFICATION_DIR = Path(os.path.expanduser("~/.cache/fpl-skill/certification"))
+CERTIFICATION_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_data_hash() -> str:

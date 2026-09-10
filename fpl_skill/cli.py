@@ -18,16 +18,34 @@ def verify():
         click.echo("Error: FPL_TEAM_ID not set.")
         sys.exit(1)
     adapter = FPLAccountAdapter(team_id)
-    state = adapter.get_state(adapter.get_active_event_id())
+    active_gw = adapter.get_active_event_id()
+    state = adapter.get_state(active_gw)
+    ownership = state.get("ownership_state", "UNAVAILABLE")
+    opt_state = state.get("optimization_state", "OPTIMIZATION_BLOCKED")
+
     click.echo("FPL ACCOUNT\n-----------")
     click.echo(f"Team ID: {team_id}")
-    click.echo("Identity: VERIFIED")
-    click.echo("Auth: VALID")
+    click.echo(f"Active GW: {active_gw}")
+    click.echo(f"Ownership State: {ownership}")
+    click.echo(f"Optimization State: {opt_state}")
+
+    if ownership == "VERIFIED_CURRENT":
+        click.echo("Identity: VERIFIED")
+        click.echo("Auth: VALID (Authenticated Session)")
+    elif ownership == "PUBLISHED_EVENT_PICKS":
+        click.echo("Identity: PUBLIC_ENTRY")
+        click.echo("Auth: UNAUTHENTICATED (Published Event Picks)")
+    elif ownership == "HISTORICAL_FALLBACK":
+        click.echo("Identity: PUBLIC_ENTRY")
+        click.echo("Auth: UNAUTHENTICATED (Historical Fallback)")
+    else:
+        click.echo("Identity: UNVERIFIED")
+        click.echo("Auth: UNAVAILABLE")
 
 
 @cli.command()
 @click.option('--gw', type=int, default=None, help='Scope to specific gameweek (optional)')
-@click.option('--by-category', is_flag=True, help='Break down bias per category (future)')
+@click.option('--by-category', is_flag=True, help='Break down bias per category')
 def calibrate(gw, by_category):
     """
     Display forecast calibration metrics and bias detection.
@@ -39,11 +57,8 @@ def calibrate(gw, by_category):
     """
     from fpl_skill.forecast_scorecard import ForecastScorecard
 
-    scorecard = ForecastScorecard()
-    # TODO: Load real calibration records from storage/DB (v1.1.0 stub: empty)
-    # For now, scorecard starts empty (NO_TRACK_RECORD_YET state)
-
-    metrics = scorecard.compute_metrics()
+    scorecard = ForecastScorecard.load()
+    metrics = scorecard.compute_metrics(gw=gw, by_category=by_category)
 
     if metrics["status"] == "NO_TRACK_RECORD_YET":
         click.echo("ℹ️  No track record yet — season is fresh.")
@@ -58,7 +73,8 @@ def calibrate(gw, by_category):
 
     # READY state
     click.echo("📊 Forecast Scorecard — Metrics")
-    click.echo(f"   Sample size: {metrics['sample_size']} records, {metrics['completed_gameweeks']} completed GWs")
+    scope_str = f" (GW {gw})" if gw else ""
+    click.echo(f"   Sample size: {metrics['sample_size']} records, {metrics['completed_gameweeks']} completed GWs{scope_str}")
     click.echo()
     click.echo("Expected Points (continuous):")
     click.echo(f"  • MAE (Mean Absolute Error):  {metrics['mae']}")
@@ -71,12 +87,14 @@ def calibrate(gw, by_category):
         click.echo(f"  • Brier Score: {metrics['brier']}")
 
     if metrics.get('log_loss'):
+        click.echo()
         click.echo(f"  • Log Loss:    {metrics['log_loss']}")
 
-    if by_category:
+    if by_category and metrics.get("by_category"):
         click.echo()
         click.echo("Bias by Category:")
-        click.echo("  (Future feature — implement in v1.1.1)")
+        for cat, cat_m in metrics["by_category"].items():
+            click.echo(f"  • {cat} (N={cat_m['count']}): MAE={cat_m['mae']}, Bias={cat_m['signed_bias']}")
 
     click.echo()
     click.echo("✅ Calibration data available. Use `/predict <player> <horizon>` for live forecasts.")
