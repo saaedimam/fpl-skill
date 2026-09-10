@@ -108,7 +108,7 @@ MATHEMATICAL OPTIMIZATION: SEARCH SPACE / LEGAL SOLUTIONS / SOLUTIONS EVALUATED 
 CERTIFICATION: GLOBAL_OPTIMUM_CERTIFIED TRUE/FALSE (if FALSE, explain why)
 ```
 
-## PERMITTED PATH FOR ANY DIAGNOSTIC FEATURE
+## 27 PERMITTED PATH: ANY
 Diagnostic feature (H2H, form bucket, etc.) → attach as evidence layer (`fpl_history_evidence.py` style) → gate on predictive lift (backtest) → only then promote to production. Until then: display alongside, never override `gw_ep` leader.
 
 ## IMPLEMENTATION POINTERS (this repo)
