@@ -81,15 +81,21 @@ def estimate_expected_minutes(player: Mapping[str, Any]) -> tuple[float, float, 
 
 def normalize_player_rates(player: Mapping[str, Any]) -> PlayerRates:
     minutes = max(0, int(float(player.get("minutes") or 0)))
-    denominator = max(minutes, 90)
-    xg = max(0.0, float(player.get("expected_goals") or 0.0))
-    xa = max(0.0, float(player.get("expected_assists") or 0.0))
-    xgc = max(0.0, float(player.get("expected_goals_conceded") or 0.0))
+    if minutes == 0:
+        xg90 = xa90 = xgc90 = 0.0
+    else:
+        xg = max(0.0, float(player.get("expected_goals") or 0.0))
+        xa = max(0.0, float(player.get("expected_assists") or 0.0))
+        xgc = max(0.0, float(player.get("expected_goals_conceded") or 0.0))
+        scale = 90.0 / minutes
+        xg90 = xg * scale
+        xa90 = xa * scale
+        xgc90 = xgc * scale
     p_start, p_sub, expected_minutes = estimate_expected_minutes(player)
     return PlayerRates(
-        xg90=xg / denominator * 90.0,
-        xa90=xa / denominator * 90.0,
-        xgc90=xgc / denominator * 90.0,
+        xg90=xg90,
+        xa90=xa90,
+        xgc90=xgc90,
         minutes=minutes,
         expected_minutes=expected_minutes,
         p_start=p_start,
