@@ -80,17 +80,28 @@ def estimate_expected_minutes(player: Mapping[str, Any]) -> tuple[float, float, 
 
 
 def normalize_player_rates(player: Mapping[str, Any]) -> PlayerRates:
-    minutes = max(0, int(float(player.get("minutes") or 0)))
-    if minutes == 0:
+    minutes_value = player.get("minutes") if "minutes" in player else None
+    if minutes_value is None:
+        # A partial record may omit minutes while still carrying cumulative
+        # xG/xA/xGC. Preserve the data instead of treating omission as zero.
+        minutes = 0
+        denominator = 90.0
+    else:
+        minutes = max(0, int(float(minutes_value)))
+        denominator = float(minutes)
+
+    if minutes == 0 and minutes_value is not None:
+        # Explicit zero minutes is a real observation: no observed exposure.
         xg90 = xa90 = xgc90 = 0.0
     else:
         xg = max(0.0, float(player.get("expected_goals") or 0.0))
         xa = max(0.0, float(player.get("expected_assists") or 0.0))
         xgc = max(0.0, float(player.get("expected_goals_conceded") or 0.0))
-        scale = 90.0 / minutes
+        scale = 90.0 / denominator
         xg90 = xg * scale
         xa90 = xa * scale
         xgc90 = xgc * scale
+
     p_start, p_sub, expected_minutes = estimate_expected_minutes(player)
     return PlayerRates(
         xg90=xg90,
