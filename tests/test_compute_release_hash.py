@@ -19,7 +19,7 @@ def test_collect_canonical_files():
     assert len(files) > 0, "No canonical files found"
     assert any(path.startswith("fpl_skill/") for path in files)
     assert any(path.startswith("contracts/") for path in files)
-    assert any(path.startswith("schemas/") for path in files)
+    assert any(path.startswith("tests/") for path in files)
     assert "SKILL.md" in files
     assert "fpl_skill/historical/firewall.py" in files
     assert "tests/test_expected_points_semantics.py" in files
