@@ -1,576 +1,374 @@
-"""
-Probabilistic Expected Points Distribution Engine
-
-Replaces scalar EP estimates with full probability distributions (P10, P25, P50, P75, P90)
-to enable rank-aware, variance-conscious decision-making.
-
-GOAT Phase 1.0 — Foundation Layer
-"""
-
+"""Canonical probabilistic expected-points engine for Phase 2."""
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Tuple, List
-from enum import Enum
-import json
 from datetime import datetime, timezone
+from enum import Enum
+from math import sqrt
+from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    from fpl_skill.rate_normalization import gw_expected_contributions, normalize_player_rates
+except ImportError:
+    from rate_normalization import gw_expected_contributions, normalize_player_rates
 
 class PlayerState(Enum):
-    """Player availability states affecting distribution."""
     AVAILABLE = "available"
     DOUBTFUL = "doubtful"
     INJURED = "injured"
     SUSPENDED = "suspended"
     UNAVAILABLE = "unavailable"
 
+_STATUS = {
+    "a": PlayerState.AVAILABLE,
+    "available": PlayerState.AVAILABLE,
+    "d": PlayerState.DOUBTFUL,
+    "doubtful": PlayerState.DOUBTFUL,
+    "i": PlayerState.INJURED,
+    "injured": PlayerState.INJURED,
+    "s": PlayerState.SUSPENDED,
+    "suspended": PlayerState.SUSPENDED,
+    "u": PlayerState.UNAVAILABLE,
+    "unavailable": PlayerState.UNAVAILABLE,
+}
+
+_POS = {
+    1: "GK",
+    "1": "GK",
+    "GK": "GK",
+    "GKP": "GK",
+    2: "DEF",
+    "2": "DEF",
+    "DEF": "DEF",
+    3: "MID",
+    "3": "MID",
+    "MID": "MID",
+    4: "FWD",
+    "4": "FWD",
+    "FWD": "FWD",
+}
+
+def normalize_player_state(value: Any) -> PlayerState:
+    if isinstance(value, PlayerState):
+        return value
+    key = str(value or "available").strip().lower()
+    if key not in _STATUS:
+        raise ValueError(f"Invalid player status: {value!r}")
+    return _STATUS[key]
+
+def normalize_position(value: Any) -> str:
+    if value not in _POS:
+        raise ValueError(f"Invalid position representation: {value!r}. Expected one of {list(_POS.keys())}")
+    return _POS[value]
 
 @dataclass
 class PlayerDistribution:
-    """
-    Complete probability distribution for a player's points in a gameweek.
-    
-    Replaces scalar "expected_points = 7.2" with full distribution:
-    - Percentiles (P10, P25, P50, P75, P90)
-    - Central moments (mean, variance, skewness)
-    - Scenario components (P_haul, P_zero, P_bench, P_injured)
-    - Confidence metadata
-    """
-    
     player_id: int
     player_name: str
     gw: int
     team: str
-    position: str  # GK, DEF, MID, FWD
-    
-    # Percentiles (core of distribution)
-    p10: float  # 10th percentile (downside)
-    p25: float  # 25th percentile
-    p50: float  # Median (robust center)
-    p75: float  # 75th percentile
-    p90: float  # 90th percentile (upside)
-    
-    # Moments
-    mean: float  # Expected value E[X] (mathematical mean)
-    variance: float  # Spread (uncertainty)
-    std_dev: float = field(init=False)  # Computed
-    skewness: float = 0.0  # +ve = upside skew (haul probability), -ve = downside
-    kurtosis: float = 0.0  # Tail probability
-    
-    # Scenario components
-    p_zero: float = 0.0  # Probability of 0 points (injured/benched)
-    p_haul: float = 0.0  # Probability of 2+ goals or 3+ returns
-    p_bench: float = 0.0  # Probability played <60 min
-    p_injured: float = 0.0  # Probability unavailable next GW
-    
-    # Metadata
+    position: str
+    p10: float
+    p25: float
+    p50: float
+    p75: float
+    p90: float
+    mean: float
+    variance: float
+    std_dev: float = field(init=False)
+    skewness: float = 0.0
+    kurtosis: float = 0.0
+    p_zero: float = 0.0
+    p_haul: float = 0.0
+    p_bench: float = 0.0
+    p_injured: float = 0.0
     data_timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    confidence: str = "high"  # high, medium, low, provisional
-    source: str = "model"  # model, historical, consensus, blend
+    confidence: str = "medium"
+    source: str = "probabilistic_model"
     notes: Optional[str] = None
-    
+
     def __post_init__(self):
-        """Compute derived fields and validate distribution."""
-        self.std_dev = self.variance ** 0.5
-        self._validate_distribution()
-    
-    def _validate_distribution(self):
-        """Ensure percentiles are monotonically increasing."""
-        percentiles = [self.p10, self.p25, self.p50, self.p75, self.p90]
-        for i in range(len(percentiles) - 1):
-            if percentiles[i] > percentiles[i + 1]:
-                raise ValueError(
-                    f"Invalid distribution: percentiles not monotonic "
-                    f"P{[10,25,50,75,90][i]} ({percentiles[i]}) > "
-                    f"P{[10,25,50,75,90][i+1]} ({percentiles[i+1]})"
-                )
-        if self.p_zero + self.p_haul + self.p_bench > 1.05:
-            raise ValueError(
-                f"Scenario probabilities exceed 1.0: "
-                f"p_zero={self.p_zero} + p_haul={self.p_haul} + p_bench={self.p_bench}"
-            )
-    
+        if not self.data_timestamp:
+            self.data_timestamp = datetime.now(timezone.utc).isoformat()
+        if self.variance < 0:
+            raise ValueError("variance must be non-negative")
+        self.std_dev = sqrt(self.variance)
+        qs = [self.p10, self.p25, self.p50, self.p75, self.p90]
+        if any(q < 0 for q in qs) or any(a > b for a, b in zip(qs, qs[1:])):
+            raise ValueError("invalid percentile ordering")
+        if self.p_zero + self.p_haul + self.p_bench > 1.000001:
+            raise ValueError("scenario probabilities exceed 1.0")
+
     def interquartile_range(self) -> float:
-        """Return 75th percentile - 25th percentile."""
         return self.p75 - self.p25
-    
+
     def tail_risk_downside(self) -> float:
-        """Return P10 as a measure of downside risk."""
         return self.p10
-    
+
     def tail_upside(self) -> float:
-        """Return (P90 - P50) as upside potential."""
         return self.p90 - self.p50
-    
+
     def risk_adjusted_value(self, risk_multiplier: float = 1.0) -> float:
-        """
-        Compute risk-adjusted expected value.
-        
-        Formula: mean - (risk_multiplier × std_dev)
-        Allows conservative (risk_multiplier > 1) or aggressive (< 1) valuation.
-        """
-        return self.mean - (risk_multiplier * self.std_dev)
-    
-    def to_dict(self) -> Dict:
-        """Export JSON-serializable dictionary."""
+        return self.mean - risk_multiplier * self.std_dev
+
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "player_id": self.player_id,
             "player_name": self.player_name,
             "gw": self.gw,
             "team": self.team,
             "position": self.position,
-            "p10": self.p10, "p25": self.p25, "p50": self.p50, "p75": self.p75, "p90": self.p90,
-            "mean": self.mean, "variance": self.variance, "std_dev": self.std_dev,
-            "skewness": self.skewness, "kurtosis": self.kurtosis,
-            "p_zero": self.p_zero, "p_haul": self.p_haul, "p_bench": self.p_bench, "p_injured": self.p_injured,
-            
-            "timestamp": self.data_timestamp, "notes": self.notes,
+            "p10": self.p10,
+            "p25": self.p25,
+            "p50": self.p50,
+            "p75": self.p75,
+            "p90": self.p90,
+            "mean": self.mean,
+            "variance": self.variance,
+            "std_dev": self.std_dev,
+            "skewness": self.skewness,
+            "kurtosis": self.kurtosis,
+            "p_zero": self.p_zero,
+            "p_haul": self.p_haul,
+            "p_bench": self.p_bench,
+            "p_injured": self.p_injured,
+            "timestamp": self.data_timestamp,
+            "confidence": self.confidence,
+            "source": self.source,
+            "notes": self.notes,
+            "expected_points": self.mean,
         }
-
 
 @dataclass
 class DistributionModelInputs:
-    """Input data for distribution model."""
-    
-    # Current state
     player_id: int
-    position: str  # GK, DEF, MID, FWD
+    position: str
     status: PlayerState
     team: str
     opponent: str
     gw: int
-    
-    # Player metrics
-    minutes_played_last_3: float  # Minutes in last 3 GWs
-    chance_of_playing_next_round: float  # 0-100, from FPL API
-    form: float  # Recent form score (e.g., 5.2)
-    selected_by_percent: float  # Ownership (0-100)
-    
-    # Fixture quality
-    fixture_difficulty: int  # 1-5 FDR scale
+    minutes_played_last_3: float
+    chance_of_playing_next_round: Optional[float]
+    form: float
+    selected_by_percent: float
+    fixture_difficulty: int
     is_home: bool
-    opponent_strength_attack: float  # FPL team strength
+    opponent_strength_attack: float
     opponent_strength_defence: float
-    
-    # Team/league context
-    team_goals_per_gw: float  # Rolling average
+    team_goals_per_gw: float
     team_conceded_per_gw: float
-    expected_goals: Optional[float] = None  # xG from understat
-    expected_assists: Optional[float] = None  # xA
-    
-    # Contextual
+    expected_minutes: float = 90.0
+    gw_xg: float = 0.0
+    gw_xa: float = 0.0
+    ict_index: float = 0.0
     is_double_gw: bool = False
     is_blank_gw: bool = False
     has_european_fixture: bool = False
     days_since_last_match: int = 7
+    expected_goals: Optional[float] = None
+    expected_assists: Optional[float] = None
 
+    def __post_init__(self):
+        self.position = normalize_position(self.position)
+        self.status = normalize_player_state(self.status)
+        if self.gw_xg == 0.0 and self.expected_goals is not None:
+            self.gw_xg = float(self.expected_goals)
+        if self.gw_xa == 0.0 and self.expected_assists is not None:
+            self.gw_xa = float(self.expected_assists)
+        self.expected_minutes = max(0.0, min(90.0, float(self.expected_minutes)))
+        self.gw_xg = max(0.0, float(self.gw_xg))
+        self.gw_xa = max(0.0, float(self.gw_xa))
 
 class ProbabilisticEPEngine:
-    """
-    Converts FPL player data into probabilistic distributions.
-    
-    Core algorithm:
-    1. Model base outcome distribution (appearance, performance, bonus)
-    2. Apply fixture weighting (opponent difficulty, home/away)
-    3. Apply team context (form, attacking/defensive strength)
-    4. Incorporate uncertainty (minutes, rotation, injury risk)
-    5. Output P10/P25/P50/P75/P90 + moments + scenario probs
-    """
-    
-    # Position-specific base points (appearance)
-    BASE_POINTS_BY_POSITION = {
-        "GK": 2,
-        "DEF": 1,
-        "MID": 5,
-        "FWD": 4,
-    }
-    
-    # Bonus point probabilities by position
-    BONUS_PROBS_BY_POSITION = {
-        "GK": 0.05,  # GKs rarely get bonus
-        "DEF": 0.12,
-        "MID": 0.20,
-        "FWD": 0.25,  # Forwards most likely to haul
-    }
-    
-    # Fixture difficulty effect on expected points
-    FDR_MULTIPLIERS = {
-        1: 1.40,  # Very easy
-        2: 1.25,
-        3: 1.00,  # Neutral
-        4: 0.80,
-        5: 0.60,  # Very hard
-    }
-    
+    """Single authoritative forecast engine. Inputs are GW-specific, not cumulative."""
+    BASE_POINTS_BY_POSITION = {"GK": 2.0, "DEF": 3.0, "MID": 2.5, "FWD": 4.0}
+    FDR_MULTIPLIERS = {1: 1.40, 2: 1.25, 3: 1.00, 4: 0.80, 5: 0.60}
     HOME_MULTIPLIER = 1.12
     AWAY_MULTIPLIER = 0.90
-    
-    def __init__(self):
-        """Initialize engine with calibrated parameters."""
-        self.calibration_data: Dict = {}  # Stores historical errors for calibration
-    
-    def generate_distribution(self, inputs: DistributionModelInputs) -> PlayerDistribution:
-        """
-        Main entry point: convert FPL data to distribution.
-        """
-        # Canonical position normalization: support FPL element_type (1-4, int or str) and text tokens
-        pos_map = {
-            1: "GK", "1": "GK", "GKP": "GK", "GK": "GK",
-            2: "DEF", "2": "DEF", "DEF": "DEF",
-            3: "MID", "3": "MID", "MID": "MID",
-            4: "FWD", "4": "FWD", "FWD": "FWD",
-        }
-        if inputs.position not in pos_map:
-            raise ValueError(f"Invalid position representation: {inputs.position!r}. Expected one of {list(pos_map.keys())}")
-        inputs.position = pos_map[inputs.position]
+    # Phase-2 baseline; future coefficient tuning requires empirical calibration.
+    XG_WEIGHT = {"GK": 0.0, "DEF": 1.5, "MID": 1.5, "FWD": 1.5}
+    XA_WEIGHT = {"GK": 0.0, "DEF": 1.0, "MID": 1.0, "FWD": 1.0}
+    FORM_WEIGHT = {"GK": 0.05, "DEF": 0.04, "MID": 0.05, "FWD": 0.05}
+    ICT_WEIGHT = {"GK": 0.005, "DEF": 0.01, "MID": 0.01, "FWD": 0.01}
 
-        # FPL API returns null chance_of_playing_next_round for fit regulars
-        if inputs.chance_of_playing_next_round is None:
-            inputs.chance_of_playing_next_round = 100.0
+    def _compute_base_distribution(self, i: DistributionModelInputs) -> Tuple[float, float]:
+        if i.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
+            return 0.0, 0.0
+        base = (
+            self.BASE_POINTS_BY_POSITION[i.position]
+            + i.gw_xg * self.XG_WEIGHT[i.position]
+            + i.gw_xa * self.XA_WEIGHT[i.position]
+            + max(0.0, i.form) * self.FORM_WEIGHT[i.position]
+            + max(0.0, i.ict_index) * self.ICT_WEIGHT[i.position]
+        )
+        factor = i.expected_minutes / 90.0
+        mean = base * factor
+        variance = max(0.25, 1.5 + (1.0 - factor) * 3.0 + max(0.0, 0.20 - i.selected_by_percent / 100.0))
+        return mean, variance
 
-        # Step 1: Base distribution given status
-        base_mean, base_variance = self._compute_base_distribution(inputs)
-        
-        # Step 2: Apply fixture weighting
-        fixture_mult = self._fixture_multiplier(inputs)
-        
-        # Step 3: Apply minutes/rotation risk
-        minutes_adjustment = self._minutes_probability_adjustment(inputs)
-        
-        # Step 4: Compute moments
-        adjusted_mean = base_mean * fixture_mult * minutes_adjustment["prob_plays"]
-        adjusted_variance = base_variance * (fixture_mult ** 2) * (minutes_adjustment["variance_factor"])
-        
-        # Step 5: Compute percentiles from moments
-        percentiles = self._moments_to_percentiles(
-            mean=adjusted_mean,
-            variance=adjusted_variance,
-            skewness=self._estimate_skewness(inputs),
+    def _fixture_multiplier(self, i: DistributionModelInputs) -> float:
+        return self.FDR_MULTIPLIERS.get(i.fixture_difficulty, 1.0) * (
+            self.HOME_MULTIPLIER if i.is_home else self.AWAY_MULTIPLIER
         )
-        
-        # Step 6: Compute scenario probabilities
-        scenarios = self._scenario_probabilities(inputs, minutes_adjustment, fixture_mult)
-        
-        # Step 7: Determine confidence level
-        confidence = self._confidence_level(inputs)
-        if scenarios['p_zero'] == 1.0:
-            # Player will definitely score 0: collapse the whole distribution.
-            adjusted_mean = 0.0
-            adjusted_variance = 0.0
-            for k in ('p10', 'p25', 'p50', 'p75', 'p90'):
-                percentiles[k] = 0.0
-        
-        # Create and return distribution
-        dist = PlayerDistribution(
-            player_id=inputs.player_id,
-            player_name=f"{inputs.team} {inputs.position} #{inputs.player_id}",
-            gw=inputs.gw,
-            team=inputs.team,
-            position=inputs.position,
-            p10=percentiles["p10"],
-            p25=percentiles["p25"],
-            p50=percentiles["p50"],
-            p75=percentiles["p75"],
-            p90=percentiles["p90"],
-            mean=adjusted_mean,
-            variance=adjusted_variance,
-            skewness=percentiles.get("skewness", 0.0),
-            p_zero=scenarios["p_zero"],
-            p_haul=scenarios["p_haul"],
-            p_bench=scenarios["p_bench"],
-            p_injured=scenarios["p_injured"],
-            confidence=confidence,
-            source="probabilistic_model",
-        )
-        
-        return dist
-    
-    def _compute_base_distribution(self, inputs: DistributionModelInputs) -> Tuple[float, float]:
-        """
-        Compute base mean and variance given player status.
-        Returns: (mean_points, variance)
-        """
-        status = inputs.status
-        
-        if status == PlayerState.INJURED:
-            return 0.0, 0.1
-        elif status == PlayerState.SUSPENDED:
-            return 0.0, 0.1
-        elif status == PlayerState.UNAVAILABLE:
-            return 0.0, 0.1
-        elif status == PlayerState.DOUBTFUL:
-            # Assume 40% chance plays
-            plays = 0.4 * self.BASE_POINTS_BY_POSITION[inputs.position]
-            return plays, 1.5
-        else:  # AVAILABLE
-            base = self.BASE_POINTS_BY_POSITION[inputs.position]
-            
-            # Enhance with form + expected_goals
-            if inputs.form and inputs.form > 0:
-                base += inputs.form * 0.3  # Form contributes 30% of variance
-            
-            if inputs.expected_goals and inputs.expected_goals > 0:
-                base += inputs.expected_goals * 3.0  # xG worth ~3pts per goal
-            
-            if inputs.expected_assists and inputs.expected_assists > 0:
-                base += inputs.expected_assists * 2.0  # xA worth ~2pts per assist
-            
-            # Variance proportional to uncertainty
-            variance = 2.0 + (100 - inputs.selected_by_percent) * 0.01  # Owned players less variable
-            
-            return base, variance
-    
-    def _fixture_multiplier(self, inputs: DistributionModelInputs) -> float:
-        """Apply fixture difficulty and home/away multiplier."""
-        fdr_mult = self.FDR_MULTIPLIERS.get(inputs.fixture_difficulty, 1.0)
-        home_mult = self.HOME_MULTIPLIER if inputs.is_home else self.AWAY_MULTIPLIER
-        
-        return fdr_mult * home_mult
-    
-    def _minutes_probability_adjustment(self, inputs: DistributionModelInputs) -> Dict:
-        """
-        Compute adjustment for minutes probability and rotation risk.
-        Returns: {"prob_plays": float, "variance_factor": float}
-        """
-        # Base from API chance_of_playing
-        prob_plays = (inputs.chance_of_playing_next_round or 100.0) / 100.0
-        
-        # Adjust downward if recent minutes are low (rotation risk)
-        if inputs.minutes_played_last_3 < 90:  # Less than 1 GW worth of minutes
-            prob_plays *= 0.7  # Assume 30% rotation risk
-        
-        # Adjust based on european fixtures (fatigue/rotation)
-        if inputs.has_european_fixture:
-            prob_plays *= 0.85
-        
-        # Variance increases with uncertainty
-        variance_factor = 1.0 + (1.0 - prob_plays) * 2.0  # Uncertain players have higher variance
-        
-        return {
-            "prob_plays": max(0.0, min(1.0, prob_plays)),  # Clamp to [0, 1]
-            "variance_factor": variance_factor,
-        }
-    
-    def _moments_to_percentiles(
-        self, mean: float, variance: float, skewness: float = 0.0
-    ) -> Dict[str, float]:
-        """
-        Convert moments (mean, variance, skewness) to percentiles.
-        Uses normal approximation with skewness adjustment.
-        """
-        std_dev = variance ** 0.5
-        
-        # Normal quantiles (z-scores)
-        # P10 = -1.28σ, P25 = -0.67σ, P50 = 0, P75 = +0.67σ, P90 = +1.28σ
-        z_scores = {"p10": -1.28, "p25": -0.67, "p50": 0.0, "p75": 0.67, "p90": 1.28}
-        
-        percentiles = {}
-        prev_label = None
-        for label, z in z_scores.items():
-            # Skewness adjustment: positive skewness shifts tails to the right (upside)
-            adjusted_z = z + (skewness * 0.1)  # Conservative skewness weight
-            val = mean + adjusted_z * std_dev
-            floor = percentiles[prev_label] if prev_label else 0.0
-            percentiles[label] = max(0.0, floor, val)
-            prev_label = label
-        for label, z in z_scores.items():
-            # Skewness adjustment: positive skewness shifts tails right (upside)
-            adjusted_z = z + (skewness * 0.1)  # Conservative skewness weight
-            val = mean + adjusted_z * std_dev
-        return percentiles
-    def _estimate_skewness(self, inputs: DistributionModelInputs) -> float:
-        """
-        Estimate distribution skewness (positive = upside, negative = downside).
-        
-        Factors:
-        - Forwards have higher upside (haul probability)
-        - Low-ownership players have higher upside variance
-        - High-form players skew positive
-        - Injuries skew negative
-        """
-        skewness = 0.0
-        
-        # Position effect
-        if inputs.position == "FWD":
-            skewness += 0.3  # Forwards have haul upside
-        elif inputs.position == "GK":
-            skewness -= 0.1  # GKs have downside (conceded)
-        
-        # Form effect
-        if inputs.form and inputs.form > 5.0:
-            skewness += min(0.3, (inputs.form - 5.0) * 0.1)
-        elif inputs.form and inputs.form < 3.0:
-            skewness -= 0.2
-        
-        # Ownership effect (low ownership = higher upside variance)
-        if inputs.selected_by_percent < 20:
-            skewness += 0.2
-        
-        # Status effect
-        if inputs.status == PlayerState.DOUBTFUL:
-            skewness -= 0.3  # Downside if might not play
-        
-        return max(-1.0, min(1.0, skewness))
-    
-    def _scenario_probabilities(
-        self, inputs: DistributionModelInputs, minutes_adj: Dict, fixture_mult: float
-    ) -> Dict[str, float]:
+
+    def _estimate_skewness(self, i: DistributionModelInputs) -> float:
+        s = 0.30 if i.position == "FWD" else (-0.10 if i.position == "GK" else 0.0)
+        if i.form > 5.0:
+            s += min(0.30, (i.form - 5.0) * 0.08)
+        elif i.form < 3.0:
+            s -= 0.15
+        if i.selected_by_percent < 20.0:
+            s += 0.15
+        if i.status == PlayerState.DOUBTFUL:
+            s -= 0.25
+        return max(-1.0, min(1.0, s))
+
+    def _moments_to_percentiles(self, mean: float, variance: float, skewness: float) -> Dict[str, float]:
+        std = sqrt(max(0.0, variance))
+        z = {"p10": -1.28, "p25": -0.67, "p50": 0.0, "p75": 0.67, "p90": 1.28}
+        out = {}
+        prev = 0.0
+        for label, zz in z.items():
+            out[label] = max(0.0, mean + (zz + skewness * 0.10) * std, prev)
+            prev = out[label]
+        return out
+
+    def _scenario_probabilities(self, *args) -> Dict[str, float]:
         """
         Compute scenario-specific probabilities.
-        
-        Invariant: probabilities are not mutually exclusive and may overlap
-        (a player can be both "benched" and "have low haul probability").
-        However, we enforce: p_zero + p_haul + p_bench <= 1.0 after independent calculation.
+        Supports both signatures:
+          _scenario_probabilities(self, inputs, fixture_mult=None)
+          _scenario_probabilities(self, inputs, minutes_adj, fixture_mult)
         """
-        p_zero = 0.0
-        p_haul = 0.0
-        p_bench = 0.0
-        p_injured = 0.0
-        
-        # CRITICAL: If unavailable, all other scenarios are 0
+        if len(args) == 1:
+            inputs = args[0]
+            fixture_mult = None
+            minutes_adj = None
+        elif len(args) == 2:
+            inputs, second_arg = args
+            if isinstance(second_arg, dict):
+                minutes_adj = second_arg
+                fixture_mult = None
+            else:
+                minutes_adj = None
+                fixture_mult = second_arg
+        elif len(args) >= 3:
+            inputs, minutes_adj, fixture_mult = args[0], args[1], args[2]
+        else:
+            raise TypeError("_scenario_probabilities expects at least inputs argument")
+
         if inputs.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
-            p_zero = 1.0
-            return {
-                "p_zero": 1.0,
-                "p_haul": 0.0,
-                "p_bench": 0.0,
-                "p_injured": 0.0,
-            }
-        
-        # For DOUBTFUL and AVAILABLE, calculate scenarios
-        if inputs.status == PlayerState.DOUBTFUL:
-            p_zero = 0.6 * (1.0 - minutes_adj["prob_plays"])
+            return {"p_zero": 1.0, "p_haul": 0.0, "p_bench": 0.0, "p_injured": 0.0}
+
+        if minutes_adj is not None and "prob_plays" in minutes_adj:
+            prob_plays = float(minutes_adj["prob_plays"])
         else:
-            # Small chance of injury during GW
-            p_zero = 0.02 * (1.0 - minutes_adj["prob_plays"])
-        
-        # P(haul) = position + form + fixture
-        base_haul_prob = self.BONUS_PROBS_BY_POSITION.get(inputs.position, 0.15)
-        form_multiplier = 1.0
-        if inputs.form and inputs.form > 6.0:
-            form_multiplier = 1.5
-        fixture_bonus = max(1.0, fixture_mult)  # Easy fixtures boost haul chance (high fixture_mult)
-        
-        p_haul = base_haul_prob * form_multiplier * fixture_bonus * minutes_adj["prob_plays"]
-        p_haul = min(0.5, p_haul)  # Cap at 50%
-        
-        # P(bench) = low minutes (not independent of p_haul; overlapping)
-        if inputs.minutes_played_last_3 < 90:
-            p_bench = 0.3
-        else:
-            p_bench = 0.1
-        
-        # P(injured next week) - separate from this GW
-        p_injured = 0.05 if inputs.status == PlayerState.DOUBTFUL else 0.02
-        
-        # Ensure sum doesn't exceed 1.0 (these are overlapping, not mutually exclusive)
-        # Normalize if necessary
-        total = p_zero + p_haul + p_bench
+            prob_plays = (inputs.expected_minutes / 90.0)
+
+        factor = prob_plays
+        p_zero = max(0.0, 1.0 - factor) * (0.60 if inputs.status == PlayerState.DOUBTFUL else 0.50)
+        p_bench = 0.30 if inputs.minutes_played_last_3 < 90 else 0.10
+        mult = 1.0 if fixture_mult is None else float(fixture_mult)
+
+        base = {"GK": 0.03, "DEF": 0.08, "MID": 0.16, "FWD": 0.22}[inputs.position]
+        p_haul = min(0.50, base * max(1.0, mult) * (1.4 if inputs.form > 6 else 1.0) * factor)
+
+        total = p_zero + p_bench + p_haul
         if total > 1.0:
-            # Scale down p_haul and p_bench proportionally
-            scale = (1.0 - p_zero) / (p_haul + p_bench) if (p_haul + p_bench) > 0 else 1.0
-            p_haul *= scale
+            scale = (1.0 - p_zero) / max(p_bench + p_haul, 1e-12)
             p_bench *= scale
-        
+            p_haul *= scale
+
         return {
-            "p_zero": max(0.0, min(1.0, p_zero)),
-            "p_haul": max(0.0, min(1.0, p_haul)),
-            "p_bench": max(0.0, min(1.0, p_bench)),
-            "p_injured": max(0.0, min(1.0, p_injured)),
+            "p_zero": p_zero,
+            "p_haul": p_haul,
+            "p_bench": p_bench,
+            "p_injured": 0.05 if inputs.status == PlayerState.DOUBTFUL else 0.02,
         }
-    
-    def _confidence_level(self, inputs: DistributionModelInputs) -> str:
-        """
-        Determine model confidence level.
-        """
-        if inputs.status in (PlayerState.INJURED, PlayerState.SUSPENDED):
-            return "high"  # Very confident about 0 points
-        
-        if inputs.status == PlayerState.DOUBTFUL:
-            return "low"  # High uncertainty
-        
-        if inputs.chance_of_playing_next_round < 50:
+
+    def _confidence_level(self, i: DistributionModelInputs) -> str:
+        if i.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
+            return "high"
+        if i.status == PlayerState.DOUBTFUL:
+            return "low"
+        if float(i.chance_of_playing_next_round or 100.0) < 50.0:
             return "medium"
-        
-        if inputs.selected_by_percent > 50 and inputs.form and inputs.form > 5.0:
-            return "high"  # High ownership + good form = confident
-        
+        if i.selected_by_percent > 50.0 and i.form > 5.0:
+            return "high"
         return "medium"
-    
-    def batch_generate(self, inputs_list: List[DistributionModelInputs]) -> List[PlayerDistribution]:
-        """Generate distributions for multiple players efficiently."""
-        return [self.generate_distribution(inputs) for inputs in inputs_list]
 
-
-# Integration points with fpl_skill/api.py
-def replace_scalar_ep_with_distribution(
-    api_response: Dict, engine: ProbabilisticEPEngine
-) -> Dict:
-    """
-    Transform FPL API response to include probabilistic distributions.
-
-    Backwards compatible: adds new "distribution" field to each player
-    while keeping legacy "expected_points" scalar for now. The canonical
-    `expected_points` value is the distribution mean E[X]; `p50` remains the
-    50th-percentile median and is never treated as the mathematical mean.
-    """
-    # This is pseudocode; actual integration depends on api.py structure
-    
-    for player_data in api_response.get("elements", []):
-        # Construct inputs from API response
-        inputs = DistributionModelInputs(
-            player_id=player_data["id"],
-            position=player_data["position"],
-            status=PlayerState(player_data.get("status", "available")),
-            team=player_data["team"],
-            opponent=player_data.get("opponent_team", ""),
-            gw=api_response.get("current_gw", 1),
-            minutes_played_last_3=sum([
-                p.get("minutes", 0) for p in player_data.get("history", [])[-3:]
-            ]),
-            chance_of_playing_next_round=player_data.get("chance_of_playing_next_round", 100),
-            form=float(player_data.get("form", 0.0)),
-            selected_by_percent=float(player_data.get("selected_by_percent", 0.0)),
-            fixture_difficulty=player_data.get("fixture_difficulty", 3),
-            is_home=player_data.get("is_home", True),
-            opponent_strength_attack=player_data.get("opponent_strength_attack", 1000),
-            opponent_strength_defence=player_data.get("opponent_strength_defence", 1000),
-            team_goals_per_gw=player_data.get("team_goals_per_gw", 1.5),
-            team_conceded_per_gw=player_data.get("team_conceded_per_gw", 1.2),
+    def generate_distribution(self, inputs: DistributionModelInputs) -> PlayerDistribution:
+        inputs.status = normalize_player_state(inputs.status)
+        inputs.position = normalize_position(inputs.position)
+        if inputs.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
+            return PlayerDistribution(
+                inputs.player_id,
+                f"{inputs.team} {inputs.position} #{inputs.player_id}",
+                inputs.gw,
+                inputs.team,
+                inputs.position,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                p_zero=1.0,
+                confidence="high",
+            )
+        mult = self._fixture_multiplier(inputs)
+        mean, var = self._compute_base_distribution(inputs)
+        mean *= mult
+        var *= mult * mult
+        q = self._moments_to_percentiles(mean, var, self._estimate_skewness(inputs))
+        s = self._scenario_probabilities(inputs, mult)
+        return PlayerDistribution(
+            inputs.player_id,
+            f"{inputs.team} {inputs.position} #{inputs.player_id}",
+            inputs.gw,
+            inputs.team,
+            inputs.position,
+            q["p10"],
+            q["p25"],
+            q["p50"],
+            q["p75"],
+            q["p90"],
+            mean,
+            var,
+            skewness=0.0,
+            p_zero=s["p_zero"],
+            p_haul=s["p_haul"],
+            p_bench=s["p_bench"],
+            p_injured=s["p_injured"],
+            confidence=self._confidence_level(inputs),
         )
-        
-        dist = engine.generate_distribution(inputs)
-        player_data["distribution"] = dist.to_dict()
-        # Preserve the prior scalar under an explicit legacy field.
-        player_data["expected_points_legacy"] = player_data.get("expected_points", 0.0)
-        # Canonical expected_points = mathematical mean E[X]; P50 remains median.
-        player_data["expected_points"] = dist.mean
-    
+
+    def batch_generate(self, inputs_list: List[DistributionModelInputs]) -> List[PlayerDistribution]:
+        return [self.generate_distribution(x) for x in inputs_list]
+
+def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: ProbabilisticEPEngine) -> Dict[str, Any]:
+    for p in api_response.get("elements", []):
+        rates = normalize_player_rates(p)
+        expected_minutes = rates.expected_minutes if ("minutes" in p or "starts" in p) else 90.0
+        gx, ga, _ = gw_expected_contributions(p, expected_minutes)
+        inp = DistributionModelInputs(
+            int(p["id"]),
+            p.get("position", p.get("element_type", "MID")),
+            normalize_player_state(p.get("status", "available")),
+            str(p.get("team", "")),
+            str(p.get("opponent_team", "")),
+            int(api_response.get("current_gw", 1)),
+            float(p.get("minutes", 0) or 0),
+            p.get("chance_of_playing_next_round"),
+            float(p.get("form", 0) or 0),
+            float(p.get("selected_by_percent", 0) or 0),
+            int(p.get("fixture_difficulty", 3) or 3),
+            bool(p.get("is_home", True)),
+            float(p.get("opponent_strength_attack", 1000) or 1000),
+            float(p.get("opponent_strength_defence", 1000) or 1000),
+            float(p.get("team_goals_per_gw", 1.5) or 1.5),
+            float(p.get("team_conceded_per_gw", 1.2) or 1.2),
+            expected_minutes,
+            gx,
+            ga,
+            float(p.get("ict_index", 0) or 0),
+        )
+        dist = engine.generate_distribution(inp)
+        p["distribution"] = dist.to_dict()
+        p["expected_points_legacy"] = p.get("expected_points", 0.0)
+        p["expected_points"] = dist.mean
     return api_response
-
-
-if __name__ == "__main__":
-    # Quick test
-    engine = ProbabilisticEPEngine()
-    
-    test_input = DistributionModelInputs(
-        player_id=12,
-        position="MID",
-        status=PlayerState.AVAILABLE,
-        team="ARS",
-        opponent="CHE",
-        gw=1,
-        minutes_played_last_3=270.0,
-        chance_of_playing_next_round=100,
-        form=5.8,
-        selected_by_percent=45.2,
-        fixture_difficulty=2,
-        is_home=True,
-        opponent_strength_attack=1050,
-        opponent_strength_defence=900,
-        team_goals_per_gw=1.8,
-        team_conceded_per_gw=1.1,
-        expected_goals=0.45,
-        expected_assists=0.15,
-    )
-    
-    dist = engine.generate_distribution(test_input)
-    print(json.dumps(dist.to_dict(), indent=2))
