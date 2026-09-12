@@ -1,0 +1,54 @@
+{
+  "type": "model_sanity_snapshot",
+  "phase": "2",
+  "date": "2026-09-13",
+  "gameweek": 5,
+  "status": "SANITY_PASS_CALIBRATION_NOT_READY",
+  "fixture": {
+    "home": "MCI",
+    "away": "SUN",
+    "home_fdr": 2,
+    "source_class": "public_snapshot"
+  },
+  "benchmarks": [
+    {
+      "player_id": 411,
+      "player": "Haaland",
+      "position": "FWD",
+      "minutes": 270,
+      "starts": 3,
+      "season_xg": 2.46,
+      "season_xa": 0.50,
+      "xg90": 0.82,
+      "expected_minutes": 82.0,
+      "gw_xg": 0.7466666667,
+      "gw_xa": 0.1518518519,
+      "predicted_mean_ep": 7.4958258436,
+      "acceptance_range": [5.5, 7.5],
+      "previous_buggy_ep": 23.87,
+      "status": "PASS"
+    },
+    {
+      "player_id": 398,
+      "player": "Foden",
+      "position": "MID",
+      "minutes": 195,
+      "starts": 2,
+      "season_xg": 1.61,
+      "season_xa": 0.86,
+      "xg90": 0.7430769231,
+      "expected_minutes": 62.0,
+      "gw_xg": 0.5114512821,
+      "gw_xa": 0.2730256410,
+      "predicted_mean_ep": 3.7500320228,
+      "acceptance_range": [2.5, 4.5],
+      "previous_buggy_ep": 20.29,
+      "status": "PASS"
+    }
+  ],
+  "calibration": {
+    "status": "NOT_READY",
+    "reason": "GW5 has not completed; no post-GW5 actuals are used in this snapshot."
+  },
+  "source_note": "Player benchmark values were taken from the current public 2026/27 snapshot used for the Phase 2 realism test; this artifact is a sanity benchmark, not empirical calibration evidence."
+}
