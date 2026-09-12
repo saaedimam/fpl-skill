@@ -3,8 +3,14 @@ from typing import Dict, Optional, List, Any
 from pathlib import Path
 import os
 import json
+import tempfile
 
 CALIBRATION_FILE = Path(os.path.expanduser("~/.cache/fpl-skill/calibration_records.json"))
+
+
+class CalibrationStoreError(RuntimeError):
+    """Raised when persisted calibration state cannot be loaded safely."""
+
 
 @dataclass
 class CalibrationRecord:
@@ -34,6 +40,7 @@ class CalibrationRecord:
             signed_error=float(data.get("signed_error", data["predicted_expected_points"] - data["actual_points"]))
         )
 
+
 class ForecastScorecard:
     """Track forecasts vs outcomes; detect systematic bias."""
     
@@ -62,27 +69,42 @@ class ForecastScorecard:
         return completed_gw_count >= 6 or total_pairs >= 20
 
     def save(self, path: Optional[Path] = None) -> None:
-        """Persist calibration records to JSON file."""
+        """Persist calibration records atomically to JSON."""
         target_path = path or CALIBRATION_FILE
         target_path.parent.mkdir(parents=True, exist_ok=True)
         data = [r.to_dict() for r in self.records]
-        with open(target_path, "w") as f:
-            json.dump(data, f, indent=2)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{target_path.name}.", suffix=".tmp", dir=target_path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_name, target_path)
+        except Exception:
+            try:
+                os.unlink(temp_name)
+            except FileNotFoundError:
+                pass
+            raise
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "ForecastScorecard":
-        """Load calibration records from JSON file."""
+        """Load calibration records from JSON; fail closed on corruption."""
         scorecard = cls()
         target_path = path or CALIBRATION_FILE
-        if target_path.exists():
-            try:
-                with open(target_path, "r") as f:
-                    data = json.load(f)
-                if isinstance(data, list):
-                    for item in data:
-                        scorecard.add_record(CalibrationRecord.from_dict(item))
-            except Exception:
-                pass
+        if not target_path.exists():
+            return scorecard
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                raise ValueError("calibration store root must be a JSON array")
+            for index, item in enumerate(data):
+                if not isinstance(item, dict):
+                    raise ValueError(f"record {index} must be an object")
+                scorecard.add_record(CalibrationRecord.from_dict(item))
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            raise CalibrationStoreError(f"Invalid calibration store {target_path}: {exc}") from exc
         return scorecard
 
     def compute_metrics(self, gw: Optional[int] = None, by_category: bool = False) -> Dict:
@@ -105,11 +127,18 @@ class ForecastScorecard:
                 "status": "NO_TRACK_RECORD_YET",
                 "reason": f"No completed records found{' for GW ' + str(gw) if gw is not None else ' — season is fresh'}"
             }
-        
-        if not self.sample_gate_passed(records) and gw is None:
+
+        # The gate is applied to the complete scorecard, not the filtered
+        # view, so a per-GW diagnostic cannot masquerade as certification.
+        gate_gw_count = len(self.completed_gameweeks())
+        gate_pair_count = len(self.records)
+        if not self.sample_gate_passed():
             return {
                 "status": "INSUFFICIENT_SAMPLE",
-                "reason": f"Need 6 completed GWs or 20 pairs; have {completed_gws} GWs, {len(records)} pairs"
+                "reason": (
+                    f"Need 6 completed GWs or 20 pairs; have "
+                    f"{gate_gw_count} GWs, {gate_pair_count} pairs"
+                )
             }
         
         # Compute aggregate metrics
