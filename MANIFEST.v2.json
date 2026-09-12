@@ -66,7 +66,7 @@
     "fpl_skill/observation/snapshot.py": "e0a3ce46ecf01c6a44192d9ec9d7307d367193a98096651d3592075c13f858d4",
     "fpl_skill/observation/store.py": "347536e30157993e98e6d853cb02a3eb4a8ff5c041011e4cb5512184eb27a161",
     "fpl_skill/observation/tape.py": "487d93156c54663ffb2e91815b90f6f14b3366d18523ff8dc87edf451d16f669",
-    "fpl_skill/observation/watcher.py": "0908bf742ef036fad2004cf3b35bc1d62e5006ca98080edf58bad0c5d04e500a",
+    "fpl_skill/observation/watcher.py": "0908bf742ef036fad2004cf3b35bc1d62e5006ca98096651d3592075c13f858d4",
     "fpl_skill/probabilistic_ep1.py": "f1b6f3630a0cb8fd13bab0a2d31ef0d2196714ef016aff0dbeb1387be3217f3b",
     "fpl_skill/rank_aware_objective1.py": "758ff472e5802c2b2dad0d542e3566636bfb3a258f45565dca7b0d237ad1a648",
     "tests/test_expected_points_semantics.py": "79c92ec9fc235b43e924697d5a868819c6886746972f9444c5c2652b0ede1ca5",
@@ -79,5 +79,5 @@
   },
   "release_hash": "09afbb8f684d42ed4905830ebf2e555e07a19761e819ca70e4b024aebe2ea5df",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
-  "freeze_updated": "2026-09-12T18:00:00+00:00"
+  "freeze_updated": "2026-09-12T17:34:00+00:00"
 }
