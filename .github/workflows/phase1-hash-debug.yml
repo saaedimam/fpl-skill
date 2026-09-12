@@ -1,0 +1,62 @@
+name: Phase 1 Hash Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  hash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print canonical hashes
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          root = Path('.')
+          paths = [
+              'CHANGELOG.md',
+              'SKILL.md',
+              'all.python',
+              'contracts/research-contract.md',
+              'evidence/v2-adversarial-audit-2026-09-09.json',
+              'fpl_skill/observation/__init__.py',
+              'fpl_skill/observation/alerts.py',
+              'fpl_skill/observation/cli.py',
+              'fpl_skill/observation/diff.py',
+              'fpl_skill/observation/ingest.py',
+              'fpl_skill/observation/model.py',
+              'fpl_skill/observation/poller.py',
+              'fpl_skill/observation/snapshot.py',
+              'fpl_skill/observation/store.py',
+              'fpl_skill/observation/tape.py',
+              'fpl_skill/observation/watcher.py',
+              'fpl_skill/probabilistic_ep1.py',
+              'fpl_skill/rank_aware_objective1.py',
+              'fpl_skill/historical/__init__.py',
+              'fpl_skill/historical/exceptions.py',
+              'fpl_skill/historical/firewall.py',
+              'fpl_skill/historical/provenance.py',
+              'fpl_skill/historical/replay.py',
+              'fpl_skill/historical/snapshot.py',
+              'tests/test_observation.py',
+              'tests/test_probabilistic_ep1_p023.py',
+              'tests/test_rank_aware_objective1.py',
+              'tests/test_replay_gate.py',
+              'tests/test_historical_data_layer.py',
+              'tests/test_redteam_historical_firewall.py',
+              'tests/test_expected_points_semantics.py',
+          ]
+          hashes = {}
+          for rel in paths:
+              data = (root / rel).read_bytes()
+              hashes[rel] = hashlib.sha256(data).hexdigest()
+              print(f'{rel}: {hashes[rel]}')
+          payload = ''.join(f'{path}:{hashes[path]}\n' for path in sorted(hashes))
+          release_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+          print(f'RELEASE_HASH: {release_hash}')
+          print(f'FILES_HASHED: {len(hashes)}')
+          PY
