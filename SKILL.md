@@ -1,14 +1,17 @@
 ---
 name: fpl
-version: 1.1.0
-status: draft-not-freeze
+version: 2.1.0-rc1
+status: active
 scope: global
 season_baseline: 2026/27
+parent_release: 2.0.0
 ---
 
-# FPL Skill v1.1.0
+# FPL Skill v2.1.0-rc1 — Canonical Agent Contract
 
-Global, user-agnostic FPL decision engine. No personal Team ID, squad, bank, transfers, captain, vice-captain, chips, or ownership state is stored in this skill. User state MUST be resolved at runtime from authoritative current FPL data or explicitly labeled user-provided evidence.
+This file is the sole canonical agent entrypoint for the FPL skill. Legacy `SKILL_V2.md` and `FPL_SKILL.md` are retained for backward compatibility and historical traceability only; they are not executable authority.
+
+The v2.1.0-rc1 line descends from the immutable, SSH-signed v2.0.0 release at commit `ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c`. Phase 1 establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity. It does not introduce new forecasting heuristics or Phase 2 probabilistic-model changes.
 
 ## 1. Operating Contract
 
@@ -18,13 +21,13 @@ For any FPL request:
 3. Model state transitions across the relevant horizon (D2).
 4. Produce future distributions (D3).
 5. Evaluate counterfactual actions (D4).
-6. Separate VERIFIED FACTS / MODEL INFERENCE / UNKNOWN-UNRESOLVED.
+6. Separate `VERIFIED FACTS`, `MODEL INFERENCE`, and `UNKNOWN / UNRESOLVED`.
 7. Never fabricate unavailable data or evidence.
 
 Closed loop:
-BUILD → PREDICT → DECIDE → OBSERVE → CALIBRATE → PREDICT AGAIN
+`BUILD → PREDICT → DECIDE → OBSERVE → CALIBRATE → PREDICT AGAIN`
 
-Long-term objective: 2,500-point season trajectory.
+Long-term trajectory target: 2,500 points.
 Minimum material squad-rating target: 92/100.
 A rating is decision quality / expected-points pace, not guaranteed actual points.
 
@@ -44,7 +47,7 @@ Required state:
 - current Gameweek
 - deadline
 
-If authoritative squad retrieval fails, user screenshot/team state MAY be substituted only when explicitly labeled `source: user-provided`.
+If authoritative squad retrieval fails, user screenshot/team state may be substituted only when explicitly labeled `source: user-provided`.
 
 Never reconstruct current ownership from historical conversation when authoritative current state is available.
 
@@ -99,7 +102,7 @@ Before a material recommendation, refresh when freshness matters:
 - chip opportunities
 - unresolved RUMOUR / REPORTED evidence
 
-Do not query every source in the 100-site registry. Select sources by claim type, authority, freshness and materiality.
+Do not query every source in the source registry. Select sources by claim type, authority, freshness, and materiality.
 
 ## 5. 4D Prediction Engine
 
@@ -156,13 +159,27 @@ Confidence may not be upgraded when required evidence/dependencies are missing.
 
 Minutes probability is counted exactly once.
 
+### 5.1 Expected-point semantics — canonical
+
+`expected_points` is the mathematical mean of the player's FPL-point random variable:
+
+`expected_points = E[X] = dist.mean`
+
+`P50` is strictly the 50th percentile, i.e. the median:
+
+`P50 = median(X)`
+
+These values are not interchangeable. A skewed distribution may satisfy `E[X] != P50`, and all downstream expected-value objectives MUST consume `mean` rather than `p50`.
+
+Percentile spreads such as `P90 - P50` remain valid when the objective explicitly measures percentile-based upside or downside. Such use does not redefine P50 as expected value.
+
 ## 6. DGW / BGW Determinism
 
 For a team and Gameweek:
 - 1 fixture → `SINGLE`
 - 2 fixtures → `DOUBLE`
 - >2 → `ANOMALOUS_UNSUPPORTED`
-- 0 requires disambiguation; never assume `BLANK`.
+- 0 requires disambiguation; never assume `BLANK`
 
 Possible zero-fixture states:
 - `FIXTURE_NOT_PUBLISHED`
@@ -170,12 +187,6 @@ Possible zero-fixture states:
 - `FIXTURE_MISSING`
 - `POSTPONED`
 - `UNKNOWN`
-
-If fixtures for other teams in the same GW are published and the team has no fixture → `BLANK`.
-If the entire fixture set is unpublished → `FIXTURE_NOT_PUBLISHED`.
-If a known fixture lacks required fields → `FIXTURE_MISSING`.
-If fixture status indicates rescheduling → `POSTPONED`.
-If fixture retrieval is unavailable → `UNKNOWN`.
 
 D3 aggregation:
 - SINGLE: single-fixture distribution.
@@ -214,18 +225,18 @@ Decision value:
 `future_expected_gain + fixture_improvement + role_minutes_improvement + value_flexibility_improvement - transfer_cost - opportunity_cost - role_injury_risk - uncertainty_penalty`
 
 Definitions:
-- future_expected_gain: D3 future EV in vs out
-- fixture_improvement: official FDR delta
-- role_minutes_improvement: D3 minutes probability delta
-- value_flexibility_improvement: future bank optionality
-- transfer_cost: 0 for free transfer; -4 × additional hits
-- opportunity_cost: best foregone alternative
-- role_injury_risk: D3 injury risk differential weighted by severity
-- uncertainty_penalty: increases as evidence confidence degrades
+- `future_expected_gain`: D3 future EV in vs out
+- `fixture_improvement`: official FDR delta
+- `role_minutes_improvement`: D3 minutes probability delta
+- `value_flexibility_improvement`: future bank optionality
+- `transfer_cost`: 0 for free transfer; -4 × additional hits
+- `opportunity_cost`: best foregone alternative
+- `role_injury_risk`: D3 injury risk differential weighted by severity
+- `uncertainty_penalty`: increases as evidence confidence degrades
 
 Rules:
 - Raw current-GW score never triggers BUY/SELL.
-- Budget, formation and club-cap validity are mandatory.
+- Budget, formation, and club-cap validity are mandatory.
 - A hit must include the full transfer cost.
 - If no alternative was researched, opportunity cost is UNKNOWN and confidence is capped at medium.
 - If the incoming state is provisional, uncertainty penalty increases.
@@ -257,7 +268,7 @@ Failure states:
 
 Read methods are idempotent.
 
-Resilience specification:
+Resilience:
 - 429: exponential backoff, base 1s, max 3 attempts, respect Retry-After
 - 5xx: exponential backoff, base 2s, max 3 attempts
 - other 4xx: non-retryable
@@ -277,7 +288,7 @@ Cache:
 
 Canonical interfaces:
 
-```javascript
+```text
 FPL_VALIDATE.squad(squad)
 FPL_VALIDATE.transfer(from, to, state)
 FPL_VALIDATE.formation(xi)
@@ -287,11 +298,11 @@ FPL_OPTIMIZE.build(constraints)
 FPL_OPTIMIZE.transfer(state)
 FPL_OPTIMIZE.captain(candidates)
 
-`FPL_OPTIMIZE.build` supports optional `hard_locks` (array of `player_id`s forced into squad). B&B optimizer subtracts locked costs from budget, enforces positional remaining slots, checks joint club limits (max 3/club), and expands budget-filler search space when locking premium assets.
-
 FPL_PREDICT.state(player_id, horizon)
 FPL_COUNTERFACTUAL.evaluate(out_player_id, in_player_id, state)
 ```
+
+`FPL_OPTIMIZE.build` supports optional `hard_locks` (array of `player_id`s forced into the squad). The optimizer must subtract locked costs from available budget, enforce positional remaining slots, enforce joint club limits (max 3/club), and fail closed on infeasible constraints.
 
 `FPL_PREDICT.state` returns D0–D3 plus distributions and confidence.
 
@@ -332,13 +343,13 @@ Never fabricate calibration statistics.
 
 ## 12. Squad / Formation / Captain / Chip Rules
 
-Preserve all frozen v1.0.0 rules unless explicitly superseded by v1.1.0.
+Preserve the frozen v1.0/v1.1 legality rules unless explicitly superseded by this contract.
 
 Every material squad/transfer/captain/chip decision:
-- uses D3 future EV
+- uses D3 future EV, where EV means distribution mean `E[X]`
 - runs D4 counterfactual logic
 - checks the 2,500-point trajectory
-- checks minutes, role, risk and flexibility
+- checks minutes, role, risk, and flexibility
 
 Captain minutes probability exactly once.
 
@@ -366,7 +377,7 @@ Never fabricate a proprietary vendor rating.
 
 ## 14. Elite Manager Engine
 
-Research proven elite-manager patterns when material squad-building evidence is available.
+When material evidence is available, research proven elite-manager patterns.
 
 Study:
 - repeated elite squads / ownership
@@ -431,12 +442,12 @@ Never:
 - fabricate calibration
 - silently downgrade UNKNOWN to BLANK
 - silently upgrade provisional confidence
-- mutate frozen v1.0.0
-- create a second canonical v1.1.0
+- mutate frozen releases
+- create a second canonical skill entrypoint
 
 ## 17. Commands
 
-> `FPL /xxx` are agent-invocation commands (user speaks natural language, agent executes the workflow). NOT CLI subcommands. Live-monitoring infrastructure is exposed via the observation CLI (see README, Observation layer): `monitor` starts the adaptive poller, `gate` runs the deterministic replay-gate scenario.
+`FPL /xxx` denotes agent invocation, not a shell CLI subcommand. Observation infrastructure is exposed through its observation CLI.
 
 ```text
 FPL /build
@@ -454,7 +465,7 @@ FPL /counterfactual <out> <in>
 FPL /calibrate
 ```
 
-## 18. Validation and Freeze
+## 18. Validation and Release Governance
 
 Validation categories:
 - STATIC_SPEC_VALIDATION
@@ -463,7 +474,7 @@ Validation categories:
 - INTEGRATION_VALIDATION
 - REPRODUCIBILITY_VALIDATION
 
-Static Notion checks are not runtime execution evidence.
+Static documentation or Notion checks are not runtime execution evidence.
 
 Required deterministic coverage includes:
 - schema validity
@@ -482,58 +493,330 @@ Required deterministic coverage includes:
 - confidence degradation
 - calibration sample gate
 - trajectory math
+- expected_points mean semantics
+- P50 median semantics
 
-Freeze requires:
+Release freeze requires:
 1. executable validation with timestamped evidence
-2. live API verification
+2. live API verification where applicable
 3. integration validation
 4. reproducible SHA256 from actual canonical package files
 5. human freeze sign-off
 
 Current release state:
-`DRAFT — NOT READY FOR FREEZE`
+`RELEASE_CANDIDATE`
 
-External blockers must remain explicitly `BLOCKED`; they must never be represented as PASS.
+The parent `v2.0.0` release remains immutable. This RC line may change until separately signed and frozen.
 
 ## 19. Canonicality
 
-Exactly one canonical v1.1.0 exists.
+Exactly one canonical agent contract exists: `SKILL.md`.
 
-Draft A and Draft B are historical/deprecated only and must never be executed.
+`SKILL_V2.md` is a deprecated v2 progression document kept for historical/backward-compatible references only.
 
-v1.0.0 remains frozen and untouched.
+`FPL_SKILL.md` is a deprecated legacy draft kept for historical/backward-compatible references only.
 
-This skill is global and user-agnostic. User-specific FPL state belongs in runtime state, not in SKILL.md.
-## 20. Execution Playbook
+Neither deprecated file may be treated as executable authority when `SKILL.md` is available.
 
-Live execution knowledge. Not model rules; verified live GW4 2026/27 run.
+The skill is global and user-agnostic. User-specific FPL state belongs in runtime state, not in this document.
 
-### 20.1 Live API endpoints (session-authenticated)
-- GET /api/my-team/{team_id}/ — current picks, bank, value
-- POST /api/my-team/{team_id}/ — apply full 15-pick state
-Modern React SPA does NOT use the legacy /api/entry/{tid}/event/{gw}/picks/ write path. SPA reads/writes /api/my-team/ only.
+## 20. Phase 1 Scope Boundary
 
-### 20.2 Authoritative write = API POST, not DOM
-DOM checkbox/button clicks on the React 18 SPA are event-source no-ops for .click() and CDP mouse events in some states. When DOM interaction stalls, the authoritative non-destructive path is a same-origin fetch from the page context:
-    fetch('/api/my-team/{team_id}/', {method:'POST', credentials:'same-origin',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({picks:[{element, position, is_captain, is_vice_captain}, ...], chip:null})})
-- 200/202 = applied. 400 includes field error bodies.
-- PATCH-style partial apply is not supported: payload is the complete 15-pick array, positions 1..15.
-- POST from page context inherits the browser session cookie; no separate auth needed.
+Phase 1 changes only:
+- canonical contract identity and unification
+- `expected_points = E[X] = dist.mean` semantics
+- rank-aware expected-value consumers use `mean`
+- explicit separation of mean from median P50
+- release manifest registry and reproducibility verification
 
-### 20.3 Bench/formation backend constraints (verified GW4)
-- GK locked to position 12 (first bench slot). GK at 13/14/15 rejected:
-      {"non_field_errors":[{"message":"Sub-position not allowed element type","code":"sub_position_not_allowed"}]}
-- Starting XI positions 1..11, bench 12..15. Formation derived from XI.
-- SKILL.md section 12 formation rules still govern optimizer output.
+Phase 1 does NOT:
+- redesign the probability model
+- introduce new scoring heuristics
+- add correlation/coupling methods
+- introduce new forecasting data sources
+- alter Phase 2 historical firewall semantics
 
-### 20.4 Player card menu
-- Card click opens drawer (Full Profile / Substitute / Captain / Vice Captain).
-- Substitute swaps via drawer only in valid positional range; position 12 GK lock applies to the swap engine too (no GK-last bench).
+Existing probability structures and heuristics remain unchanged except where a field was semantically mislabeled as expected value but actually used P50.
 
-### 20.5 Element identity
-Player fpl_id from /bootstrap-static/ elements; web_name is display-only (accents/spaces vary: "Groß", "João Pedro"). Always key state by element id, never by name.
+## 21. v2 Strategic Objective
 
-### 20.6 Verified data freshness
-GW4 current. Deadline per event API; confirm before acting. Do not re-derive from page text; use /api/my-team/ for source of truth and page only for confirmation.
+The v2 strategic goal is to maximize the probability of finishing #1 overall conditional on:
+- current rank and gap to #1
+- squad state, bank, transfer state, and remaining chips
+- field behavior, ownership, and effective ownership
+- minutes, rotation, injury, and fixture uncertainty
+- future information arrival
+
+Raw expected points remain necessary but are not sufficient for rank optimization. Decisions should consider relative gain, relative loss, field position, and variance.
+
+## 22. v2 Design Principles
+
+1. FACT / VALIDATED STATE / DERIVED METRIC / PROBABILISTIC FORECAST / SCENARIO / DECISION are distinct layers.
+2. Use a probabilistic player model rather than a scalar-only EP model.
+3. Optimize relative gain, not absolute EP alone.
+4. Use rank-dependent strategy.
+5. Plan across multiple Gameweeks.
+6. Attach confidence, data quality, model agreement, uncertainty, and reversibility to material recommendations.
+7. Maintain a calibration loop against actual outcomes.
+8. Prefer simple, correct, calibrated behavior over complex, impressive, fragile behavior.
+
+## 23. v2 Probabilistic Projection Specification
+
+### Minutes
+
+`P(start) = f(last5_mins, substitution_pattern, manager_rotation, congestion, European schedule, international duty, injury status, squad competition, tactical role, upcoming density)`
+
+`P(60+) | start = 1 - P(subbed_early | start)`
+
+### Fixture / team strength
+
+Use team attack/defence strength from xG for/against per 90, home/away split, and weighted recency. Opponent adjustments are inverted appropriately for defenders/keepers.
+
+FDR is a model input and must not be treated as an unvalidated bolt-on when richer event-rate data is available.
+
+BGW → 0 fixtures → 0 EP.
+DGW → sum per-fixture distributions while modeling minutes separately.
+
+### Event rates
+
+```text
+P(goal) = player goal opportunity × role share × penalty share adjustment
+P(assist) = player assist opportunity × role share
+P(CS) = f(team concede rate, opponent attack strength, venue)
+P(bonus) = f(projected BPS, match volatility)
+P(yellow) = position/player tendency base rate
+```
+
+Penalty takers receive a goal-probability adjustment derived from penalty share and team penalty rate.
+
+### Distribution
+
+Per fixture, the engine may construct a distribution from modeled match outcomes and output:
+`P10, P25, P50, P75, P90, mean, variance, P(start), P(60+), P(goal), P(assist), P(CS), P(bonus), P(yellow), P(2+), P(3+), P(rotation), P(injury)`.
+
+Calibration drift must widen uncertainty and lower confidence rather than silently altering point estimates.
+
+## 24. v2 Rank-Aware Objective Specification
+
+Strategy bands:
+
+| Rank band | Strategy | Intent |
+|---|---|---|
+| 1–50 | `ELITE_SAFE` | protect lead and minimize unforced variance |
+| 51–500 | `ELITE_CHASE` | balance expected value and differential upside |
+| 501–10,000 | `COMPETITIVE` | maximize expected value with stability |
+| 10,000+ | `ASPIRATIONAL` | maximize expected value |
+
+Base expected-point accumulation always uses `distribution.mean`.
+
+Percentile spreads such as `P90-P50` may remain in explicit upside/ceiling terms because that quantity is a percentile spread, not expected value.
+
+## 25. Captaincy Specification
+
+Captain choice must account for:
+- expected value
+- probability of starting
+- variance
+- upside / ceiling
+- field ownership and effective ownership
+- rank context
+
+Base captain EP is:
+`2 × mean`
+
+A percentile ceiling term may use `P90-P50` where the objective explicitly measures median-to-tail upside.
+
+The vice-captain is the best conditional fallback among remaining legal candidates, not merely the second-highest raw projection.
+
+## 26. Ownership / Effective Ownership / Relative Rank
+
+`own(p) = selected_by_percent / 100`
+
+`EO(p) = own(p) × P(start)`
+
+Relative-gain terms may use ownership-weighted field surplus and rank-dependent lambda values.
+
+EO adjustments modify decision value, not the mathematical definition of expected points.
+
+## 27. Transfer Intelligence
+
+A transfer should compare the marginal multi-GW value of the new squad against the baseline, including:
+- D3 delta expected value
+- relative gain delta
+- information timing value
+- fixture swing
+- minutes/role improvement
+- transfer cost
+- option value of rolling the FT
+
+Wait when expected information arrival can change the decision more than the current decision margin.
+
+Only recommend a hit when gain minus hit cost exceeds the strategy threshold and the downstream horizon justifies the action.
+
+## 28. Chip Valuation
+
+Rule-based first; backtest-refined later.
+
+| Chip | Example trigger |
+|---|---|
+| Wildcard | material multi-GW squad deficit or multiple unavailable starters |
+| Triple Captain | strong candidate with strong fixture or DGW and sufficient start confidence |
+| Bench Boost | DGW with strong bench depth |
+| Free Hit | BGW with materially reduced starting XI |
+
+Every chip recommendation carries the confidence block.
+
+## 29. Scenario / Correlation Model
+
+Teammates are not independent when a match-level event drives multiple returns. Where implemented, model at match level first and allocate player events through role shares so shared team events induce correlation.
+
+Portfolio variance and concentration risk should be considered explicitly in title-defense contexts.
+
+## 30. Risk / Failure Protection
+
+Every high-impact failure mode needs:
+`Detection / Impact / Mitigation / Fallback / Recovery`
+
+Required classes include:
+- API failure and staleness
+- malformed bootstrap
+- squad-state mismatch
+- late lineup shock
+- optimizer infeasibility
+- repeated model error
+
+Failure must be detected and surfaced. Never silently degrade to an apparently valid state.
+
+## 31. Decision Confidence
+
+Every material recommendation should expose:
+
+```text
+DECISION
+CONFIDENCE
+DATA QUALITY
+MODEL AGREEMENT
+UNCERTAINTY
+REVERSIBILITY
+```
+
+Confidence below the policy threshold downgrades action to `CONSIDER / HOLD` and engages the approval gate.
+
+## 32. Historical Backtesting / Temporal Firewall
+
+Completed Gameweeks must be replayed using only information available at decision time.
+
+Required invariant:
+`I_t ⊆ D_≤t AND I_t ∩ D_>t = ∅`
+
+Historical snapshots are immutable, provenance-bound, content-hashed, and subject to the pre-model temporal firewall.
+
+The Phase 2 historical layer added to this RC line is preserved as data-integrity infrastructure and is not altered by Phase 1.
+
+## 33. State / Persistence
+
+Track per Gameweek:
+- predictions emitted
+- actuals
+- calibration records
+- decisions made
+- chip usage
+- FT state
+- price-change events
+
+Persistence may be local SQLite/TSDB or an equivalent deterministic store under the existing cache policy.
+
+## 34. Implementation Gates
+
+The v2 progression remains gate-based and must not silently release unfinished future capability:
+
+| Gate | Scope | Exit criterion |
+|---|---|---|
+| P0 | v1.1 correctness, legality, certification, contracts | baseline certified |
+| P0.1 | executable D3/D4 runtime | runtime schema/tests closed |
+| P1-1 | richer probabilistic engine | monotonicity, DGW, probability checks |
+| P1-2 | captaincy + EO | rank-sensitive behavior tests |
+| P1-3 | scenario + correlation | correlation/variance tests |
+| P1-4 | chips + multi-GW strategy | chip-trigger tests |
+| P1-5 | calibration wiring + persistence | completed-GW update gate |
+| P2 | full leak-free backtest and operational confidence | evidence package and comparison |
+
+Each gate must be backtested and red-teamed against the previous certified gate. KEEP when calibrated rank-EV improves; REVERT otherwise.
+
+## 35. Definition of Done
+
+The title-winning target is not merely “working”. It requires:
+1. calibrated distributions
+2. rank-aware and legal optimization
+3. confidence and reversibility on decisions
+4. calibration with automatic rollback safeguards
+5. positive relative-gain evidence against the raw-EP baseline
+6. explicit failure detection, fallback, and recovery
+
+## 36. Execution Playbook
+
+Live execution knowledge is operational and does not redefine the mathematical model.
+
+### 36.1 Live API endpoints
+- `GET /api/my-team/{team_id}/` — current picks, bank, value
+- `POST /api/my-team/{team_id}/` — apply full 15-pick state
+
+The modern React SPA uses `/api/my-team/` for current editable squad state; do not substitute historical `/api/entry/.../picks/` state for current editable state.
+
+### 36.2 Authoritative write
+When authorized execution is explicitly requested, the authoritative non-destructive browser-context path is a same-origin API POST containing the complete 15-pick array. DOM clicks are not authoritative state transitions.
+
+Execution must remain blocked unless the account state is `VERIFIED_CURRENT` and the configured approval/execution policy permits the action.
+
+### 36.3 Bench / formation backend constraints
+- Starting XI positions are 1–11.
+- Bench positions are 12–15.
+- GK is constrained to the first bench slot by the verified current backend contract.
+- Formation is derived from the XI and must satisfy the canonical formation rules.
+
+### 36.4 Element identity
+Use FPL element ID as the canonical player key. Names are display-only and must not be identity keys.
+
+### 36.5 Freshness
+Confirm the current Gameweek and deadline from the authoritative event API before a deadline-sensitive action.
+
+## 37. Release Integrity Contract
+
+`MANIFEST.v2.json` is the release registry for this RC line.
+
+The registry records:
+- release version/status
+- immutable parent release identity
+- canonical file paths
+- SHA-256 for every canonical file
+- one derived release hash
+
+`MANIFEST.v2.json` itself is excluded from its own hash inputs.
+
+The canonical release hash serialization is:
+
+`SHA256("".join(path + ":" + sha256(file) + "\\n" for path in sorted(canonical_paths)))`
+
+The manifest registry and the verification script MUST agree exactly on the canonical path set and hashes.
+
+## 38. Backward Compatibility
+
+Legacy references resolve as follows:
+
+```text
+SKILL_V2.md  → SKILL.md
+FPL_SKILL.md → SKILL.md
+```
+
+Legacy documents are informational/historical only. They must not supersede the active `SKILL.md` contract.
+
+## 39. Phase 1 Release Classification
+
+```text
+Parent release: v2.0.0
+Parent commit:  ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c
+RC line:        v2.1.0-rc1
+Status:         ACTIVE / RELEASE_CANDIDATE
+```
+
+No tag is created or moved for this RC. The existing `v2.0.0` tag remains untouched.
