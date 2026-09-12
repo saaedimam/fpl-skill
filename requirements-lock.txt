@@ -1,0 +1,27 @@
+# Reproducible dependency lock — EXACT resolved versions with environment markers.
+# Authority model:
+#   pyproject.toml         -> abstract direct dependencies
+#   requirements-lock.txt -> exact pinned closure (runtime + dev + transitive)
+#   requirements.txt      -> compatibility wrapper targeting requirements-lock.txt
+
+# Runtime Direct
+click==8.3.3
+pulp==3.3.2
+requests==2.34.2
+
+# Runtime Transitive (requests)
+certifi==2026.7.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.7.0
+
+# Dev / Test Direct
+pytest==9.1.1
+pytest-cov==7.1.0
+
+# Dev / Test Transitive
+coverage==7.15.2
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0
+Pygments==2.20.0

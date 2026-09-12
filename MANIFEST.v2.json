@@ -6,7 +6,8 @@
   "parent": {
     "skill": "FPL skill",
     "version": "1.1.0",
-    "status": "FROZEN"
+    "status": "FROZEN",
+    "sha256": "ec1f5954a12b10852172c7a64e7cf458adde9976b5eaa94d637ea6af9df01b8c"
   },
   "scope": "v2 upgrade program: probabilistic EP distribution engine, rank-aware objective, public-API observation layer, adversarial-audit repairs",
   "canonical_files": [
@@ -57,6 +58,6 @@
     "tests/test_rank_aware_objective1.py": "ecfd331add1fa807eee09d1878cdf7e438ba577c2721bc8126e63a9182379f35",
     "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28"
   },
-  "release_hash": "e283164fbae9e7679cdea9db6f3d02714078b55f9f30d7bb98a854dc94566c82",
-  "freeze_updated": "2026-09-10T14:15:00.875941+00:00"
+  "release_hash": "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80",
+  "freeze_updated": "2026-09-12T15:17:18.692982+00:00"
 }
