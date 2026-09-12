@@ -28,7 +28,19 @@ def _gw_distribution(player,gw,fm,engine):
     fixtures=_fixtures_for(fm,player.get("team",""),gw)
     if not fixtures: return {"mean":0.0,"p10":0.0,"p25":0.0,"p50":0.0,"p75":0.0,"p90":0.0,"variance":0.0,"p_haul":0.0,"p_zero":1.0,"fixtures":0}
     ds=[_distribution_for_fixture(player,gw,f,engine,i) for i,f in enumerate(fixtures)]
-    return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
+    mean=sum(d.mean for d in ds)
+    variance=sum(d.variance for d in ds)
+    # For independent fixture outcomes, means and variances add; quantiles do not.
+    # Use the canonical moment-to-quantile approximation for the aggregate distribution.
+    aggregate_q=engine._moments_to_percentiles(mean,variance,0.0)
+    p_haul=1.0
+    for d in ds:
+        p_haul *= 1.0 - d.p_haul
+    p_haul=1.0-p_haul
+    p_zero=1.0
+    for d in ds:
+        p_zero *= d.p_zero
+    return {"mean":round(mean,6),"p10":round(aggregate_q["p10"],6),"p25":round(aggregate_q["p25"],6),"p50":round(aggregate_q["p50"],6),"p75":round(aggregate_q["p75"],6),"p90":round(aggregate_q["p90"],6),"variance":round(variance,6),"p_haul":round(p_haul,6),"p_zero":round(p_zero,6),"fixtures":len(ds)}
 
 def load(horizon:Tuple[int,int]=(3,6)):
     raw=get_fpl_data()
