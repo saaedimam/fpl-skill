@@ -1,3 +1,5 @@
+> NOTE: This document has been merged into canonical SKILL.md. See SKILL.md for the authoritative v2 skill contract. This file is retained for backward compatibility and historical traceability only.
+
 # FPL Skill v2.0 — Title-Winning Engineering Specification
 
 > v1.1.0 = frozen, certified, correctness-hardened baseline (FIX-01..07 applied, 35 tests green).
