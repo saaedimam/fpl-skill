@@ -39,6 +39,14 @@ Convert Level 1–3 forecasts into FPL points using the current official scoring
 ```
 expected_points, P10, P25, P50, P75, P90, floor_scenario, ceiling_scenario, confidence, risk
 ```
+
+### Expected-point semantics (normative)
+- `expected_points` is the mathematical expectation `E[X]` of the player's FPL-point random variable.
+- In the probabilistic engine, `expected_points` binds to `distribution.mean`.
+- `P50` is strictly the 50th percentile, i.e. the median of the distribution.
+- `expected_points` and `P50` MUST NOT be used interchangeably.
+- A skewed distribution may have `E[X] != P50`; downstream expected-value objectives therefore consume `mean`, while percentile-based upside/downside terms may explicitly use `P90-P50` or other percentile spreads.
+
 **Validity constraints (enforced, see schemas/prediction.schema.json and tests/run_validation.py):**
 - `P10 ≤ P25 ≤ P50 ≤ P75 ≤ P90`
 - every probability field ∈ `[0, 1]`

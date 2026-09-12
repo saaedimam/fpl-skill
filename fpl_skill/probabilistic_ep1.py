@@ -49,7 +49,7 @@ class PlayerDistribution:
     p90: float  # 90th percentile (upside)
     
     # Moments
-    mean: float  # Expected value (center)
+    mean: float  # Expected value E[X] (mathematical mean)
     variance: float  # Spread (uncertainty)
     std_dev: float = field(init=False)  # Computed
     skewness: float = 0.0  # +ve = upside skew (haul probability), -ve = downside
@@ -506,9 +506,11 @@ def replace_scalar_ep_with_distribution(
 ) -> Dict:
     """
     Transform FPL API response to include probabilistic distributions.
-    
+
     Backwards compatible: adds new "distribution" field to each player
-    while keeping legacy "expected_points" scalar for now.
+    while keeping legacy "expected_points" scalar for now. The canonical
+    `expected_points` value is the distribution mean E[X]; `p50` remains the
+    50th-percentile median and is never treated as the mathematical mean.
     """
     # This is pseudocode; actual integration depends on api.py structure
     
@@ -537,10 +539,10 @@ def replace_scalar_ep_with_distribution(
         
         dist = engine.generate_distribution(inputs)
         player_data["distribution"] = dist.to_dict()
-        # Keep legacy field
+        # Preserve the prior scalar under an explicit legacy field.
         player_data["expected_points_legacy"] = player_data.get("expected_points", 0.0)
-        # Update to median of distribution
-        player_data["expected_points"] = dist.p50
+        # Canonical expected_points = mathematical mean E[X]; P50 remains median.
+        player_data["expected_points"] = dist.mean
     
     return api_response
 

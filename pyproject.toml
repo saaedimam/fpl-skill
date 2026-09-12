@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fpl-skill"
-version = "2.0.0"
+version = "2.1.0rc1"
 description = "Autonomous MILP optimization engine and advisory agent skill for Fantasy Premier League"
 readme = "README.md"
 requires-python = ">=3.11"

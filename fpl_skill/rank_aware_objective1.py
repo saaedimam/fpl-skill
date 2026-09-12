@@ -143,8 +143,9 @@ class RankAwareObjective:
                 × P(maintain current position)
                 × P(capture upside vs. leader)
         """
+        # expected_points is the distribution mean E[X], never P50 (median).
         expected_points = sum(
-            player.get("distribution", {}).get("p50", 0.0)
+            player.get("distribution", {}).get("mean", 0.0)
             for player in squad.values()
         )
         
@@ -179,13 +180,14 @@ class RankAwareObjective:
         E[P] + 0.3 × (upside factor) - 0.2 × (variance)
         where upside_factor = P(outperform leader's likely score)
         """
-        # Base expected points
+        # Base expected points = mathematical mean E[X].
         expected_points = sum(
-            player.get("distribution", {}).get("p50", 0.0)
+            player.get("distribution", {}).get("mean", 0.0)
             for player in squad.values()
         )
         
-        # Upside component (room to grow in ranking)
+        # Upside component (room to grow in ranking). P90-P50 is kept as
+        # an explicit percentile spread and therefore remains median-based.
         upside_component = 0.0
         for player in squad.values():
             dist = player.get("distribution", {})
@@ -220,20 +222,21 @@ class RankAwareObjective:
         Formula:
         E[P] + 0.1 × (upside) - 0.1 × (downside)
         """
-        # Base expected points (primary objective)
+        # Base expected points = mathematical mean E[X].
         expected_points = sum(
-            player.get("distribution", {}).get("p50", 0.0)
+            player.get("distribution", {}).get("mean", 0.0)
             for player in squad.values()
         )
         
-        # Small upside bonus (always good to outperform)
+        # Small upside bonus (always good to outperform). The percentile
+        # spread P90-P50 remains explicitly median-based.
         upside_component = sum(
             (player.get("distribution", {}).get("p90", 0) -
              player.get("distribution", {}).get("p50", 0)) * 0.05
             for player in squad.values()
         )
         
-        # Small downside penalty (protect position)
+        # Small downside penalty (protect position); P50 is explicitly the median.
         downside_component = sum(
             (player.get("distribution", {}).get("p50", 0) -
              player.get("distribution", {}).get("p10", 0)) * 0.05
@@ -253,8 +256,9 @@ class RankAwareObjective:
         Formula:
         E[P] (ignore variance, upside/downside don't matter as much)
         """
+        # Base expected points = mathematical mean E[X].
         expected_points = sum(
-            player.get("distribution", {}).get("p50", 0.0)
+            player.get("distribution", {}).get("mean", 0.0)
             for player in squad.values()
         )
         
@@ -304,12 +308,12 @@ class RankAwareObjective:
             player_id = player["id"]
             dist = player.get("distribution", {})
             
-            # Base captain multiplier (2x)
-            base_ep = dist.get("p50", 0.0) * 2.0
+            # Base captain multiplier (2x) applied to mathematical mean E[X].
+            base_ep = dist.get("mean", 0.0) * 2.0
             
             if strategy == RankStrategy.ELITE_SAFE:
                 # Elite safe: protect lead, minimize variance
-                # Use expected value (P50) as base, penalize high variance
+                # Use expected value (mean) as base, penalize high variance
                 variance = dist.get("variance", 0.5)
                 variance_penalty = math.sqrt(max(0.0, variance)) * 0.3  # Penalize volatility
                 value = base_ep - variance_penalty  # Reduce for variance
@@ -319,7 +323,8 @@ class RankAwareObjective:
                 captain_values[player_id] = value + consensus_bonus
             
             elif strategy == RankStrategy.ELITE_CHASE:
-                # Elite chase: balanced upside + consistency
+                # Elite chase: balanced upside + consistency. P90-P50 is an
+                # explicit percentile spread and intentionally remains median-based.
                 ceiling = (dist.get("p90", 0.0) - dist.get("p50", 0.0)) * 2.0
                 consistency_bonus = 1.0 - math.sqrt(max(0.0, dist.get("variance", 2.0))) / 10.0
                 captain_values[player_id] = base_ep + ceiling * 0.2 + max(0, consistency_bonus) * 0.1
@@ -360,17 +365,17 @@ class RankAwareObjective:
         
         elif chip_name == "triple_captain":
             # Triple captain: 3x captain multiplier
-            # Value = captain_ep * 1 (since normal is 2x, triple is +1x more)
+            # Value = captain mean * 1 (since normal is 2x, triple is +1x more)
             best_captain_ep = max(
-                (player.get("distribution", {}).get("p50", 0.0) * 1.0 for player in squad.values()),
+                (player.get("distribution", {}).get("mean", 0.0) * 1.0 for player in squad.values()),
                 default=0.0
             )
-            chip_value = best_captain_ep  # +1x of captain's points
+            chip_value = best_captain_ep  # +1x of captain's mean
         
         elif chip_name == "bench_boost":
-            # Bench boost: score from bench
+            # Bench boost: score from bench using distribution mean.
             bench_ep = sum(
-                player.get("distribution", {}).get("p50", 0.0) * 0.5  # Bench plays less
+                player.get("distribution", {}).get("mean", 0.0) * 0.5  # Bench plays less
                 for player in squad.values()
                 if player.get("is_bench", False)
             )
@@ -418,36 +423,3 @@ class RankAwareObjective:
             base_threshold *= 1.5  # Higher bar when time is short
         
         return base_threshold
-
-
-if __name__ == "__main__":
-    # Test rank-aware objective
-    
-    rank_context = RankContext(
-        current_rank=47,
-        current_points=312,
-        current_gw=5,
-        remaining_gw=33,
-        rank_1_points=340,
-    )
-    
-    strategy = get_rank_strategy(rank_context)
-    print(f"Rank {rank_context.current_rank} → Strategy: {strategy.value}")
-    
-    # Test threshold
-    objective = RankAwareObjective()
-    threshold = objective.transfer_urgency_threshold(rank_context)
-    print(f"Transfer urgency threshold: {threshold:.2f} points")
-    
-    # Test with aspirational rank
-    aspirational_context = RankContext(
-        current_rank=85000,
-        current_points=295,
-        current_gw=5,
-        remaining_gw=33,
-    )
-    
-    strategy2 = get_rank_strategy(aspirational_context)
-    threshold2 = objective.transfer_urgency_threshold(aspirational_context)
-    print(f"Rank {aspirational_context.current_rank} → Strategy: {strategy2.value}")
-    print(f"Transfer urgency threshold: {threshold2:.2f} points")
