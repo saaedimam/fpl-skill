@@ -127,11 +127,18 @@ class ForecastScorecard:
                 "status": "NO_TRACK_RECORD_YET",
                 "reason": f"No completed records found{' for GW ' + str(gw) if gw is not None else ' — season is fresh'}"
             }
-        
-        if not self.sample_gate_passed(records) and gw is None:
+
+        # The gate is applied to the complete scorecard, not the filtered
+        # view, so a per-GW diagnostic cannot masquerade as certification.
+        gate_gw_count = len(self.completed_gameweeks())
+        gate_pair_count = len(self.records)
+        if not self.sample_gate_passed():
             return {
                 "status": "INSUFFICIENT_SAMPLE",
-                "reason": f"Need 6 completed GWs or 20 pairs; have {completed_gws} GWs, {len(records)} pairs"
+                "reason": (
+                    f"Need 6 completed GWs or 20 pairs; have "
+                    f"{gate_gw_count} GWs, {gate_pair_count} pairs"
+                )
             }
         
         # Compute aggregate metrics
