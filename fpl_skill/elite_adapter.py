@@ -115,7 +115,8 @@ def fetch_cohort(
     has_next = True
     page = 1
     seen: set = set()
-    while len(entry_ids) < top_n and page <= 5 and has_next:
+    max_pages = max(1, (int(top_n) + 49) // 50)
+    while len(entry_ids) < top_n and page <= max_pages and has_next:
         url = standings_url(league_id, page)
         assert _is_allowed(url), f"forbidden url {url}"
         data, resp = fetch_json(t, url)
@@ -180,13 +181,9 @@ def detect_buys(
     picks_gw: Optional[Dict[str, Any]],
     picks_prev: Optional[Dict[str, Any]],
 ) -> List[int]:
-    """Picks-delta BUY detection. Returns sorted element ids that are new in GW."""
-    if not picks_gw or not picks_prev:
-        return []
+    """Authoritative BUY: element in picks(gw) not in picks(gw-1). §5."""
     gw_set = _picks_elements(picks_gw)
     prev_set = _picks_elements(picks_prev)
-    # automatic_subs are not BUYs — picks delta already excludes them since they are post-deadline;
-    # caller ensures observed_at < deadline, so any delta is a manager decision
     buys = sorted(gw_set - prev_set)
     return buys
 
@@ -225,15 +222,17 @@ def build_observation_records(
     if observed_at is None:
         observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     deadline = _deadline_for_gw(bootstrap, gw)
-    # GW-specific snapshot guard: observed_at must be < deadline
-    if deadline is not None:
-        try:
-            obs_dt = parse_iso(observed_at)
-            dl_dt = parse_iso(deadline)
-            if obs_dt is not None and dl_dt is not None and obs_dt >= dl_dt:
-                return []  # leaked look-ahead
-        except Exception:
-            pass
+    if not deadline:
+        return []  # fail closed: missing deadline cannot enforce cutoff
+    try:
+        obs_dt = parse_iso(observed_at)
+        dl_dt = parse_iso(deadline)
+        if obs_dt is None or dl_dt is None or obs_dt.tzinfo is None or dl_dt.tzinfo is None:
+            return []  # fail closed: naive or missing timestamp rejected (§6)
+        if obs_dt >= dl_dt:
+            return []  # leaked look-ahead
+    except Exception:
+        return []  # fail closed on malformed timestamp
 
     records: List[Dict[str, Any]] = []
     entry_ids = cohort.get("entry_ids", [])
@@ -286,11 +285,9 @@ def build_observation_records(
                 confidence = "medium"
             elif transfer_ts is not None:
                 # check transfer before deadline
-                if deadline is not None:
-                    mtd = _minutes_to_deadline(transfer_ts, deadline)
-                    if mtd is not None and mtd <= 0:
-                        continue  # look-ahead leak
-                    # also check observed_at already < deadline done above
+                mtd = _minutes_to_deadline(transfer_ts, deadline)
+                if mtd is None or mtd <= 0:
+                    continue  # look-ahead leak or invalid/naive transfer timestamp
                 provenance = "picks_delta_verified"
                 confidence = "high"
             else:

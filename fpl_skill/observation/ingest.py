@@ -232,7 +232,8 @@ def discover_top(t: Transport, n: int = 50, league: int = 314) -> List[Dict[str,
     """Cohort discovery: top-N of the public 'Overall' classic league."""
     out: List[Dict[str, Any]] = []
     page = 1
-    while len(out) < n and page <= 5:
+    max_pages = max(1, (int(n) + 49) // 50)
+    while len(out) < n and page <= max_pages:
         data, resp = fetch_json(t, standings_url(league, page))
         if not data or "standings" not in data:
             break

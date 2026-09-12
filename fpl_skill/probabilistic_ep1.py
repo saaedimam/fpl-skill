@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from math import sqrt
+from math import isfinite, sqrt
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -60,6 +60,14 @@ def normalize_position(value: Any) -> str:
         raise ValueError(f"Invalid position representation: {value!r}. Expected one of {list(_POS.keys())}")
     return _POS[value]
 
+def _check_finite(val: Any, name: str) -> float:
+    if val is None:
+        raise ValueError(f"{name} must not be None")
+    fval = float(val)
+    if not isfinite(fval):
+        raise ValueError(f"{name} must be finite")
+    return fval
+
 @dataclass
 class PlayerDistribution:
     player_id: int
@@ -89,6 +97,13 @@ class PlayerDistribution:
     def __post_init__(self):
         if not self.data_timestamp:
             self.data_timestamp = datetime.now(timezone.utc).isoformat()
+        # Finite validations
+        for fld in (
+            "p10", "p25", "p50", "p75", "p90",
+            "mean", "variance", "skewness", "kurtosis",
+            "p_zero", "p_haul", "p_bench", "p_injured",
+        ):
+            _check_finite(getattr(self, fld), fld)
         if self.variance < 0:
             raise ValueError("variance must be non-negative")
         self.std_dev = sqrt(self.variance)
@@ -170,6 +185,20 @@ class DistributionModelInputs:
     def __post_init__(self):
         self.position = normalize_position(self.position)
         self.status = normalize_player_state(self.status)
+        for fld in (
+            "minutes_played_last_3", "form", "selected_by_percent",
+            "opponent_strength_attack", "opponent_strength_defence",
+            "team_goals_per_gw", "team_conceded_per_gw",
+            "expected_minutes", "gw_xg", "gw_xa", "ict_index",
+        ):
+            _check_finite(getattr(self, fld), fld)
+        if self.chance_of_playing_next_round is not None:
+            _check_finite(self.chance_of_playing_next_round, "chance_of_playing_next_round")
+        if self.expected_goals is not None:
+            _check_finite(self.expected_goals, "expected_goals")
+        if self.expected_assists is not None:
+            _check_finite(self.expected_assists, "expected_assists")
+
         if self.gw_xg == 0.0 and self.expected_goals is not None:
             self.gw_xg = float(self.expected_goals)
         if self.gw_xa == 0.0 and self.expected_assists is not None:

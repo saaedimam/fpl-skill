@@ -60,14 +60,14 @@
     "fpl_skill/observation/alerts.py": "9537130aac74e50d8ec78eb8868ce744747af0398395206b62b2ff42c36f492d",
     "fpl_skill/observation/cli.py": "b95a6be1325491056e38b6776a514701d317de6ca4eac9e88fe25f0915043921",
     "fpl_skill/observation/diff.py": "bb8def83416856591a36541db31ba75e4b5ed982b1e81e83a20dc28ed88a3d5e",
-    "fpl_skill/observation/ingest.py": "48314ae4fd138b1d353c7a0de169d59eef3ad11dea20f202c1ad0c71b90c926f",
+    "fpl_skill/observation/ingest.py": "b9637e10f1f8109c7703ab981b105c396f9244032245caedf003df497233a536",
     "fpl_skill/observation/model.py": "d97ede083eac394d2867afa4a46d1b0f34667ca387c4fe5b7ea6fefb78f804c8",
     "fpl_skill/observation/poller.py": "876027df02e37035b15968208a9091241880929109e481b9d687fd81f4b0156f",
     "fpl_skill/observation/snapshot.py": "e0a3ce46ecf01c6a44192d9ec9d7307d367193a98096651d3592075c13f858d4",
     "fpl_skill/observation/store.py": "347536e30157993e98e6d853cb02a3eb4a8ff5c041011e4cb5512184eb27a161",
     "fpl_skill/observation/tape.py": "487d93156c54663ffb2e91815b90f6f14b3366d18523ff8dc87edf451d16f669",
     "fpl_skill/observation/watcher.py": "0908bf742ef036fad2004cf3b35bc1d62e5006ca98080edf58bad0c5d04e500a",
-    "fpl_skill/probabilistic_ep1.py": "0f7bf241a800e55d44a75be8d471046416c067eb51f94928710892e084733b4c",
+    "fpl_skill/probabilistic_ep1.py": "90caff323f4ee0044de45a3e579915e06dd6f06632776dc0cb940f2c9419e8c2",
     "fpl_skill/rank_aware_objective1.py": "1e4671a9f2572745f42be5beb37af1258bd88e3b7a9fa1346ec7353d34a21e89",
     "tests/test_expected_points_semantics.py": "79c92ec9fc235b43e924697d5a868819c6886746972f9444c5c2652b0ede1ca5",
     "tests/test_historical_data_layer.py": "75cbe3d20e4afe334a975fdbbe5d0ec54201c8295d378f9fd501a162e0a354e4",
@@ -77,7 +77,7 @@
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
     "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28"
   },
-  "release_hash": "3f6fc5a1122ff7b41d127127f0f18770511450c5c31a409ead1fb8d175497789",
+  "release_hash": "55c9b6f3cc6af717157aae0d8292b767cc997c771c7f529371b0059fb7fe538f",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-09-13T01:09:00+00:00"
 }
