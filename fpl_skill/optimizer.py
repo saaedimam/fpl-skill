@@ -42,6 +42,10 @@ def load(horizon:Tuple[int,int]=(3,6)):
     return players,fm,ep,data_hash,raw,gws
 
 _legacy.load=load
+# Preserve the prior optimizer public surface while replacing only its data-loading path.
+for _name in dir(_legacy):
+    if _name not in {"load", "build_and_solve"} and not _name.startswith("__"):
+        globals().setdefault(_name, getattr(_legacy, _name))
 
 def build_and_solve(*args,**kwargs): return _legacy.build_and_solve(*args,**kwargs)
 
