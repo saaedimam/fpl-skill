@@ -7,7 +7,7 @@ import sys
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
-from .exceptions import TemporalLeakageError
+from .exceptions import ProvenanceError, SnapshotIntegrityError, TemporalLeakageError
 from .provenance import (
     Provenance,
     ProvenancedDatum,
@@ -56,8 +56,15 @@ class InformationSet:
     info_set_hash: str = field(init=False)
 
     def __post_init__(self):
-        # Enforce temporal verification on all provenance records
+        # Validate decision timestamp
         cutoff_dt = parse_iso_utc(self.decision_timestamp_utc)
+
+        # Enforce that if data has snapshots/elements, provenance_records cannot be empty
+        observed_count = self.data.get("observed_snapshots_count", 0)
+        if observed_count > 0 and not self.provenance_records:
+            raise ProvenanceError("InformationSet contains data but zero provenance records")
+
+        # Enforce temporal verification on all provenance records
         for p in self.provenance_records:
             obs_dt = parse_iso_utc(p["observed_at"])
             if obs_dt > cutoff_dt:
@@ -74,7 +81,7 @@ class InformationSet:
             "decision_timestamp_utc": self.decision_timestamp_utc,
             "gameweek": self.gameweek,
             "data": self.data,
-            "provenance_records": sorted(self.provenance_records, key=lambda r: (r["observed_at"], r["source_uri"])),
+            "provenance_records": sorted(self.provenance_records, key=lambda r: (parse_iso_utc(r["observed_at"]), r["source_uri"])),
             "replay_context": self.replay_context.to_dict(),
         }
         object.__setattr__(self, "info_set_hash", compute_sha256(h_payload))
@@ -111,7 +118,7 @@ class InformationSetBuilder:
         seed: int = 42,
     ) -> InformationSet:
         """Reconstruct I_t strictly from snapshots observed on or before decision_timestamp_utc.
-        
+
         Enforces:
         I_t ⊆ D_≤t
         I_t ∩ D_>t = ∅
@@ -142,35 +149,49 @@ class InformationSetBuilder:
             snap.verify_integrity()
             p_dict = asdict(snap.provenance)
             provenance_records.append(p_dict)
-            
+
             payload = copy.deepcopy(snap.data)
             rec_type = snap.provenance.record_type
 
             if rec_type in ("bootstrap_static", "elements"):
                 if "elements" in payload and isinstance(payload["elements"], list):
                     for el in payload["elements"]:
-                        el_id = el["id"]
-                        aggregated_data["elements"][str(el_id)] = el
+                        el_id = str(el["id"])
+                        if el_id not in aggregated_data["elements"]:
+                            aggregated_data["elements"][el_id] = copy.deepcopy(el)
+                        else:
+                            # Merge updates so previous fields (name, price, etc.) are preserved
+                            aggregated_data["elements"][el_id].update(copy.deepcopy(el))
                 elif "elements" in payload and isinstance(payload["elements"], dict):
-                    aggregated_data["elements"].update(payload["elements"])
-                
+                    for k, v in payload["elements"].items():
+                        el_id = str(k)
+                        if el_id not in aggregated_data["elements"]:
+                            aggregated_data["elements"][el_id] = copy.deepcopy(v)
+                        else:
+                            if isinstance(v, dict):
+                                aggregated_data["elements"][el_id].update(copy.deepcopy(v))
+                            else:
+                                aggregated_data["elements"][el_id] = copy.deepcopy(v)
+
                 if "events" in payload:
                     if isinstance(payload["events"], list):
                         for ev in payload["events"]:
-                            aggregated_data["events"][str(ev["id"])] = ev
+                            aggregated_data["events"][str(ev["id"])] = copy.deepcopy(ev)
                     elif isinstance(payload["events"], dict):
-                        aggregated_data["events"].update(payload["events"])
-                        
+                        for k, v in payload["events"].items():
+                            aggregated_data["events"][str(k)] = copy.deepcopy(v)
+
                 if "teams" in payload:
                     if isinstance(payload["teams"], list):
                         for tm in payload["teams"]:
-                            aggregated_data["teams"][str(tm["id"])] = tm
+                            aggregated_data["teams"][str(tm["id"])] = copy.deepcopy(tm)
                     elif isinstance(payload["teams"], dict):
-                        aggregated_data["teams"].update(payload["teams"])
+                        for k, v in payload["teams"].items():
+                            aggregated_data["teams"][str(k)] = copy.deepcopy(v)
 
             elif rec_type == "fixtures":
                 fixtures_list = payload.get("fixtures", payload if isinstance(payload, list) else [])
-                aggregated_data["fixtures"] = fixtures_list
+                aggregated_data["fixtures"] = copy.deepcopy(fixtures_list)
 
             elif rec_type == "element_summary":
                 el_id = payload.get("element_id")
@@ -178,19 +199,19 @@ class InformationSetBuilder:
                     el_key = str(el_id)
                     if el_key not in aggregated_data["elements"]:
                         aggregated_data["elements"][el_key] = {}
-                    aggregated_data["elements"][el_key]["summary"] = payload
+                    aggregated_data["elements"][el_key]["summary"] = copy.deepcopy(payload)
 
             elif rec_type == "lineup_leak":
                 match_id = payload.get("match_id")
                 if "lineups" not in aggregated_data:
                     aggregated_data["lineups"] = {}
-                aggregated_data["lineups"][str(match_id)] = payload
+                aggregated_data["lineups"][str(match_id)] = copy.deepcopy(payload)
 
             else:
                 # Generic record type aggregation
                 if rec_type not in aggregated_data:
                     aggregated_data[rec_type] = {}
-                aggregated_data[rec_type][snap.snapshot_id] = payload
+                aggregated_data[rec_type][snap.snapshot_id] = copy.deepcopy(payload)
 
         # Config hash
         c_hash = compute_sha256(config or {})

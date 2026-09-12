@@ -7,7 +7,7 @@ import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .exceptions import SnapshotIntegrityError, TemporalLeakageError
+from .exceptions import ProvenanceError, SnapshotIntegrityError, TemporalLeakageError
 from .provenance import (
     Provenance,
     ProvenancedDatum,
@@ -31,10 +31,18 @@ class ImmutableSnapshot:
         # Validate that observed_at matches provenance
         if self.observed_at != self.provenance.observed_at:
             raise ValueError(f"Snapshot observed_at ({self.observed_at}) != provenance ({self.provenance.observed_at})")
-        
+
         # Deep defensive copy on data to prevent mutation
         object.__setattr__(self, "data", copy.deepcopy(self.data))
-        
+
+        # Validate that provenance source_hash matches data if this is an authoritative raw payload
+        computed_data_hash = compute_sha256(self.data)
+        if self.provenance.source_hash != computed_data_hash:
+            raise SnapshotIntegrityError(
+                f"Provenance source_hash ({self.provenance.source_hash}) does not match "
+                f"computed data hash ({computed_data_hash}) for snapshot {self.snapshot_id}"
+            )
+
         c_hash = compute_sha256({
             "snapshot_id": self.snapshot_id,
             "observed_at": self.observed_at,
@@ -45,7 +53,11 @@ class ImmutableSnapshot:
         object.__setattr__(self, "content_hash", c_hash)
 
     def verify_integrity(self) -> bool:
-        """Verify snapshot content matches its content hash."""
+        """Verify snapshot content matches its content hash and provenance source hash."""
+        computed_data_hash = compute_sha256(self.data)
+        if self.provenance.source_hash != computed_data_hash:
+            raise SnapshotIntegrityError(f"Provenance source_hash mismatch for snapshot {self.snapshot_id}")
+
         expected = compute_sha256({
             "snapshot_id": self.snapshot_id,
             "observed_at": self.observed_at,
@@ -74,11 +86,12 @@ class VersionedHistoricalDataset:
     dataset_hash: str = field(init=False, default="")
 
     def __post_init__(self):
+        object.__setattr__(self, "metadata", copy.deepcopy(self.metadata))
         self._recompute_dataset_hash()
 
     def _recompute_dataset_hash(self):
-        # Sort snapshots by (observed_at, snapshot_id) for deterministic hashing
-        sorted_snaps = sorted(self.snapshots, key=lambda s: (s.observed_at, s.snapshot_id))
+        # Sort snapshots by (parse_iso_utc(observed_at), snapshot_id) for accurate chronological sorting
+        sorted_snaps = sorted(self.snapshots, key=lambda s: (parse_iso_utc(s.observed_at), s.snapshot_id))
         hash_payload = {
             "data_version": self.data_version,
             "metadata": self.metadata,
@@ -93,21 +106,21 @@ class VersionedHistoricalDataset:
         self._recompute_dataset_hash()
 
     def get_snapshots_before(self, cutoff_utc: str) -> List[ImmutableSnapshot]:
-        """Retrieve snapshots strictly observed on or before cutoff_utc (I_t ⊆ D_≤t)."""
+        """Retrieve snapshots strictly observed on or before cutoff_utc (I_t ⊆ D_≤t), sorted chronologically by instant."""
         cutoff_dt = parse_iso_utc(cutoff_utc)
         valid = []
         for s in self.snapshots:
             s_dt = parse_iso_utc(s.observed_at)
             if s_dt <= cutoff_dt:
                 valid.append(s)
-        return sorted(valid, key=lambda s: (s.observed_at, s.snapshot_id))
+        return sorted(valid, key=lambda s: (parse_iso_utc(s.observed_at), s.snapshot_id))
 
     def to_dict(self) -> Dict[str, Any]:
-        sorted_snaps = sorted(self.snapshots, key=lambda s: (s.observed_at, s.snapshot_id))
+        sorted_snaps = sorted(self.snapshots, key=lambda s: (parse_iso_utc(s.observed_at), s.snapshot_id))
         return {
             "data_version": self.data_version,
             "dataset_hash": self.dataset_hash,
-            "metadata": self.metadata,
+            "metadata": copy.deepcopy(self.metadata),
             "snapshots": [
                 {
                     "snapshot_id": s.snapshot_id,
@@ -149,4 +162,10 @@ class VersionedHistoricalDataset:
             snap.verify_integrity()
             ds.snapshots.append(snap)
         ds._recompute_dataset_hash()
+
+        # Verify top-level dataset_hash if provided
+        if "dataset_hash" in data and data["dataset_hash"] != ds.dataset_hash:
+            raise SnapshotIntegrityError(
+                f"Stored dataset_hash ({data['dataset_hash']}) does not match computed dataset_hash ({ds.dataset_hash})"
+            )
         return ds

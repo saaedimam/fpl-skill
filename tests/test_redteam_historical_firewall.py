@@ -78,7 +78,7 @@ def test_redteam_direct_future_injection():
     cutoff = "2026-09-01T10:00:00Z"
     future_time = "2026-09-01T10:00:01Z"  # +1 second
     snap = make_snap("future_1", future_time, 4, {"points": 10})
-    
+
     fw = TemporalFirewall(cutoff)
     with pytest.raises(TemporalLeakageError):
         fw.validate_snapshot(snap)
@@ -91,7 +91,7 @@ def test_redteam_microsecond_future_leak():
     cutoff = "2026-09-01T10:00:00.000000Z"
     micro_future = "2026-09-01T10:00:00.000001Z"
     snap = make_snap("micro_future", micro_future, 4, {"points": 10})
-    
+
     fw = TemporalFirewall(cutoff)
     with pytest.raises(TemporalLeakageError):
         fw.validate_snapshot(snap)
@@ -106,7 +106,7 @@ def test_redteam_timezone_conversion_leak():
     # 15:30:00 +05:00 is 10:30:00 UTC (+30 min leak in local time mask)
     offset_future = "2026-09-01T15:30:00+05:00"
     snap = make_snap("tz_future", offset_future, 4, {"points": 10})
-    
+
     fw = TemporalFirewall(cutoff)
     with pytest.raises(TemporalLeakageError):
         fw.validate_snapshot(snap)
@@ -132,11 +132,11 @@ def test_redteam_deserialization_tampered_hash_fails():
     ds = VersionedHistoricalDataset("v1")
     snap = make_snap("s1", "2026-09-01T08:00:00Z", 4, {"x": 1})
     ds.add_snapshot(snap)
-    
+
     ds_dict = ds.to_dict()
     # Maliciously modify the snapshot data inside serialized dict without updating content_hash
     ds_dict["snapshots"][0]["data"]["x"] = 999
-    
+
     with pytest.raises(SnapshotIntegrityError):
         VersionedHistoricalDataset.from_dict(ds_dict)
 
@@ -179,7 +179,7 @@ def test_redteam_nested_future_data_isolation():
 
     builder = InformationSetBuilder(ds)
     info_set = builder.build_information_set("2026-09-01T10:00:00Z")
-    
+
     el = info_set.get_element(1)
     assert el is not None
     assert "hidden_future_stats" not in el
@@ -198,11 +198,11 @@ def test_redteam_returned_state_mutation_isolation():
 
     builder = InformationSetBuilder(ds)
     info_set = builder.build_information_set("2026-09-01T10:00:00Z")
-    
+
     # Consumer attempts to mutate returned element dict in place
     el = info_set.get_element(1)
     el["now_cost"] = 9999
-    
+
     # Fresh retrieval from same info_set or snapshot must be completely unaffected
     el_fresh = info_set.get_element(1)
     assert el_fresh["now_cost"] == 100
@@ -256,7 +256,7 @@ def test_redteam_malformed_timestamps():
 
 
 # ---------------------------------------------------------------------------
-# Vector 14 & 15: Out-of-order historical events
+# Vector 14 & 15: Out-of-order historical events & Timezone Instant Sorting
 # ---------------------------------------------------------------------------
 def test_redteam_out_of_order_snapshot_sorting():
     ds = VersionedHistoricalDataset("v1")
@@ -266,10 +266,28 @@ def test_redteam_out_of_order_snapshot_sorting():
 
     builder = InformationSetBuilder(ds)
     info_set = builder.build_information_set("2026-09-01T10:00:00Z")
-    
+
     # Chronological sort must ensure s2 (latest pre-deadline) takes precedence over s1
     el = info_set.get_element(1)
     assert el["price"] == 105
+
+
+def test_redteam_timezone_offset_lexical_vs_instant_sorting():
+    ds = VersionedHistoricalDataset("v1")
+    # 09:00:00Z is 09:00 UTC
+    # 13:30:00+05:00 is 08:30 UTC (earlier instant, but lexical string starts with '13'!)
+    snap_earlier = make_snap("s_early", "2026-09-01T13:30:00+05:00", 4, {"elements": [{"id": 1, "status": "d"}]})
+    snap_later = make_snap("s_late", "2026-09-01T09:00:00Z", 4, {"elements": [{"id": 1, "status": "a"}]})
+
+    ds.add_snapshot(snap_earlier)
+    ds.add_snapshot(snap_later)
+
+    builder = InformationSetBuilder(ds)
+    info_set = builder.build_information_set("2026-09-01T10:00:00Z")
+
+    # Latest instant (09:00 UTC) must override earlier instant (08:30 UTC)
+    el = info_set.get_element(1)
+    assert el["status"] == "a"
 
 
 # ---------------------------------------------------------------------------
@@ -279,21 +297,48 @@ def test_redteam_altered_provenance_hash_check():
     # If an attacker alters the payload to include future points but keeps original hash, integrity check fails
     data_orig = {"points": 0}
     data_tampered = {"points": 20}  # future leak
-    
+
     prov = Provenance(
         source_uri="uri",
         observed_at="2026-09-01T08:00:00Z",
-        source_hash=compute_sha256(data_orig), # original hash!
+        source_hash=compute_sha256(data_orig),  # original hash!
         record_type="test",
     )
-    
-    snap = ImmutableSnapshot(
-        snapshot_id="s_tamper",
-        observed_at="2026-09-01T08:00:00Z",
-        event=4,
-        data=data_tampered,
-        provenance=prov,
-    )
-    
-    # Cross-check: Source hash must match data payload
-    assert compute_sha256(snap.data) != snap.provenance.source_hash
+
+    with pytest.raises(SnapshotIntegrityError):
+        ImmutableSnapshot(
+            snapshot_id="s_tamper",
+            observed_at="2026-09-01T08:00:00Z",
+            event=4,
+            data=data_tampered,
+            provenance=prov,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vector 17: Tampered Top-Level Dataset Hash & Heterogeneous Key Serialization
+# ---------------------------------------------------------------------------
+def test_redteam_dataset_hash_tamper_detection():
+    ds = VersionedHistoricalDataset("v1")
+    ds.add_snapshot(make_snap("s1", "2026-09-01T08:00:00Z", 4, {"x": 1}))
+    d_dict = ds.to_dict()
+
+    # Tamper with dataset_hash
+    d_dict["dataset_hash"] = "tampered_dataset_hash_value"
+    with pytest.raises(SnapshotIntegrityError):
+        VersionedHistoricalDataset.from_dict(d_dict)
+
+
+def test_redteam_heterogeneous_key_normalization():
+    ds = VersionedHistoricalDataset("v1")
+    # Add snapshot with integer keys in dict form
+    ds.add_snapshot(make_snap("s1", "2026-09-01T08:00:00Z", 4, {
+        "elements": {101: {"name": "Saka"}, "102": {"name": "Saliba"}}
+    }))
+    builder = InformationSetBuilder(ds)
+    info_set = builder.build_information_set("2026-09-01T10:00:00Z")
+
+    assert info_set.get_element(101)["name"] == "Saka"
+    assert info_set.get_element("102")["name"] == "Saliba"
+    # Invariant: Hashing must succeed without TypeError
+    assert len(info_set.info_set_hash) == 64
