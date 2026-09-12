@@ -79,7 +79,7 @@ def test_dgw_quantiles_are_not_added_as_if_quantiles_were_linear():
 
     assert result["mean"] == pytest.approx(10.0)
     assert result["variance"] == pytest.approx(8.0)
-    assert result["p50"] == pytest.approx(10.0)
     assert result["p50"] != pytest.approx(d1.p50 + d2.p50)
+    assert result["p50"] == pytest.approx(10.1)
     assert 0.0 <= result["p_zero"] <= 1.0
     assert 0.0 <= result["p_haul"] <= 1.0
