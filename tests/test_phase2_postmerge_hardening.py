@@ -41,6 +41,20 @@ def test_zero_minutes_produce_zero_exposure_rate():
     assert rates.xgc90 == 0.0
 
 
+def test_missing_minutes_preserves_partial_record_attack_data():
+    player = {
+        "expected_goals": 0.5,
+        "expected_assists": 0.25,
+        "expected_goals_conceded": 1.0,
+    }
+
+    rates = normalize_player_rates(player)
+
+    assert rates.xg90 == pytest.approx(0.5)
+    assert rates.xa90 == pytest.approx(0.25)
+    assert rates.xgc90 == pytest.approx(1.0)
+
+
 def test_dgw_quantiles_are_not_added_as_if_quantiles_were_linear():
     player = {"player_id": 1, "team": "MCI"}
     d1 = PlayerDistribution(
