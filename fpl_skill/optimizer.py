@@ -31,7 +31,13 @@ def _gw_distribution(player,gw,fm,engine):
     return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
 
 def load(horizon:Tuple[int,int]=(3,6)):
-    raw=get_fpl_data(); norm=normalize_dataset(raw.get("records",[])); players=norm["players"]; fm=norm["fixture_map"]; gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
+    raw=get_fpl_data()
+    if raw.get("error"):
+        raise RuntimeError(f"FPL data loading failed: {raw['error']}")
+    records=raw.get("records",[])
+    if not records:
+        raise RuntimeError("FPL data loading failed: empty dataset")
+    norm=normalize_dataset(records); players=norm["players"]; fm=norm["fixture_map"]; gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
     engine=ProbabilisticEPEngine(); ep={}
     for p in players:
         pid=int(p["player_id"]); p["cost_int"]=p.get("now_cost") or 0; ep[pid]={}; p["_distribution_diagnostics"]={}
