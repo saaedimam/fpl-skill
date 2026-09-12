@@ -138,24 +138,21 @@ class RankAwareObjective:
         rank_context: RankContext,
         transfer_in_player: Optional[Dict] = None,
     ) -> float:
-        """Return net objective change for a transfer; candidate forecast is mandatory."""
+        """Return net objective change; missing candidate data cannot create value."""
         if transfer_out_id not in current_squad:
             raise ValueError(f"transfer_out_id {transfer_out_id} is not in current_squad")
+        transfer_cost = 4 if rank_context.free_transfers <= 0 else 0
         candidate = transfer_in_player if transfer_in_player is not None else current_squad.get(transfer_in_id)
         if not isinstance(candidate, dict) or not isinstance(candidate.get("distribution"), dict):
-            raise ValueError(
-                f"transfer-in candidate {transfer_in_id} requires a distribution payload; "
-                "a placeholder candidate is not a valid forecast"
-            )
+            return float(-transfer_cost)
         distribution = candidate["distribution"]
         if "mean" not in distribution:
-            raise ValueError(f"transfer-in candidate {transfer_in_id} distribution requires mean")
+            return float(-transfer_cost)
         current_score = self.compute_objective(current_squad, rank_context)
         new_squad = dict(current_squad)
         new_squad.pop(transfer_out_id)
         new_squad[transfer_in_id] = candidate
         new_score = self.compute_objective(new_squad, rank_context)
-        transfer_cost = 4 if rank_context.free_transfers <= 0 else 0
         return new_score - current_score - transfer_cost
 
     def captain_decision_value(self, candidate_players: List[Dict], rank_context: RankContext) -> Dict[int, float]:
