@@ -26,3 +26,17 @@ def test_missing_transfer_candidate_has_no_upside_and_only_hit_cost():
 
     assert obj.transfer_decision_value(squad, 1, 2, _context(free_transfers=1)) == 0.0
     assert obj.transfer_decision_value(squad, 1, 2, _context(free_transfers=0)) == -4.0
+
+
+def test_missing_transfer_out_player_is_rejected():
+    obj = RankAwareObjective()
+    squad = {1: {"distribution": {"mean": 5.0, "variance": 1.0}}}
+
+    with pytest.raises(ValueError, match="not in current_squad"):
+        obj.transfer_decision_value(
+            squad,
+            99,
+            2,
+            _context(),
+            transfer_in_player={"distribution": {"mean": 8.0, "variance": 1.0}},
+        )
