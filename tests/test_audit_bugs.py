@@ -187,11 +187,31 @@ def test_finding_a_datetime_timezone_aware():
 
 
 def test_finding_b_pulp_variable_and_constraint_compatibility():
-    """FINDING B: Optimizer constructs model with zero deprecation warnings and valid dimensions."""
+    """FINDING B: Optimizer constructs model with zero deprecation warnings and valid dimensions.
+
+    Expected counts are DERIVED from the live player dataset + formation set rather than
+    hardcoded snapshot values (which drift whenever the FPL API roster changes):
+      variables   = P + 2*P*G + F*G        (x per player; y, c per player/GW; z per formation/GW)
+      constraints = 6 + T + |locks| + 13*G + 2*P*G
+                    (squad=1, pos-exact=4, budget=1, club-limit=T, locks;
+                     y<=x = P*G; per-GW fixed XI/pos/z/cap area = 13*G; captain pos-bounds = P*G)
+    This asserts the constructed PuLP model has exactly the dimensions the MILP encoding implies,
+    catching regressions while remaining robust to roster changes.
+    """
     res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
     assert res["status"] == "BUILT"
-    assert res["variables_count"] == 5927
-    assert res["constraints_count"] == 5318
+    players = res["players"]
+    P = len(players)
+    G = 4  # horizon (3, 6) -> GWs 3,4,5,6
+    F = len(VALID_FORMATIONS)
+    T = len({p["team"] for p in players})
+    locks = 0
+    expected_vars = P * (1 + 2 * G) + F * G
+    expected_cons = 6 + T + locks + 13 * G + 2 * P * G
+    assert res["variables_count"] == expected_vars
+    assert res["constraints_count"] == expected_cons
+    # Structural sanity: every player contributes at least one squad variable
+    assert res["variables_count"] >= P
 
 
 def test_finding_f_position_normalization_dialects():

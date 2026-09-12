@@ -1,5 +1,28 @@
-click>=8.0.0
-pulp>=2.7.0
-requests>=2.28.0
-pytest>=7.0.0
-pytest-cov>=4.0.0
+# Reproducible dependency lock — EXACT resolved versions.
+#
+# Authority model:
+#   pyproject.toml   -> abstract direct dependencies (what the project needs)
+#   requirements.txt -> this file: pinned full closure (what the release installs)
+#
+# Both are kept in agreement. Regenerate this lock after changing pyproject.toml:
+#   python -m venv /tmp/fpl-lock && . /tmp/fpl-lock/bin/activate \
+#     && pip install -e '.[dev]' && pip freeze
+#
+# Runtime
+click==8.3.3
+pulp==3.3.2
+requests==2.34.2
+# Runtime transitive (requests)
+certifi==2026.7.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.7.0
+# Test
+pytest==9.1.1
+pytest-cov==7.1.0
+# Test transitive
+coverage==7.15.2
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0
+Pygments==2.20.0

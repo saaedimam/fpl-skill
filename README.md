@@ -1,11 +1,11 @@
 # FPL Skill
 
 [![CI](https://github.com/saaedimam/fpl-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/saaedimam/fpl-skill/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-1.1.0--v2.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Status](https://img.shields.io/badge/status-certified%20%26%20frozen-brightgreen)
 ![Season](https://img.shields.io/badge/season-2026%2F27-green)
-![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
-![Tests](https://img.shields.io/badge/tests-76%20passed%20%7C%2080%20collected-brightgreen)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)
+![Tests](https://img.shields.io/badge/tests-80%20passed%20%7C%2084%20collected-brightgreen)
 ![Optimizer](https://img.shields.io/badge/optimizer-Exact%20MILP%20(CBC)-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -407,7 +407,7 @@ python -m fpl_skill.certification
 
 ## Test Suite & Verification Gate
 
-The codebase enforces a zero-regression, contract-driven test gate run against Python 3.11, 3.12, and 3.13 on GitHub Actions.
+The codebase enforces a zero-regression, contract-driven test gate run against Python 3.11, 3.12, 3.13, and 3.14 on GitHub Actions.
 
 ```bash
 python -m pytest tests/ -v -ra
@@ -416,10 +416,10 @@ python -m pytest tests/ -v -ra
 ### Test Suite Execution Summary
 ```text
 =========================== short test summary info ============================
-PASSED [76 tests] Core EP, MILP optimizer, observation layer, calibration, decision values
-SKIPPED [1 test]  tests/test_acceptance.py:10 (Requires live FPL_TEAM_ID)
+PASSED [80 tests] Core EP, MILP optimizer, observation layer, calibration, decision values
+SKIPPED [1 test]  tests/test_acceptance.py::TestAcceptance::test_acceptance (Requires live FPL_TEAM_ID)
 XFAIL   [3 tests] tests/test_evidence_policy.py (Structural Phase 3+ rules: L5/L6 solo rejection)
-=================== 76 passed, 1 skipped, 3 xfailed in 8.47s ===================
+=================== 80 passed, 1 skipped, 3 xfailed in 7.94s ===================
 ```
 
 ### Test Architecture Breakdown
