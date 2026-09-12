@@ -1,6 +1,7 @@
 from pathlib import Path
-
 import json
+
+import pytest
 
 from tests.compute_release_hash import (
     collect_canonical_files,
@@ -47,7 +48,10 @@ def test_reproducible_hash():
 def test_manifest_file_hashes_match_registry():
     """Manifest file_hashes must exactly match actual canonical file contents."""
     files = collect_canonical_files()
-    assert verify_manifest_hashes(files) is True
+    try:
+        assert verify_manifest_hashes(files) is True
+    except AssertionError as exc:
+        raise AssertionError(f"{exc}\nACTUAL_CANONICAL_HASHES={json.dumps(files, sort_keys=True)}") from exc
 
 
 def test_manifest_release_hash_matches_computed_value():
