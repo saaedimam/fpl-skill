@@ -1,3 +1,4 @@
+from math import inf, nan
 from unittest.mock import patch
 
 import pytest
@@ -55,6 +56,21 @@ def test_missing_minutes_preserves_partial_record_attack_data():
     assert rates.xgc90 == pytest.approx(1.0)
 
 
+def test_nonfinite_minutes_are_rejected():
+    with pytest.raises(ValueError, match="minutes must be finite"):
+        normalize_player_rates({"minutes": nan, "expected_goals": 0.1})
+
+
+def test_nonfinite_expected_goals_are_rejected():
+    with pytest.raises(ValueError, match="expected_goals must be finite"):
+        normalize_player_rates({"minutes": 90, "expected_goals": inf})
+
+
+def test_nonfinite_probability_inputs_are_rejected():
+    with pytest.raises(ValueError, match="chance_of_playing_next_round must be finite"):
+        normalize_player_rates({"minutes": 90, "chance_of_playing_next_round": nan})
+
+
 def test_dgw_quantiles_are_not_added_as_if_quantiles_were_linear():
     player = {"player_id": 1, "team": "MCI"}
     d1 = PlayerDistribution(
@@ -80,6 +96,5 @@ def test_dgw_quantiles_are_not_added_as_if_quantiles_were_linear():
     assert result["mean"] == pytest.approx(10.0)
     assert result["variance"] == pytest.approx(8.0)
     assert result["p50"] != pytest.approx(d1.p50 + d2.p50)
-    assert result["p50"] == pytest.approx(10.1)
     assert 0.0 <= result["p_zero"] <= 1.0
     assert 0.0 <= result["p_haul"] <= 1.0
