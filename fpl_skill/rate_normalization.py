@@ -10,6 +10,15 @@ from math import ceil, isfinite
 from typing import Any, Mapping
 
 
+def _finite_float(value: Any, name: str, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    result = float(value)
+    if not isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
@@ -46,18 +55,20 @@ def _history_rows(player: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def estimate_expected_minutes(player: Mapping[str, Any]) -> tuple[float, float, float]:
-    cop = player.get("chance_of_playing_next_round")
-    chance = 1.0 if cop is None else _clamp(float(cop) / 100.0, 0.0, 1.0)
+    cop_raw = player.get("chance_of_playing_next_round")
+    chance = 1.0 if cop_raw is None else _clamp(_finite_float(cop_raw, "chance_of_playing_next_round") / 100.0, 0.0, 1.0)
     recent = _history_rows(player)
 
     if recent:
-        starts = sum(bool(r.get("starts")) or float(r.get("minutes", 0) or 0) >= 60 for r in recent)
-        appearances = sum(float(r.get("minutes", 0) or 0) > 0 for r in recent)
+        minute_values = [_finite_float(r.get("minutes", 0), "history.minutes") for r in recent]
+        start_flags = [bool(r.get("starts")) for r in recent]
+        starts = sum(flag or minutes >= 60 for flag, minutes in zip(start_flags, minute_values))
+        appearances = sum(minutes > 0 for minutes in minute_values)
         p_start_hist = starts / appearances if appearances else 0.0
         p_sub_hist = (appearances - starts) / appearances if appearances else 0.0
     else:
-        minutes = max(0, int(float(player.get("minutes") or 0)))
-        starts = max(0, int(float(player.get("starts") or 0)))
+        minutes = max(0, int(_finite_float(player.get("minutes"), "minutes", 0.0)))
+        starts = max(0, int(_finite_float(player.get("starts"), "starts", 0.0)))
         if starts:
             appearances = max(starts, int(ceil(minutes / 90.0)))
             p_start_hist = starts / appearances
@@ -80,16 +91,34 @@ def estimate_expected_minutes(player: Mapping[str, Any]) -> tuple[float, float, 
 
 
 def normalize_player_rates(player: Mapping[str, Any]) -> PlayerRates:
-    minutes = max(0, int(float(player.get("minutes") or 0)))
-    denominator = max(minutes, 90)
-    xg = max(0.0, float(player.get("expected_goals") or 0.0))
-    xa = max(0.0, float(player.get("expected_assists") or 0.0))
-    xgc = max(0.0, float(player.get("expected_goals_conceded") or 0.0))
+    minutes_value = player.get("minutes") if "minutes" in player else None
+    if minutes_value is None:
+        # A partial record may omit minutes while still carrying cumulative
+        # xG/xA/xGC. Preserve the data instead of treating omission as zero.
+        minutes = 0
+        denominator = 90.0
+    else:
+        minutes_float = _finite_float(minutes_value, "minutes")
+        minutes = max(0, int(minutes_float))
+        denominator = float(minutes)
+
+    if minutes == 0 and minutes_value is not None:
+        # Explicit zero minutes is a real observation: no observed exposure.
+        xg90 = xa90 = xgc90 = 0.0
+    else:
+        xg = max(0.0, _finite_float(player.get("expected_goals"), "expected_goals"))
+        xa = max(0.0, _finite_float(player.get("expected_assists"), "expected_assists"))
+        xgc = max(0.0, _finite_float(player.get("expected_goals_conceded"), "expected_goals_conceded"))
+        scale = 90.0 / denominator
+        xg90 = xg * scale
+        xa90 = xa * scale
+        xgc90 = xgc * scale
+
     p_start, p_sub, expected_minutes = estimate_expected_minutes(player)
     return PlayerRates(
-        xg90=xg / denominator * 90.0,
-        xa90=xa / denominator * 90.0,
-        xgc90=xgc / denominator * 90.0,
+        xg90=xg90,
+        xa90=xa90,
+        xgc90=xgc90,
         minutes=minutes,
         expected_minutes=expected_minutes,
         p_start=p_start,
@@ -99,6 +128,6 @@ def normalize_player_rates(player: Mapping[str, Any]) -> PlayerRates:
 
 def gw_expected_contributions(player: Mapping[str, Any], expected_minutes_override: float | None = None) -> tuple[float, float, float]:
     rates = normalize_player_rates(player)
-    minutes = rates.expected_minutes if expected_minutes_override is None else _clamp(float(expected_minutes_override), 0.0, 90.0)
+    minutes = rates.expected_minutes if expected_minutes_override is None else _clamp(_finite_float(expected_minutes_override, "expected_minutes_override"), 0.0, 90.0)
     scale = minutes / 90.0
     return rates.xg90 * scale, rates.xa90 * scale, rates.xgc90 * scale

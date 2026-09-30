@@ -221,6 +221,9 @@ def get_fpl_data(force_refresh: bool = False) -> Dict[str, Any]:
     """
     Main entry point.
     Returns cached data if valid, otherwise fetches fresh.
+
+    Expired cache is never returned as a usable dataset. Callers receive an
+    explicit error state when refresh fails after the TTL has expired.
     """
     cached = load_from_cache()
     now = time.time()
@@ -237,12 +240,14 @@ def get_fpl_data(force_refresh: bool = False) -> Dict[str, Any]:
         save_to_cache(fresh_data)
         fresh_data["is_stale"] = False
         return fresh_data
-        
-    # Fallback to stale cache if fetch fails
+
     if cached:
-        cached["is_stale"] = True
-        return cached
-        
+        return {
+            "error": "FPL API unavailable and cached data is stale",
+            "is_stale": True,
+            "cache_timestamp": cached.get("cache_timestamp", 0),
+        }
+
     return {"error": "FPL API unavailable and no cache exists"}
 
 if __name__ == "__main__":

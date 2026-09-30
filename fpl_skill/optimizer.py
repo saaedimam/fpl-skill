@@ -1,6 +1,7 @@
 """Public optimizer bound to the Phase-2 probabilistic forecast engine."""
 from __future__ import annotations
 import hashlib, json
+from math import sqrt
 from typing import Any, Dict, Tuple
 from . import optimizer_legacy as _legacy
 from .api import get_fpl_data, normalize_dataset, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
@@ -24,14 +25,46 @@ def _distribution_for_fixture(player,gw,fix,engine,idx=0):
     )
     return engine.generate_distribution(inp)
 
+def _inferred_skewness(d):
+    if d.skewness != 0.0:
+        return float(d.skewness)
+    std=sqrt(max(0.0,float(d.variance)))
+    if std == 0.0:
+        return 0.0
+    return max(-1.0,min(1.0,(float(d.p50)-float(d.mean))/(0.10*std)))
+
 def _gw_distribution(player,gw,fm,engine):
     fixtures=_fixtures_for(fm,player.get("team",""),gw)
-    if not fixtures: return {"mean":0.0,"p10":0.0,"p25":0.0,"p50":0.0,"p75":0.0,"p90":0.0,"variance":0.0,"p_haul":0.0,"p_zero":1.0,"fixtures":0}
+    if not fixtures: return {"mean":0.0,"p10":0.0,"p25":0.0,"p50":0.0,"p75":0.0,"p90":0.0,"variance":0.0,"skewness":0.0,"p_haul":0.0,"p_zero":1.0,"fixtures":0}
     ds=[_distribution_for_fixture(player,gw,f,engine,i) for i,f in enumerate(fixtures)]
-    return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
+    mean=sum(d.mean for d in ds)
+    variance=sum(d.variance for d in ds)
+    third_moment=0.0
+    for d in ds:
+        std=sqrt(max(0.0,float(d.variance)))
+        third_moment += _inferred_skewness(d) * std**3
+    aggregate_skewness = third_moment / (variance**1.5) if variance > 0.0 else 0.0
+    aggregate_skewness = max(-1.0,min(1.0,aggregate_skewness))
+    # For independent fixture outcomes, first three central moments combine.
+    # Quantiles themselves are not additive, so derive aggregate quantiles from moments.
+    aggregate_q=engine._moments_to_percentiles(mean,variance,aggregate_skewness)
+    p_haul=1.0
+    for d in ds:
+        p_haul *= 1.0 - d.p_haul
+    p_haul=1.0-p_haul
+    p_zero=1.0
+    for d in ds:
+        p_zero *= d.p_zero
+    return {"mean":round(mean,6),"p10":round(aggregate_q["p10"],6),"p25":round(aggregate_q["p25"],6),"p50":round(aggregate_q["p50"],6),"p75":round(aggregate_q["p75"],6),"p90":round(aggregate_q["p90"],6),"variance":round(variance,6),"skewness":round(aggregate_skewness,6),"p_haul":round(p_haul,6),"p_zero":round(p_zero,6),"fixtures":len(ds)}
 
 def load(horizon:Tuple[int,int]=(3,6)):
-    raw=get_fpl_data(); norm=normalize_dataset(raw.get("records",[])); players=norm["players"]; fm=norm["fixture_map"]; gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
+    raw=get_fpl_data()
+    if raw.get("error"):
+        raise RuntimeError(f"FPL data loading failed: {raw['error']}")
+    records=raw.get("records",[])
+    if not records:
+        raise RuntimeError("FPL data loading failed: empty dataset")
+    norm=normalize_dataset(records); players=norm["players"]; fm=norm["fixture_map"]; gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
     engine=ProbabilisticEPEngine(); ep={}
     for p in players:
         pid=int(p["player_id"]); p["cost_int"]=p.get("now_cost") or 0; ep[pid]={}; p["_distribution_diagnostics"]={}
@@ -42,7 +75,6 @@ def load(horizon:Tuple[int,int]=(3,6)):
     return players,fm,ep,data_hash,raw,gws
 
 _legacy.load=load
-# Preserve the prior optimizer public surface while replacing only its data-loading path.
 for _name in dir(_legacy):
     if _name not in {"load", "build_and_solve"} and not _name.startswith("__"):
         globals().setdefault(_name, getattr(_legacy, _name))

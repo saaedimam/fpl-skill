@@ -68,7 +68,7 @@
     "fpl_skill/observation/tape.py": "487d93156c54663ffb2e91815b90f6f14b3366d18523ff8dc87edf451d16f669",
     "fpl_skill/observation/watcher.py": "0908bf742ef036fad2004cf3b35bc1d62e5006ca98080edf58bad0c5d04e500a",
     "fpl_skill/probabilistic_ep1.py": "0f7bf241a800e55d44a75be8d471046416c067eb51f94928710892e084733b4c",
-    "fpl_skill/rank_aware_objective1.py": "758ff472e5802c2b2dad0d542e3566636bfb3a258f45565dca7b0d237ad1a648",
+    "fpl_skill/rank_aware_objective1.py": "1e4671a9f2572745f42be5beb37af1258bd88e3b7a9fa1346ec7353d34a21e89",
     "tests/test_expected_points_semantics.py": "79c92ec9fc235b43e924697d5a868819c6886746972f9444c5c2652b0ede1ca5",
     "tests/test_historical_data_layer.py": "75cbe3d20e4afe334a975fdbbe5d0ec54201c8295d378f9fd501a162e0a354e4",
     "tests/test_observation.py": "6fa1304b932fa86065a06154407e1abc40c8183785b035cba799dc2d570a992c",
@@ -77,7 +77,7 @@
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
     "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28"
   },
-  "release_hash": "0027ed1578f11b212a66054aa5e4875d3f572648db48d0d7765a663262e7c3f9",
+  "release_hash": "3f6fc5a1122ff7b41d127127f0f18770511450c5c31a409ead1fb8d175497789",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-09-13T01:09:00+00:00"
 }
