@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 
 from fpl_skill.account_adapter import FPLAccountAdapter
+from fpl_skill.player_model import ELEMENT_TYPE_MAP as _ELEMENT_TYPE_MAP, from_bootstrap_element as _from_bootstrap_element
 from fpl_skill.api import (
     calculate_player_gw_ep, build_fixture_map, select_best_legal_xi,
     evaluate_squad_multi_gw, find_best_one_ft
@@ -32,6 +33,23 @@ from fpl_skill.certification import get_data_hash
 
 BACKTEST_DIR = Path(os.path.expanduser("~/.cache/fpl-skill/certification"))
 BACKTEST_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _normalize_squad(squad: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ensure every player dict has 'position' string and 'player_id'.
+    Delegates to the canonical player_model boundary for element_type mapping.
+    """
+    out = []
+    for p in squad:
+        p = dict(p)
+        # Normalize position from element_type if needed
+        if "position" not in p or p["position"] not in _ELEMENT_TYPE_MAP.values():
+            p["position"] = _ELEMENT_TYPE_MAP.get(int(p.get("element_type", 0)), "UNKNOWN")
+        # Normalize player_id from id if needed
+        if "player_id" not in p:
+            p["player_id"] = p.get("id", 0)
+        out.append(p)
+    return out
 
 
 @dataclass
@@ -91,6 +109,7 @@ class CaptainBacktest:
         squad = [self.elements[pid] for pid in squad_ids if pid in self.elements]
         if not squad:
             raise ValueError(f"No squad players found for IDs: {squad_ids}")
+        squad = _normalize_squad(squad)
 
         xi_res = select_best_legal_xi(squad, gw, self.fixture_map)
         captain = xi_res.get("captain", {})
@@ -225,6 +244,7 @@ class BenchBacktest:
         squad = [self.elements[pid] for pid in squad_ids if pid in self.elements]
         if not squad:
             raise ValueError(f"No squad players found: {squad_ids}")
+        squad = _normalize_squad(squad)
 
         xi_res = select_best_legal_xi(squad, gw, self.fixture_map)
         bench = xi_res.get("bench", [])
@@ -339,6 +359,7 @@ class TransferBacktest:
         squad = [self.elements[pid] for pid in squad_ids if pid in self.elements]
         if not squad:
             raise ValueError(f"No squad players found: {squad_ids}")
+        squad = _normalize_squad(squad)
 
         result = find_best_one_ft(squad, self.all_players, bank, self.fixture_map)
         if not result.get("player_out") or not result.get("player_in"):

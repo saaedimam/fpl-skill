@@ -31,6 +31,7 @@ from fpl_skill.api import (
     build_fixture_map, evaluate_squad_multi_gw, select_best_legal_xi,
     VALID_FORMATIONS, optimize_wildcard_squad, fast_eval_squad_ep
 )
+from fpl_skill.optimizer import build_and_solve as _highs_build_and_solve, get_solver_metadata
 
 CERTIFICATION_DIR = Path(os.path.expanduser("~/.cache/fpl-skill/certification"))
 CERTIFICATION_DIR.mkdir(parents=True, exist_ok=True)
@@ -459,6 +460,18 @@ def generate_certificate(bb_result: Dict[str, Any],
 def run_full_certification() -> Dict[str, Any]:
     """
     Execute complete mathematical certification pipeline.
+
+    Canonical path:
+      1. HiGHS MILP solve via optimizer.build_and_solve()  → requires OPTIMAL
+      2. B&B exhaustive verification via exhaustive_verification()  → independent
+      3. Agreement check within tolerance
+      4. Constraint + formation + sensitivity analysis
+      5. Formal certificate with solver metadata
+
+    Fails closed on:
+      - Non-OPTIMAL HiGHS status
+      - HiGHS/B&B score disagreement > 0.01 EP
+      - Any constraint or formation violation
     """
     print("=" * 70)
     print("FPL WILDCARD MATHEMATICAL CERTIFICATION v2.0")
@@ -479,54 +492,115 @@ def run_full_certification() -> Dict[str, Any]:
           f"MID: {sum(1 for p in all_players if p['position']=='MID')}, "
           f"FWD: {sum(1 for p in all_players if p['position']=='FWD')})")
 
-    # Run Branch-and-Bound (existing pipeline)
-    print("\n2. Running Branch-and-Bound optimization...")
-    bb_result = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map)
-    print(f"   BB Score: {bb_result['optimization_metadata']['best_score']:.2f}")
-    print(f"   Branches explored: {bb_result['optimization_metadata']['branches_explored']:,}")
-    print(f"   Branches pruned: {bb_result['optimization_metadata']['branches_pruned']:,}")
-    print(f"   Claimed optimal: {bb_result['optimization_metadata']['optimality_proven']}")
+    # Step 1: Canonical HiGHS MILP solve
+    print("\n2. Canonical HiGHS MILP solve (optimizer.build_and_solve)...")
+    solver_meta = get_solver_metadata()
+    print(f"   Solver: {solver_meta.get('solver')} via {solver_meta.get('solver_backend')} "
+          f"v{solver_meta.get('solver_version')}")
+    highs_result = _highs_build_and_solve(budget=100.0)
+    highs_status = highs_result.get("status", "Unknown")
+    print(f"   Status: {highs_status}")
 
-    # Exhaustive verification (no truncation)
-    print("\n3. Exhaustive verification over FULL candidate space...")
+    if highs_status != "Optimal":
+        return {
+            "status": "FAILED",
+            "gate": "HIGHS_SOLVER",
+            "reason": f"HiGHS solver returned non-Optimal status: {highs_status}",
+            "solver_metadata": solver_meta,
+            "certified_optimal": False,
+            "optimality_proven": False,
+            "data_hash": data_hash,
+        }
+
+    highs_score = highs_result["objective"]
+    print(f"   HiGHS objective: {highs_score:.4f} EP")
+    print(f"   Squad IDs: {sorted(highs_result['squad_ids'])}")
+
+    # Recover squad player objects from all_players
+    by_id = {p["player_id"]: p for p in all_players}
+    highs_squad = [by_id[pid] for pid in highs_result["squad_ids"] if pid in by_id]
+
+    # Build a bb_result-compatible dict for downstream functions
+    # (generate_certificate, verify_bb_against_exhaustive still use bb_result structure)
+    bb_result = {
+        "squad": highs_squad,
+        "optimization_metadata": {
+            "best_score": highs_score,
+            "branches_explored": highs_result.get("variables_count", 0),
+            "branches_pruned": 0,
+            "pruning_bound": 0,
+            "candidate_space_size": 0,
+            "exhaustive": False,
+            "optimality_proven": True,   # MILP with gap=0 is proven optimal
+        }
+    }
+
+    # Step 2: Independent B&B exhaustive verification
+    print("\n3. Independent B&B exhaustive verification...")
     exh_result = exhaustive_verification(all_players, fixture_map, budget=100.0)
-    print(f"   Exhaustive Score: {exh_result['best_score']:.2f}")
+    print(f"   Exhaustive Score: {exh_result['best_score']:.4f}")
     print(f"   Evaluated: {exh_result['total_evaluated']:,}")
     print(f"   Pruned: {exh_result['total_pruned']:,}")
     print(f"   Time: {exh_result['elapsed_seconds']:.1f}s")
 
-    # Verify equivalence
-    print("\n4. Verifying BB vs Exhaustive equivalence...")
+    # Step 3: Agreement check
+    print("\n4. HiGHS vs B&B agreement check...")
     eq = verify_bb_against_exhaustive(bb_result, exh_result)
-    print(f"   BB Score: {eq['branch_and_bound_score']:.2f}")
-    print(f"   Exhaustive Score: {eq['exhaustive_score']:.2f}")
-    print(f"   Gap: {eq['gap']:.4f}")
-    print(f"   Match: {eq['match']}")
+    gap = abs(highs_score - exh_result["best_score"])
+    print(f"   HiGHS:     {highs_score:.4f}")
+    print(f"   Exhaustive: {exh_result['best_score']:.4f}")
+    print(f"   Gap: {gap:.4f}")
+    agreement = gap < 0.01
+    print(f"   Agreement: {agreement}")
 
-    # Constraint verification
+    if not agreement:
+        return {
+            "status": "FAILED",
+            "gate": "SOLVER_AGREEMENT",
+            "reason": (
+                f"HiGHS ({highs_score:.4f}) and B&B exhaustive ({exh_result['best_score']:.4f}) "
+                f"disagree by {gap:.4f} EP (tolerance 0.01)"
+            ),
+            "solver_metadata": solver_meta,
+            "certified_optimal": False,
+            "optimality_proven": False,
+            "highs_score": highs_score,
+            "exhaustive_score": exh_result["best_score"],
+            "gap": gap,
+            "data_hash": data_hash,
+        }
+
+    # Step 4: Constraint verification
     print("\n5. Verifying hard constraints...")
-    constraint_check = constraint_verification(bb_result["squad"])
+    constraint_check = constraint_verification(highs_squad)
     print(f"   Valid: {constraint_check['valid']}")
     if not constraint_check['valid']:
         for v in constraint_check['violations']:
             print(f"   VIOLATION: {v}")
 
-    # Formation verification
+    # Step 5: Formation verification
     print("\n6. Verifying GW3 formation & captaincy...")
-    formation_check = formation_verification(bb_result["squad"], fixture_map)
+    formation_check = formation_verification(highs_squad, fixture_map)
     print(f"   Formation: {formation_check['formation']} ({formation_check['formation_reason']})")
-    print(f"   Captain: {formation_check['captain']} ({formation_check['captain_position']}) - Attacking: {formation_check['captain_attacking']}")
-    print(f"   Vice-Captain: {formation_check['vice_captain']} ({formation_check['vice_captain_position']}) - Attacking: {formation_check['vice_captain_attacking']}")
+    print(f"   Captain: {formation_check['captain']} ({formation_check['captain_position']}) "
+          f"- Attacking: {formation_check['captain_attacking']}")
+    print(f"   Vice-Captain: {formation_check['vice_captain']} ({formation_check['vice_captain_position']}) "
+          f"- Attacking: {formation_check['vice_captain_attacking']}")
 
-    # Sensitivity analysis
+    # Step 6: Sensitivity analysis
     print("\n7. Computing sensitivity analysis...")
-    sensitivity = sensitivity_analysis(bb_result["squad"], all_players, fixture_map)
+    sensitivity = sensitivity_analysis(highs_squad, all_players, fixture_map)
     print(f"   Current score: {sensitivity['current_score']:.2f}")
     print(f"   Min gap to 1-swap: {sensitivity['min_gap_to_1swap']:.2f}")
 
-    # Generate certificate
+    # Step 7: Generate certificate
     print("\n8. Generating formal certificate...")
     cert = generate_certificate(bb_result, exh_result, constraint_check, formation_check, sensitivity, data_hash)
+    cert["solver_metadata"] = solver_meta
+    cert["highs_objective"] = highs_score
+    cert["highs_squad_ids"] = sorted(highs_result["squad_ids"])
+    cert["canonical_optimizer"] = "HiGHS_MILP_via_optimizer.build_and_solve"
+    cert["verification_optimizer"] = "BranchAndBound_exhaustive_verification"
 
     # Save certificate
     cert_path = CERTIFICATION_DIR / f"optimality_certificate_{data_hash}.json"
@@ -545,10 +619,14 @@ def run_full_certification() -> Dict[str, Any]:
     print(f"Captain Attacking: {cert['formation_verification']['captain_attacking']}")
     print(f"Vice-Captain Attacking: {cert['formation_verification']['vice_captain_attacking']}")
     print(f"Gap to Next Alternative: {cert['sensitivity_analysis']['min_gap_to_1swap']:.2f} xPts")
+    print(f"HiGHS Score: {highs_score:.4f}")
+    print(f"B&B Score:   {exh_result['best_score']:.4f}")
+    print(f"Agreement:   {agreement}")
     print(f"Data Hash: {data_hash}")
     print(f"Certificate: {cert_path}")
 
     overall_pass = (
+        agreement and
         cert['equivalence_verification']['verification'] == 'PASSED' and
         cert['upper_bound_proof']['admissible'] and
         cert['constraint_verification']['valid'] and
@@ -557,11 +635,39 @@ def run_full_certification() -> Dict[str, Any]:
         cert['formation_verification']['vice_captain_attacking']
     )
 
+    cert["status"] = "PASSED" if overall_pass else "FAILED"
+    cert["certified_optimal"] = bool(overall_pass)
+    cert["optimality_proven"] = bool(overall_pass)
+    cert["bb_score"] = exh_result["best_score"]
+    cert["exhaustive_score"] = exh_result["best_score"]
+    cert["highs_vs_bb_gap"] = round(gap, 4)
+    cert["gap"] = round(gap, 4)
+
     print(f"\nOVERALL: {'✅ CERTIFIED OPTIMAL' if overall_pass else '❌ CERTIFICATION FAILED'}")
 
     return cert
 
 
+def run_full_certification_safe() -> Dict[str, Any]:
+    """Execute complete mathematical certification pipeline with fail-closed error handling."""
+    try:
+        return run_full_certification()
+    except Exception as exc:
+        solver_meta = {}
+        try:
+            from fpl_skill.optimizer import get_solver_metadata
+            solver_meta = get_solver_metadata()
+        except Exception:
+            pass
+        return {
+            "status": "FAILED",
+            "gate": "SOLVER",
+            "reason": str(exc),
+            "solver_metadata": solver_meta,
+            "certified_optimal": False,
+        }
+
+
 if __name__ == "__main__":
-    cert = run_full_certification()
-    exit(0 if cert["equivalence_verification"]["verification"] == "PASSED" else 1)
+    cert = run_full_certification_safe()
+    exit(0 if cert.get("certified_optimal") else 1)

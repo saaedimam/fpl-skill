@@ -22,12 +22,14 @@ def verify():
     state = adapter.get_state(active_gw)
     ownership = state.get("ownership_state", "UNAVAILABLE")
     opt_state = state.get("optimization_state", "OPTIMIZATION_BLOCKED")
+    data_mode = state.get("data_mode", "UNAVAILABLE")
 
     click.echo("FPL ACCOUNT\n-----------")
     click.echo(f"Team ID: {team_id}")
     click.echo(f"Active GW: {active_gw}")
     click.echo(f"Ownership State: {ownership}")
     click.echo(f"Optimization State: {opt_state}")
+    click.echo(f"Data Mode: {data_mode}")
 
     if ownership == "VERIFIED_CURRENT":
         click.echo("Identity: VERIFIED")
@@ -41,6 +43,7 @@ def verify():
     else:
         click.echo("Identity: UNVERIFIED")
         click.echo("Auth: UNAVAILABLE")
+
 
 
 @cli.command()

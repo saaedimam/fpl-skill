@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib, json
 from math import sqrt
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional, List
 from . import optimizer_legacy as _legacy
 from .api import get_fpl_data, normalize_dataset, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
 from .probabilistic_ep1 import DistributionModelInputs, ProbabilisticEPEngine, normalize_player_state, normalize_position

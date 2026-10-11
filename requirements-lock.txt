@@ -8,11 +8,18 @@
 click==8.3.3
 pulp==3.3.2
 requests==2.34.2
+highspy==1.15.1
+jsonschema==4.26.0
 
-# Runtime Transitive (requests)
+# Runtime Transitive (highspy, jsonschema, requests)
+attrs==26.1.0
 certifi==2026.7.22
 charset-normalizer==3.4.7
 idna==3.13
+jsonschema-specifications==2025.9.1
+numpy==2.5.3
+referencing==0.37.0
+rpds-py==2026.6.3
 urllib3==2.7.0
 
 # Dev / Test Direct

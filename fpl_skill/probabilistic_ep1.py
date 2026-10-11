@@ -32,10 +32,10 @@ _STATUS = {
 }
 
 _POS = {
-    1: "GK",
-    "1": "GK",
-    "GK": "GK",
-    "GKP": "GK",
+    1: "GKP",
+    "1": "GKP",
+    "GK": "GKP",
+    "GKP": "GKP",
     2: "DEF",
     "2": "DEF",
     "DEF": "DEF",
@@ -95,6 +95,8 @@ class PlayerDistribution:
     notes: Optional[str] = None
 
     def __post_init__(self):
+        if self.position == "GK":
+            object.__setattr__(self, "position", "GKP")
         if not self.data_timestamp:
             self.data_timestamp = datetime.now(timezone.utc).isoformat()
         # Finite validations
@@ -105,13 +107,32 @@ class PlayerDistribution:
         ):
             _check_finite(getattr(self, fld), fld)
         if self.variance < 0:
-            raise ValueError("variance must be non-negative")
+            raise ValueError(f"variance must be >= 0 (got {self.variance})")
+        if self.mean < 0:
+            raise ValueError(f"mean must be >= 0 (got {self.mean})")
         self.std_dev = sqrt(self.variance)
-        qs = [self.p10, self.p25, self.p50, self.p75, self.p90]
-        if any(q < 0 for q in qs) or any(a > b for a, b in zip(qs, qs[1:])):
-            raise ValueError("invalid percentile ordering")
-        if self.p_zero + self.p_haul + self.p_bench > 1.000001:
-            raise ValueError("scenario probabilities exceed 1.0")
+        percentiles = [self.p10, self.p25, self.p50, self.p75, self.p90]
+        labels = [10, 25, 50, 75, 90]
+        for i in range(len(percentiles) - 1):
+            if percentiles[i] > percentiles[i + 1]:
+                raise ValueError(
+                    f"Invalid distribution: percentiles not monotonic "
+                    f"P{labels[i]} ({percentiles[i]}) > P{labels[i+1]} ({percentiles[i+1]})"
+                )
+        prob_fields = {
+            "p_zero": self.p_zero,
+            "p_haul": self.p_haul,
+            "p_bench": self.p_bench,
+            "p_injured": self.p_injured,
+        }
+        for fname, fval in prob_fields.items():
+            if not (0.0 <= fval <= 1.0):
+                raise ValueError(f"{fname} must be in [0, 1] (got {fval})")
+        if self.p_zero + self.p_haul + self.p_bench > 1.05:
+            raise ValueError(
+                f"Scenario probabilities exceed 1.0: "
+                f"p_zero={self.p_zero} + p_haul={self.p_haul} + p_bench={self.p_bench}"
+            )
 
     def interquartile_range(self) -> float:
         return self.p75 - self.p25
@@ -124,6 +145,19 @@ class PlayerDistribution:
 
     def risk_adjusted_value(self, risk_multiplier: float = 1.0) -> float:
         return self.mean - risk_multiplier * self.std_dev
+
+    def probability_of_exceeding(self, threshold: float) -> float:
+        if threshold <= self.p10:
+            return 0.90
+        elif threshold <= self.p25:
+            return 0.75
+        elif threshold <= self.p50:
+            return 0.50
+        elif threshold <= self.p75:
+            return 0.25
+        elif threshold <= self.p90:
+            return 0.10
+        return 0.05
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -146,11 +180,10 @@ class PlayerDistribution:
             "p_haul": self.p_haul,
             "p_bench": self.p_bench,
             "p_injured": self.p_injured,
-            "timestamp": self.data_timestamp,
+            "data_timestamp": self.data_timestamp,
             "confidence": self.confidence,
             "source": self.source,
             "notes": self.notes,
-            "expected_points": self.mean,
         }
 
 @dataclass
@@ -209,15 +242,18 @@ class DistributionModelInputs:
 
 class ProbabilisticEPEngine:
     """Single authoritative forecast engine. Inputs are GW-specific, not cumulative."""
-    BASE_POINTS_BY_POSITION = {"GK": 2.0, "DEF": 3.0, "MID": 2.5, "FWD": 4.0}
+    BASE_POINTS_BY_POSITION = {"GKP": 2.0, "GK": 2.0, "DEF": 3.0, "MID": 2.5, "FWD": 4.0}
     FDR_MULTIPLIERS = {1: 1.40, 2: 1.25, 3: 1.00, 4: 0.80, 5: 0.60}
     HOME_MULTIPLIER = 1.12
     AWAY_MULTIPLIER = 0.90
     # Phase-2 baseline; future coefficient tuning requires empirical calibration.
-    XG_WEIGHT = {"GK": 0.0, "DEF": 1.5, "MID": 1.5, "FWD": 1.5}
-    XA_WEIGHT = {"GK": 0.0, "DEF": 1.0, "MID": 1.0, "FWD": 1.0}
-    FORM_WEIGHT = {"GK": 0.05, "DEF": 0.04, "MID": 0.05, "FWD": 0.05}
-    ICT_WEIGHT = {"GK": 0.005, "DEF": 0.01, "MID": 0.01, "FWD": 0.01}
+    XG_WEIGHT = {"GKP": 0.0, "GK": 0.0, "DEF": 1.5, "MID": 1.5, "FWD": 1.5}
+    XA_WEIGHT = {"GKP": 0.0, "GK": 0.0, "DEF": 1.0, "MID": 1.0, "FWD": 1.0}
+    FORM_WEIGHT = {"GKP": 0.05, "GK": 0.05, "DEF": 0.04, "MID": 0.05, "FWD": 0.05}
+    ICT_WEIGHT = {"GKP": 0.005, "GK": 0.005, "DEF": 0.01, "MID": 0.01, "FWD": 0.01}
+
+    def __init__(self):
+        self.calibration_data: Dict = {}
 
     def _compute_base_distribution(self, i: DistributionModelInputs) -> Tuple[float, float]:
         if i.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
@@ -240,7 +276,7 @@ class ProbabilisticEPEngine:
         )
 
     def _estimate_skewness(self, i: DistributionModelInputs) -> float:
-        s = 0.30 if i.position == "FWD" else (-0.10 if i.position == "GK" else 0.0)
+        s = 0.30 if i.position == "FWD" else (-0.10 if i.position in ("GK", "GKP") else 0.0)
         if i.form > 5.0:
             s += min(0.30, (i.form - 5.0) * 0.08)
         elif i.form < 3.0:
@@ -298,7 +334,7 @@ class ProbabilisticEPEngine:
         p_bench = 0.30 if inputs.minutes_played_last_3 < 90 else 0.10
         mult = 1.0 if fixture_mult is None else float(fixture_mult)
 
-        base = {"GK": 0.03, "DEF": 0.08, "MID": 0.16, "FWD": 0.22}[inputs.position]
+        base = {"GKP": 0.03, "GK": 0.03, "DEF": 0.08, "MID": 0.16, "FWD": 0.22}[inputs.position]
         p_haul = min(0.50, base * max(1.0, mult) * (1.4 if inputs.form > 6 else 1.0) * factor)
 
         total = p_zero + p_bench + p_haul

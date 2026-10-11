@@ -224,9 +224,9 @@ def test_finding_f_position_normalization_dialects():
         opponent_strength_attack=1050, opponent_strength_defence=900,
         team_goals_per_gw=1.8, team_conceded_per_gw=1.1,
     )
-    # Integer dialects: 1 (GK), 2 (DEF), 3 (MID), 4 (FWD)
+    # Integer dialects: 1 (GKP), 2 (DEF), 3 (MID), 4 (FWD)
     d1 = engine.generate_distribution(DistributionModelInputs(position=1, **base_kw))
-    assert d1.position == "GK"
+    assert d1.position == "GKP"  # canonical form
     d2 = engine.generate_distribution(DistributionModelInputs(position=2, **base_kw))
     assert d2.position == "DEF"
     d3 = engine.generate_distribution(DistributionModelInputs(position=3, **base_kw))
@@ -235,12 +235,12 @@ def test_finding_f_position_normalization_dialects():
     assert d4.position == "FWD"
 
     # String numeric dialects: "1", "2", "3", "4"
-    assert engine.generate_distribution(DistributionModelInputs(position="1", **base_kw)).position == "GK"
+    assert engine.generate_distribution(DistributionModelInputs(position="1", **base_kw)).position == "GKP"
     assert engine.generate_distribution(DistributionModelInputs(position="2", **base_kw)).position == "DEF"
 
-    # Token dialects: "GKP", "GK", "DEF", "MID", "FWD"
-    assert engine.generate_distribution(DistributionModelInputs(position="GKP", **base_kw)).position == "GK"
-    assert engine.generate_distribution(DistributionModelInputs(position="GK", **base_kw)).position == "GK"
+    # Token dialects: "GKP" and "GK" both normalise to canonical "GKP"
+    assert engine.generate_distribution(DistributionModelInputs(position="GKP", **base_kw)).position == "GKP"
+    assert engine.generate_distribution(DistributionModelInputs(position="GK", **base_kw)).position == "GKP"
 
     # Invalid representation must be rejected with ValueError
     with pytest.raises(ValueError, match="Invalid position representation"):

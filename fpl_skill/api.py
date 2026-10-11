@@ -34,11 +34,23 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
         total += engine.generate_distribution(inp).mean
     return round(total, 2)
 
-# Patch the legacy implementation's global symbol. Its existing XI/transfer/certification
+def optimize_wildcard_squad(*args, **kwargs):
+    import warnings
+    warnings.warn(
+        "api.optimize_wildcard_squad() is deprecated as the primary optimizer. "
+        "Use fpl_skill.optimizer.build_and_solve() for production use. "
+        "This B&B implementation is retained only for exhaustive verification.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return _legacy.optimize_wildcard_squad(*args, **kwargs)
+
+# Patch the legacy implementation's global symbols. Its existing XI/transfer/certification
 # routines therefore consume the canonical Phase-2 function without a broad rewrite.
 _legacy.calculate_player_gw_ep = calculate_player_gw_ep
+_legacy.optimize_wildcard_squad = optimize_wildcard_squad
 for _name in dir(_legacy):
-    if _name not in {"calculate_player_gw_ep"} and not _name.startswith("__"):
+    if _name not in {"calculate_player_gw_ep", "optimize_wildcard_squad"} and not _name.startswith("__"):
         globals().setdefault(_name, getattr(_legacy, _name))
 
 __all__ = [n for n in globals() if not n.startswith("_")]

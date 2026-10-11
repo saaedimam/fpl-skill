@@ -12,6 +12,51 @@ from typing import Optional, List, Tuple, Dict, Any
 from fpl_skill.api import get_fpl_data, normalize_dataset, calculate_player_gw_ep, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
 import pulp
 
+
+def get_mip_solver(*, msg: bool = False, time_limit: int = 60):
+    """
+    Return native HiGHS MIP solver via highspy.
+    Fails closed if highspy is unavailable or unsupported.
+    """
+    if not hasattr(pulp, "HiGHS"):
+        raise RuntimeError("Native HiGHS solver interface unavailable in PuLP")
+
+    try:
+        import highspy  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "highspy is required for native deterministic MIP certification. "
+            "Install highspy>=1.15.1."
+        ) from exc
+
+    return pulp.HiGHS(
+        msg=msg,
+        timeLimit=time_limit,
+        gapRel=0.0,
+        gapAbs=0.0,
+    )
+
+
+def get_solver_metadata() -> Dict[str, Any]:
+    """Return runtime solver environment metadata."""
+    import importlib.metadata
+    import platform
+    try:
+        highspy_ver = importlib.metadata.version("highspy")
+    except Exception:
+        highspy_ver = "unknown"
+    return {
+        "solver": "HiGHS",
+        "solver_api": "pulp.HiGHS",
+        "solver_backend": "highspy",
+        "solver_version": highspy_ver,
+        "pulp_version": getattr(pulp, "__version__", "unknown"),
+        "python_version": sys.version.split()[0],
+        "platform": platform.system().lower(),
+        "architecture": platform.machine(),
+    }
+
+
 FORMATIONS = list(VALID_FORMATIONS)  # All legal formations
 
 def load(horizon: Tuple[int, int] = (3, 6)):
@@ -131,11 +176,12 @@ def build_and_solve(
             "players": players
         }
 
-    solver = pulp.PULP_CBC_CMD(msg=True, timeLimit=time_limit, gapRel=0, gapAbs=0)
+    solver = get_mip_solver(msg=True, time_limit=time_limit)
     t0 = time.time()
     prob.solve(solver)
     elapsed = time.time() - t0
     status = pulp.LpStatus[prob.status]
+    solver_meta = get_solver_metadata()
 
     if status != "Optimal":
         print(f"Status: {status} Objective: None Time: {elapsed:.1f}s", flush=True)
@@ -151,7 +197,8 @@ def build_and_solve(
             "raw": raw,
             "players": players,
             "ep": ep,
-            "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None)
+            "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None),
+            "solver_metadata": solver_meta,
         }
 
     obj = pulp.value(prob.objective)
@@ -166,7 +213,8 @@ def build_and_solve(
         "status": status, "objective": obj, "elapsed": elapsed,
         "squad_ids": squad_ids, "by_gw_y": by_gw_y, "by_gw_c": by_gw_c, "by_gw_z": by_gw_z,
         "data_hash": data_hash, "raw": raw, "players": players, "ep": ep,
-        "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None)
+        "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None),
+        "solver_metadata": solver_meta,
     }
 
 if __name__ == "__main__":

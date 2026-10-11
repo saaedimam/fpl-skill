@@ -13,6 +13,8 @@ dependencies = [
   "click>=8.0.0",
   "pulp>=2.7.0",
   "requests>=2.28.0",
+  "highspy>=1.15.1",
+  "jsonschema>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +25,7 @@ dev = [
 
 [project.scripts]
 fpl = "fpl_skill.cli:cli"
+fpl-certify = "fpl_skill.release_cert:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

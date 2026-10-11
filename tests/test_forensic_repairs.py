@@ -45,7 +45,8 @@ def test_account_adapter_ownership_state_lineage():
             assert state["optimization_state"] == "OPTIMIZATION_READY"
             assert len(state["squad_ids"]) == 15
 
-    # 2. Public /entry/.../event/1/picks/ -> PUBLISHED_EVENT_PICKS & OPTIMIZATION_BLOCKED
+    # 2. Public /entry/.../event/1/picks/ -> PUBLISHED_EVENT_PICKS & OPTIMIZATION_READY
+    #    (published picks are sufficient for backtest; only account-mutating ops need auth)
     with patch.object(adapter, "get_bootstrap", return_value=mock_bootstrap):
         with patch.object(adapter, "_fetch_authenticated") as mock_fetch:
             def side_effect(path):
@@ -57,9 +58,31 @@ def test_account_adapter_ownership_state_lineage():
             mock_fetch.side_effect = side_effect
             state = adapter.get_state(1)
             assert state["ownership_state"] == "PUBLISHED_EVENT_PICKS"
+            assert state["optimization_state"] == "OPTIMIZATION_READY"
+
+    # 3. Historical fallback -> HISTORICAL_FALLBACK & OPTIMIZATION_BLOCKED
+    mock_bootstrap_2gw = {
+        "events": [
+            {"id": 1, "deadline_time": "2026-09-01T10:00:00Z", "is_current": True},
+            {"id": 2, "deadline_time": "2026-09-15T10:00:00Z", "is_current": False},
+        ]
+    }
+    with patch.object(adapter, "get_bootstrap", return_value=mock_bootstrap_2gw):
+        with patch.object(adapter, "_fetch_authenticated") as mock_fetch:
+            def side_effect_hist(path):
+                if path.startswith("/my-team/"):
+                    return None
+                if "/event/2/picks/" in path:
+                    return None
+                if "/event/1/picks/" in path:
+                    return {"picks": [{"element": i} for i in range(1, 16)]}
+                return None
+            mock_fetch.side_effect = side_effect_hist
+            state = adapter.get_state(2)
+            assert state["ownership_state"] == "HISTORICAL_FALLBACK"
             assert state["optimization_state"] == "OPTIMIZATION_BLOCKED"
 
-    # 3. Unavailable / missing picks -> UNAVAILABLE & OPTIMIZATION_BLOCKED
+    # 4. Unavailable / missing picks -> UNAVAILABLE & OPTIMIZATION_BLOCKED
     with patch.object(adapter, "get_bootstrap", return_value=mock_bootstrap):
         with patch.object(adapter, "_fetch_authenticated", return_value=None):
             state = adapter.get_state(1)
@@ -171,14 +194,15 @@ def test_forecast_scorecard_persistence_and_metrics(tmp_path):
         rec = CalibrationRecord(
             gw=(i % 6) + 1,
             player_id=100 + i,
-            forecast_type="expected_points" if i % 2 == 0 else "goal",
+            forecast_type="expected_points" if i % 2 == 0 else "probability",
             predicted_expected_points=5.0,
-            predicted_distribution={"P50": 5.0},
+            predicted_distribution={"P10": 2.0, "P25": 3.5, "P50": 5.0, "P75": 6.5, "P90": 8.0},
             actual_points=4.0 if i % 2 == 0 else 6.0,
             absolute_error=1.0,
             signed_error=1.0 if i % 2 == 0 else -1.0
         )
         scorecard.add_record(rec)
+
 
     scorecard.save(record_file)
     assert record_file.exists()
@@ -192,7 +216,8 @@ def test_forecast_scorecard_persistence_and_metrics(tmp_path):
     assert metrics["mae"] == 1.0
     assert "by_category" in metrics
     assert "expected_points" in metrics["by_category"]
-    assert "goal" in metrics["by_category"]
+    assert "probability" in metrics["by_category"]
+
 
 
 def test_cli_verify_and_calibrate():
