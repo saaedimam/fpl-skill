@@ -79,7 +79,9 @@ for _name in dir(_legacy):
     if _name not in {"load", "build_and_solve"} and not _name.startswith("__"):
         globals().setdefault(_name, getattr(_legacy, _name))
 
-def build_and_solve(*args,**kwargs): return _legacy.build_and_solve(*args,**kwargs)
+def build_and_solve(*args,**kwargs):
+    _legacy.load = globals()["load"]
+    return _legacy.build_and_solve(*args,**kwargs)
 
 if __name__=="__main__":
     result=build_and_solve(budget=100.0)
