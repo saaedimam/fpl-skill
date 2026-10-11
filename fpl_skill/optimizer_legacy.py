@@ -204,6 +204,19 @@ def build_and_solve(
     obj = pulp.value(prob.objective)
     print(f"Status: {status} Objective: {obj} Time: {elapsed:.1f}s", flush=True)
 
+    model = getattr(prob, "solverModel", None)
+    mip_gap = 0.0
+    dual_bound = float(obj) if obj is not None else 0.0
+    if model is not None and hasattr(model, "getInfo"):
+        try:
+            info = model.getInfo()
+            mip_gap = float(getattr(info, "mip_gap", 0.0))
+            raw_dual = getattr(info, "mip_dual_bound", None)
+            if raw_dual is not None:
+                dual_bound = abs(float(raw_dual))
+        except Exception:
+            pass
+
     squad_ids = [pid for pid in by_id if pulp.value(x[pid]) and pulp.value(x[pid]) > 0.5]
     by_gw_y = {g: [pid for pid in by_id if pulp.value(y[(pid,g)]) and pulp.value(y[(pid,g)]) > 0.5] for g in gws}
     by_gw_c = {g: [pid for pid in by_id if pulp.value(c[(pid,g)]) and pulp.value(c[(pid,g)]) > 0.5][0] for g in gws if any(pulp.value(c[(pid,g)]) and pulp.value(c[(pid,g)]) > 0.5 for pid in by_id)}
@@ -215,6 +228,9 @@ def build_and_solve(
         "data_hash": data_hash, "raw": raw, "players": players, "ep": ep,
         "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None),
         "solver_metadata": solver_meta,
+        "prob": prob,
+        "solver_gap": mip_gap,
+        "dual_bound": dual_bound,
     }
 
 if __name__ == "__main__":
