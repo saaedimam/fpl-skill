@@ -4,7 +4,7 @@ Installs a test-only network guard that:
 - blocks non-loopback TCP connects at the socket layer
 - blocks POST/PUT/PATCH/DELETE aimed at FPL hosts via urllib/http.client
 
-This is defense in depth for developer machines. CI runs the suite inside a
+This monkeypatch is not a security boundary. CI runs the suite inside a
 network namespace with only loopback enabled; that kernel boundary is the
 authoritative "no egress" control. See ``tests/README.md``.
 """

@@ -1,6 +1,6 @@
 ---
 name: fpl
-description: "Advisory Fantasy Premier League skill. Account writes fail closed unless a signed out-of-band approval, a write-permitting FPL_MODE, a fresh verified account read, and sandbox validation all pass. Autonomous mode is not unattended live execution."
+description: "Advisory Fantasy Premier League skill. Account mutations are permanently refused. A signed approval is not authorization to transmit. The executor cannot mint a signature."
 version: 2.1.0-rc1
 status: active
 scope: global
@@ -789,16 +789,11 @@ Live execution knowledge is operational and does not redefine the mathematical m
 The modern React SPA uses `/api/my-team/` for current editable squad state; do not substitute historical `/api/entry/.../picks/` state for current editable state.
 
 ### 36.2 Authoritative write
-Account mutations are forbidden unless every condition below is true. If any one is missing or invalid, raise and send no request:
+Account mutations are permanently refused. `execute_account_mutation` may validate an approval, squad, evidence record, temporal cutoff, and account state, and it may consume a nonce, but none of that is authorization to transmit. It then discards any injected transport and session and raises `ExecutionDenied`. There is no mode, cookie, or approval that turns transmission back on.
 
-1. A signed approval record for this exact action: team id, endpoint, canonical body, nonce, and expiry. The record is created only by a separate interactive confirmation (`python -m fpl_skill.approval_issuer`) that shows the payload and signs it with a private key. The executor verifies that signature with the public key and does not hold the signing key. A hash of the payload is not an approval. Each nonce works once and expires. `FPL_MODE=autonomous` does not skip this record and cannot mint it.
-2. `FPL_MODE` is `approval` or `autonomous`. The default `advisory` never writes. `autonomous` is not unattended or safe live execution.
-3. A fresh authenticated account read inside the write chokepoint returns `VERIFIED_CURRENT`. A caller-supplied state string is not accepted.
-4. The proposed squad passes sandbox validation against authoritative bootstrap data: each element id exists once, and its team, position, and price match that bootstrap, then budget, 15 players in a 2/5/5/3 shape, at most 3 from one club, a legal formation, and both captain and vice-captain in the starting XI.
+The only account-mutation function is `fpl_skill.execution.execute_account_mutation`. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client.
 
-The only account-mutation function is `fpl_skill.execution.execute_account_mutation`. It always refuses before any outbound write. A signed approval, `FPL_MODE=approval`, `FPL_MODE=autonomous`, a cookie file, and an injected transport cannot override that refusal. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client.
-
-`all.python --apply` calls that chokepoint and still transmits nothing. It reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval.
+`all.python --apply` and `--cookies` are deprecated. They call that chokepoint, report that account mutations are permanently disabled, and transmit nothing. The script reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval. `load_cookies()` does not read a cookie file.
 
 ### 36.3 Bench / formation backend constraints
 - Starting XI positions are 1–11.

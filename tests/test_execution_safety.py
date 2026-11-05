@@ -547,13 +547,14 @@ def test_script_transport_posts_only_after_the_gate(monkeypatch, tmp_path):
     assert calls == []
 
 
-def test_all_python_apply_without_approval_fails_closed(monkeypatch, tmp_path):
+def test_all_python_apply_without_approval_fails_closed(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("FPL_TEAM_ID", "YOUR_ENTRY_ID")
     monkeypatch.setenv("FPL_MODE", "approval")
     module = _load_all_python()
     cookies = tmp_path / "cookies.txt"
     _write_fake_cookies(cookies)
     assert module.main(["--apply", "--cookies", str(cookies)]) != 0
+    assert "permanently disabled" in capsys.readouterr().out
 
 
 def test_all_python_apply_in_advisory_mode_fails_closed(monkeypatch, tmp_path):
@@ -753,6 +754,55 @@ def test_write_verbs_exist_only_on_the_chokepoint():
         text = path.read_text(encoding="utf-8")
         assert "import requests" not in text
         assert "import httpx" not in text
+
+
+def test_production_has_no_shell_http_or_non_get_request():
+    """Static audit of production HTTP and subprocess networking.
+
+    urllib GETs in the adapter, direct API, and observation ingest are
+    allowed. subprocess use is limited to openssl verification and the
+    macOS keychain lookup. curl, wget, netcat, and a non-GET Request
+    method are rejected.
+    """
+    roots = list((REPO / "fpl_skill").rglob("*.py")) + [REPO / "all.python"]
+    shell_http = {"curl", "wget", "nc", "ncat", "netcat", "socat"}
+    hits = []
+
+    def strings(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return [node.value]
+        if isinstance(node, (ast.List, ast.Tuple)):
+            found = []
+            for item in node.elts:
+                found.extend(strings(item))
+            return found
+        return []
+
+    for path in roots:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        relative = str(path.relative_to(REPO))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+            if name in {"run", "Popen", "call", "check_call", "check_output"} and node.args:
+                argv = [part.lower() for part in strings(node.args[0])]
+                if shell_http.intersection(argv) or any(part in {"post", "put", "patch", "delete"} for part in argv):
+                    hits.append((relative, node.lineno, "shell-http", argv))
+            if name == "Request":
+                for keyword in node.keywords:
+                    if keyword.arg == "method" and isinstance(keyword.value, ast.Constant):
+                        method = str(keyword.value.value).upper()
+                        if method != "GET":
+                            hits.append((relative, node.lineno, "request-method", method))
+            if name == "urlopen":
+                for keyword in node.keywords:
+                    if keyword.arg == "data" and not (
+                        isinstance(keyword.value, ast.Constant) and keyword.value.value is None
+                    ):
+                        hits.append((relative, node.lineno, "urlopen-data", keyword.arg))
+    assert hits == []
 
 
 def test_patched_transports_see_only_gets_outside_the_chokepoint(monkeypatch):

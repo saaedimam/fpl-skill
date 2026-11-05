@@ -40,7 +40,7 @@ Effects:
   (`fantasy.premierleague.com` and `*.premierleague.com`) raise
   `NetworkGuardError` even if the TCP peer is loopback (Host-header case)
 
-**This monkeypatch is not a complete boundary.** It can be bypassed by:
+**This monkeypatch is not a security boundary.** It can be bypassed by:
 
 - C extensions that call the libc `connect(2)` directly
 - subprocesses / other interpreters
@@ -48,12 +48,19 @@ Effects:
 - code that captured a bound method reference before the patch
 - alternate HTTP stacks not covered by the patches
 
-Prefer the network namespace when you need a hard guarantee. Set
-`FPL_ALLOW_TEST_NETWORK=1` only for intentional live harnesses on a
-developer machine outside the default offline suite; that flag disables
-only the pytest monkeypatch (with a warning), never the CI netns, and is
-**ignored** when `CI` or `GITHUB_ACTIONS` is set. It does not enable
-production writes.
+The kernel namespace in CI is the authoritative isolation control. Do not
+treat the monkeypatch, by itself, as proof that a test cannot egress.
+
+Disabling the monkeypatch on a developer machine requires both:
+
+```bash
+FPL_ALLOW_TEST_NETWORK=1
+FPL_CONFIRM_LIVE_NETWORK=I-understand-this-is-not-a-security-boundary
+```
+
+One of those is not enough. Both are ignored when `CI` or `GITHUB_ACTIONS`
+is set. Neither disables `unshare --net`, and neither enables production
+writes.
 
 Live acceptance tests remain skipped unless `FPL_TEAM_ID` /
 `FPL_LIVE_TEST=1` are set, and must never run against a real account from CI.

@@ -264,6 +264,7 @@ def test_netns_kernel_denies_external_connect_when_flagged():
 
 def test_allow_test_network_ignored_under_ci(monkeypatch):
     monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.setenv("FPL_CONFIRM_LIVE_NETWORK", "I-understand-this-is-not-a-security-boundary")
     monkeypatch.setenv("CI", "true")
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     with pytest.warns(RuntimeWarning, match="ignored because CI/GITHUB_ACTIONS"):
@@ -272,22 +273,34 @@ def test_allow_test_network_ignored_under_ci(monkeypatch):
 
 def test_allow_test_network_ignored_under_github_actions(monkeypatch):
     monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.setenv("FPL_CONFIRM_LIVE_NETWORK", "I-understand-this-is-not-a-security-boundary")
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     with pytest.warns(RuntimeWarning, match="ignored because CI/GITHUB_ACTIONS"):
         assert network_guard_enabled() is True
 
 
-def test_allow_test_network_honored_only_locally(monkeypatch):
+def test_allow_test_network_without_confirmation_keeps_guard_on(monkeypatch):
     monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.delenv("FPL_CONFIRM_LIVE_NETWORK", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    with pytest.warns(RuntimeWarning, match="disables the pytest network monkeypatch"):
+    with pytest.warns(RuntimeWarning, match="not a security boundary"):
+        assert network_guard_enabled() is True
+
+
+def test_allow_test_network_honored_only_with_second_confirmation(monkeypatch):
+    monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.setenv("FPL_CONFIRM_LIVE_NETWORK", "I-understand-this-is-not-a-security-boundary")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    with pytest.warns(RuntimeWarning, match="not a security boundary"):
         assert network_guard_enabled() is False
 
 
 def test_allow_test_network_unset_keeps_guard_on(monkeypatch):
     monkeypatch.delenv("FPL_ALLOW_TEST_NETWORK", raising=False)
+    monkeypatch.delenv("FPL_CONFIRM_LIVE_NETWORK", raising=False)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     assert network_guard_enabled() is True
