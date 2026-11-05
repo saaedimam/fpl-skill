@@ -49,8 +49,11 @@ Effects:
 - alternate HTTP stacks not covered by the patches
 
 Prefer the network namespace when you need a hard guarantee. Set
-`FPL_ALLOW_TEST_NETWORK=1` only for intentional live harnesses outside the
-default offline suite; that flag does not enable production writes.
+`FPL_ALLOW_TEST_NETWORK=1` only for intentional live harnesses on a
+developer machine outside the default offline suite; that flag disables
+only the pytest monkeypatch (with a warning), never the CI netns, and is
+**ignored** when `CI` or `GITHUB_ACTIONS` is set. It does not enable
+production writes.
 
 Live acceptance tests remain skipped unless `FPL_TEAM_ID` /
 `FPL_LIVE_TEST=1` are set, and must never run against a real account from CI.

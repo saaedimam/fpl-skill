@@ -14,7 +14,10 @@ Two layers exist:
    them. Prefer the namespace when proving "no outbound write".
 
 Disable the monkeypatch layer for intentional live harnesses with
-``FPL_ALLOW_TEST_NETWORK=1``. That variable does not reopen production writes.
+``FPL_ALLOW_TEST_NETWORK=1`` *only outside CI*. When ``CI`` or
+``GITHUB_ACTIONS`` is truthy the opt-out is ignored and the guard stays on.
+That variable does not reopen production writes and never disables the
+kernel network-namespace boundary.
 """
 from __future__ import annotations
 
@@ -36,8 +39,37 @@ class NetworkGuardError(RuntimeError):
     """Raised when a test attempts forbidden network activity."""
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def network_guard_enabled() -> bool:
-    return os.environ.get("FPL_ALLOW_TEST_NETWORK", "").strip() != "1"
+    """Return True when the pytest monkeypatch guard should be installed.
+
+    ``FPL_ALLOW_TEST_NETWORK=1`` opts out locally (with a loud warning).
+    Under CI / GitHub Actions the opt-out is ignored so the guard stays on.
+    """
+    import warnings
+
+    allow = os.environ.get("FPL_ALLOW_TEST_NETWORK", "").strip() == "1"
+    if not allow:
+        return True
+    if _env_truthy("CI") or _env_truthy("GITHUB_ACTIONS"):
+        warnings.warn(
+            "FPL_ALLOW_TEST_NETWORK=1 ignored because CI/GITHUB_ACTIONS is set; "
+            "pytest network guard stays enabled",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return True
+    warnings.warn(
+        "FPL_ALLOW_TEST_NETWORK=1 disables the pytest network monkeypatch "
+        "(local only). Kernel netns isolation is unaffected and production "
+        "writes stay refused.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    return False
 
 
 def _hostname(value: Any) -> str:

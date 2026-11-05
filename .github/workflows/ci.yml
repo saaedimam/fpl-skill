@@ -58,7 +58,7 @@ jobs:
       - name: Run test suite (network namespace, loopback only)
         run: |
           # tests/run_validation.py is a manual live-data harness and is not collected here.
-          # FPL_TEST_NETNS=1 enables the netns-only interface assertion in tests.
+          # FPL_TEST_NETNS=1 enables the libc connect(2)/ENETUNREACH netns proof in tests.
           PYTHON_BIN="$(command -v python)"
           sudo unshare --net -- env \
             PATH="$PATH" \

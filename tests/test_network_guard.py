@@ -29,6 +29,7 @@ from tests.network_isolation import (
     assert_connect_allowed,
     is_fpl_host,
     is_loopback_host,
+    network_guard_enabled,
 )
 
 
@@ -260,3 +261,34 @@ def test_netns_kernel_denies_external_connect_when_flagged():
         libc.close(fd)
     assert rc != 0
     assert err == errno.ENETUNREACH
+
+def test_allow_test_network_ignored_under_ci(monkeypatch):
+    monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    with pytest.warns(RuntimeWarning, match="ignored because CI/GITHUB_ACTIONS"):
+        assert network_guard_enabled() is True
+
+
+def test_allow_test_network_ignored_under_github_actions(monkeypatch):
+    monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    with pytest.warns(RuntimeWarning, match="ignored because CI/GITHUB_ACTIONS"):
+        assert network_guard_enabled() is True
+
+
+def test_allow_test_network_honored_only_locally(monkeypatch):
+    monkeypatch.setenv("FPL_ALLOW_TEST_NETWORK", "1")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    with pytest.warns(RuntimeWarning, match="disables the pytest network monkeypatch"):
+        assert network_guard_enabled() is False
+
+
+def test_allow_test_network_unset_keeps_guard_on(monkeypatch):
+    monkeypatch.delenv("FPL_ALLOW_TEST_NETWORK", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    assert network_guard_enabled() is True
+
