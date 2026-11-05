@@ -31,6 +31,6 @@ The early cases use sample data. From `test_direct_api_caching` onward the scrip
 ## Freeze Gate
 This suite becomes a valid basis for FROZEN status only when:
 1. Every test above is actually executed (not asserted) and its `run_validation.py` result is `PASS`.
-2. `MANIFEST.json` file hashes match the actual file contents and the release hash is reproducible across two independent runs.
+2. `MANIFEST.v2.json` (the active release registry) file hashes match the actual file contents and the release hash is reproducible across two independent runs.
 3. A human operator reviews the DRAFT release and explicitly signs off — this suite passing does not itself flip the release to FROZEN.
 4. Live-API verification of the underlying v1.0.0 Data Adapter is separately evidenced (out of scope for this suite; not claimed here).

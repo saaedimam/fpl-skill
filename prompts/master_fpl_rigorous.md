@@ -113,6 +113,6 @@ Diagnostic feature (H2H, form bucket, etc.) → attach as evidence layer (`fpl_h
 
 ## IMPLEMENTATION POINTERS (this repo)
 - Production objective: `fpl_skill.api.calculate_player_gw_ep` + `fixture_map` via `fpl_skill.api.build_fixture_map` (bootstrap-static fixtures, all 380).
-- Squad optimizer: `fpl_skill.optimizer.build_and_solve` encodes exact MILP (squad + per-GW XI/formation/captain + budget/club + GW3 locks). CBC `Optimal` -> global. `optimize_wildcard_squad` in `fpl_skill/api.py` uses branch-and-bound over full positional pools (no `[:10]/[:30]/[:40]` truncation).
+- Squad optimizer: `fpl_skill.optimizer.build_and_solve` encodes exact MILP (squad + per-GW XI/formation/captain + budget/club + GW3 locks). CBC `Optimal` -> global. `optimize_wildcard_squad` in `fpl_skill/api.py` uses branch-and-bound over full positional pools (no `[:10]/[:30]/[:40]` truncation). Legacy B&B output is never a certificate: never report it as globally optimal or `GLOBAL_OPTIMUM_CERTIFIED TRUE`. Only an exact-MILP CBC `Optimal` result that passes the constraint re-check in `fpl_skill/optimality.py` may be reported as `OPTIMAL`.
 - Bench invariant: recalculate `gw_ep` via `calculate_player_gw_ep(gw, fm)`, not stale `p['gw_ep']` (Gomez 359 Liverpool contaminant precedent).
 - Contracts: `contracts/GLOBAL15_CONTRACT.md`, `certification/NOTICE.md`.

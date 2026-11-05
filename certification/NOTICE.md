@@ -14,7 +14,7 @@ Locked problem (4 fixed: Calafiori/B.Fernandes/João Pedro/Haaland) optima:
   - GW3-8 exact: 547.62 (same core, Pecsi/Jaros tie on GKP filler at 0.0 — tie, same GW power).
   - Bench gw_ep: recalculated via `calculate_player_gw_ep`, not stale `p['gw_ep']` (Gomez 359 Liverpool contaminant fixed). GKP last.
 
-Legacy `optimize_wildcard_squad` Branch-and-Bound with `[:10]/[:30]/[:40]` truncation is a heuristic best-effort search (admissible-bound pruning only over truncated space) — does NOT guarantee global optimality. The exact MILP is the gate.
+Legacy `optimize_wildcard_squad` (`fpl_skill/api_legacy.py`) Branch-and-Bound no longer applies the old `[:10]/[:30]/[:40]` truncation; it searches the full filtered positional pools. It still does not produce an optimality certificate. Per `fpl_skill/optimality.py`, a result is `OPTIMAL` only when the exact MILP returns CBC status `Optimal` with an objective value and the returned squad passes the constraint re-check; everything else, including any legacy B&B output, is `NOT_CERTIFIED`. The exact MILP is the gate.
 
 Do not surface `GLOBAL_OPTIMUM_CERTIFIED = YES` for any result not produced by the exact MILP with the above objective.
 
