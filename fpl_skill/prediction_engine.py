@@ -2,6 +2,10 @@ import json, os
 from typing import Optional, List, Dict, Any, Sequence
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.api import calculate_player_gw_ep, build_fixture_map, select_best_legal_xi
+from fpl_skill.current_data import (
+    CurrentDataError, assert_future_gameweeks, assert_gameweeks_have_fixtures,
+    assert_projections_valid, blank_teams,
+)
 from fpl_skill.evidence_policy import evaluate_evidence
 from fpl_skill.historical.exceptions import SnapshotIntegrityError, TemporalLeakageError
 from fpl_skill.historical.firewall import admit_snapshots
@@ -11,8 +15,9 @@ class PredictionEngine:
         self.adapter = FPLAccountAdapter(team_id)
         self.bootstrap = self.adapter.get_bootstrap()
         self.fixtures = self.adapter.get_fixtures()
-        # Ensure fixtures are passed to build_fixture_map
-        self.fixture_map = build_fixture_map(self.fixtures)
+        self.events = self.bootstrap.get("events")
+        # Current-data gate: live /api/fixtures/ schema, keyed by team id, name and short_name.
+        self.fixture_map = build_fixture_map(self.fixtures, teams=self.bootstrap.get("teams"))
         self.elements = {p['id']: p for p in self.bootstrap['elements']}
 
     def run(
@@ -53,6 +58,19 @@ class PredictionEngine:
                 p["player_id"] = p.get("id", 0)
             normalized_squad.append(p)
 
+        # Current-data gate (fail loudly, never silently plan on zeros).
+        events = getattr(self, "events", None) or (getattr(self, "bootstrap", None) or {}).get("events")
+        if not events:
+            raise CurrentDataError("Bootstrap events missing; cannot confirm target gameweek is upcoming.")
+        assert_future_gameweeks([target_gw], events)
+        assert_gameweeks_have_fixtures(self.fixture_map, [target_gw])
+        blank = set(blank_teams(self.fixture_map, target_gw, {p.get("team") for p in normalized_squad}))
+        blank_players = [p["player_id"] for p in normalized_squad if p.get("team") in blank]
+
+        assert_projections_valid(
+            {p["player_id"]: calculate_player_gw_ep(p, target_gw, self.fixture_map) for p in normalized_squad},
+            context=f"GW{target_gw} prediction",
+        )
         xi_res = select_best_legal_xi(normalized_squad, target_gw, self.fixture_map)
         xi_players = [
             {"id": p.get("player_id", p.get("id")), "name": p.get("web_name"), "ep": p.get("gw_ep", 0.0), "position": p.get("position")}
@@ -73,7 +91,9 @@ class PredictionEngine:
                 {"id": p.get("player_id", p.get("id")), "name": p.get("web_name"), "ep": p.get("gw_ep", 0.0), "position": p.get("position")}
                 for p in xi_res.get("bench", [])
             ],
-            "total_ep": xi_res.get("total_ep", 0.0)
+            "total_ep": xi_res.get("total_ep", 0.0),
+            "target_gw": target_gw,
+            "blank_gameweek_players": blank_players,
         }
         if "evidence" in guard:
             result["evidence"] = guard["evidence"]
@@ -106,4 +126,5 @@ def _guard_prediction_inputs(
 
 if __name__ == "__main__":
     engine = PredictionEngine(os.environ.get("FPL_TEAM_ID"))
-    print(json.dumps(engine.run(2), indent=2))
+    from fpl_skill.current_data import next_gameweek
+    print(json.dumps(engine.run(next_gameweek(engine.events)), indent=2))

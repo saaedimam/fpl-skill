@@ -3,6 +3,7 @@ import os
 from typing import Dict, Any, List
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.prediction_engine import PredictionEngine
+from fpl_skill.current_data import assert_future_gameweeks, CurrentDataError
 from fpl_skill.api import calculate_player_gw_ep, find_best_one_ft, evaluate_squad_multi_gw
 
 # FIX-07: principled transfer threshold accounting for option value of rolling a FT
@@ -40,6 +41,12 @@ class TransferIntelligence:
             target_gw: target gameweek
             use_hit: if True, threshold includes hit cost (gain > HIT_COST + option_value)
         """
+        events = (self.bootstrap or {}).get("events")
+        if not events:
+            raise CurrentDataError("Bootstrap events missing; cannot confirm target gameweek is upcoming.")
+        horizon = list(range(target_gw, min(38, target_gw + 3) + 1))
+        # Release gate: refuse planning windows containing already-played gameweeks.
+        assert_future_gameweeks(horizon, events)
         state = self.adapter.get_state(target_gw)
 
         if state['optimization_state'] != "OPTIMIZATION_READY":
@@ -51,15 +58,16 @@ class TransferIntelligence:
         squad = [self.elements[pid] for pid in owned_ids if pid in self.elements]
 
         all_players = list(self.elements.values())
-        best = find_best_one_ft(squad, all_players, bank=bank, fixture_map=self.engine.fixture_map)
+        best = find_best_one_ft(squad, all_players, bank=bank, fixture_map=self.engine.fixture_map,
+                                gameweeks=horizon, events=events)
 
         if not best.get("player_out") or not best.get("player_in"):
             return {"status": "READY", "suggestions": [], "recommendation": "HOLD"}
 
         # Compute multi-GW baseline expected points for the current squad
-        baseline_eval = evaluate_squad_multi_gw(squad, [3, 4, 5, 6], self.engine.fixture_map)
+        baseline_eval = evaluate_squad_multi_gw(squad, horizon, self.engine.fixture_map)
         baseline_ep = round(baseline_eval["total_ep"], 2)
-        total_ep = round(best["gw3_6_ep"], 2)
+        total_ep = round(best["horizon_ep"], 2)
         ep_gain = round(total_ep - baseline_ep, 2)
 
         # Threshold: must exceed rolling option value (free FT) or hit cost + option value (hit)
@@ -68,6 +76,7 @@ class TransferIntelligence:
 
         return {
             "status": "READY",
+            "horizon": horizon,
             "recommendation": recommendation,
             "threshold_used": threshold,
             "baseline_ep": baseline_ep,
@@ -76,14 +85,15 @@ class TransferIntelligence:
             "suggestions": [{
                 "SELL": best["player_out"]["web_name"],
                 "BUY": best["player_in"]["web_name"],
-                "TOTAL_EP_GW3_6": total_ep,
-                "BASELINE_EP_GW3_6": baseline_ep,
-                "EP_GAIN_GW3_6": ep_gain,
+                "HORIZON": horizon,
+                "TOTAL_EP": total_ep,
+                "BASELINE_EP": baseline_ep,
+                "EP_GAIN": ep_gain,
                 "THRESHOLD": threshold,
                 "move_str": best["move_str"],
             }] if recommendation == "TRANSFER" else [],
             "reasoning": (
-                f"Best 1-FT gain over GW3-6: {ep_gain:.2f} pts (Total: {total_ep:.2f} vs Baseline: {baseline_ep:.2f}). "
+                f"Best 1-FT gain over GW{horizon[0]}-{horizon[-1]}: {ep_gain:.2f} pts (Total: {total_ep:.2f} vs Baseline: {baseline_ep:.2f}). "
                 f"Threshold ({'hit' if use_hit else 'free FT'}): {threshold:.1f} pts. "
                 f"{'Exceeds' if recommendation == 'TRANSFER' else 'Does not exceed'} threshold."
             )
@@ -91,4 +101,5 @@ class TransferIntelligence:
 
 if __name__ == "__main__":
     ti = TransferIntelligence(os.environ.get("FPL_TEAM_ID", "1"))
-    print(json.dumps(ti.evaluate_transfers(2), indent=2))
+    from fpl_skill.current_data import next_gameweek
+    print(json.dumps(ti.evaluate_transfers(next_gameweek(ti.bootstrap)), indent=2))

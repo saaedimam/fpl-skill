@@ -6,6 +6,7 @@ from . import optimizer_legacy as _legacy
 from .api import get_fpl_data, normalize_dataset, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
 from .probabilistic_ep1 import DistributionModelInputs, ProbabilisticEPEngine, normalize_player_state, normalize_position
 from .rate_normalization import normalize_player_rates, gw_expected_contributions
+from .current_data import CurrentDataError, assert_future_gameweeks, assert_gameweeks_have_fixtures, assert_projections_valid, planning_horizon
 
 FORMATIONS=list(VALID_FORMATIONS)
 
@@ -30,13 +31,35 @@ def _gw_distribution(player,gw,fm,engine):
     ds=[_distribution_for_fixture(player,gw,f,engine,i) for i,f in enumerate(fixtures)]
     return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
 
-def load(horizon:Tuple[int,int]=(3,6)):
-    raw=get_fpl_data(); norm=normalize_dataset(raw.get("records",[])); players=norm["players"]; fm=norm["fixture_map"]; gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
+def _live_events():
+    from .direct_api import fetch_url, BOOTSTRAP_URL
+    boot=fetch_url(BOOTSTRAP_URL)
+    if not boot or not boot.get("events"):
+        raise CurrentDataError("Could not load live bootstrap events to resolve/validate the planning horizon.")
+    return boot["events"]
+
+def load(horizon=None, allow_past: bool=False):
+    """Load players/projections for a planning horizon.
+
+    Current-data gate: ``horizon=None`` derives the window from live bootstrap
+    events (is_next/is_current). Already-played gameweeks are refused unless
+    ``allow_past=True`` (explicit historical/backtest use). All-zero or missing
+    projections raise ``CurrentDataError``.
+    """
+    raw=get_fpl_data(); norm=normalize_dataset(raw.get("records",[])); players=norm["players"]; fm=norm["fixture_map"]
+    if horizon is None:
+        gws=planning_horizon(_live_events())
+    else:
+        gws=list(range(horizon[0],horizon[1]+1)) if isinstance(horizon,tuple) else list(horizon)
+    if not allow_past:
+        assert_future_gameweeks(gws,_live_events())
+    assert_gameweeks_have_fixtures(fm,gws)
     engine=ProbabilisticEPEngine(); ep={}
     for p in players:
         pid=int(p["player_id"]); p["cost_int"]=p.get("now_cost") or 0; ep[pid]={}; p["_distribution_diagnostics"]={}
         for gw in gws:
             diag=_gw_distribution(p,gw,fm,engine); ep[pid][gw]=diag["mean"]; p["_distribution_diagnostics"][gw]=diag
+    assert_projections_valid({pid:sum(v.values()) for pid,v in ep.items()},context=f"optimizer horizon GW{gws}")
     data_repr=[{"id":p["player_id"],"name":p.get("web_name"),"team":p.get("team"),"pos":p.get("position"),"cost":p.get("cost_int"),"ep_mean":round(sum(ep[p["player_id"]][g] for g in gws),6)} for p in sorted(players,key=lambda x:x["player_id"])]
     data_hash=hashlib.sha256(json.dumps(data_repr,sort_keys=True,separators=(",",":")).encode()).hexdigest()[:16]
     return players,fm,ep,data_hash,raw,gws
@@ -47,7 +70,16 @@ for _name in dir(_legacy):
     if _name not in {"load", "build_and_solve"} and not _name.startswith("__"):
         globals().setdefault(_name, getattr(_legacy, _name))
 
-def build_and_solve(*args,**kwargs): return _legacy.build_and_solve(*args,**kwargs)
+def build_and_solve(*args,allow_past: bool=False,**kwargs):
+    """Solve over the live horizon by default; ``allow_past`` only for explicit historical runs."""
+    kwargs.setdefault("horizon",None)
+    current=_legacy.load
+    if current is load:  # do not clobber an injected loader (tests/offline fixtures)
+        _legacy.load=lambda horizon=None: load(horizon=horizon,allow_past=allow_past)
+    try:
+        return _legacy.build_and_solve(*args,**kwargs)
+    finally:
+        _legacy.load=current
 
 if __name__=="__main__":
     result=build_and_solve(budget=100.0)

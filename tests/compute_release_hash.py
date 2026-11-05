@@ -13,6 +13,7 @@ REQUIRED_SAFETY_PATHS = (
     "fpl_skill/approval_gate.py",
     "fpl_skill/approval_issuer.py",
     "fpl_skill/approval_verify.py",
+    "fpl_skill/current_data.py",
     "fpl_skill/evidence_policy.py",
     "fpl_skill/execution.py",
     "fpl_skill/execution_sandbox.py",
@@ -21,6 +22,8 @@ REQUIRED_SAFETY_PATHS = (
     "tests/test_certificate_contract.py",
     "tests/test_compute_release_hash.py",
     "tests/test_execution_safety.py",
+    "tests/test_release_gates.py",
+    "tests/data/live_fpl_sample.json",
     "tests/compute_release_hash.py",
 )
 

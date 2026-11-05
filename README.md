@@ -30,6 +30,7 @@ The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-
 - [Account Authentication & Verified-Current Lineage](#account-authentication--verified-current-lineage)
 - [Source Authority Hierarchy](#source-authority-hierarchy)
 - [Module Catalog](#module-catalog)
+- [Release Gates](#release-gates)
 - [CLI Reference](#cli-reference)
 - [Quickstart & Installation](#quickstart--installation)
 - [Test Suite & Verification Gate](#test-suite--verification-gate)
@@ -347,9 +348,41 @@ Authenticated reads use an FPL session cookie that the account adapter reads fro
 
 ---
 
+## Release Gates
+
+**Current-data gate** (`fpl_skill/current_data.py`, raises `CurrentDataError`):
+- Fixtures are parsed by one normalizer that accepts the live FPL `/api/fixtures/` schema (`event`, `team_h`, `team_a`, `team_h_difficulty`, `team_a_difficulty`, `kickoff_time`, `finished`) and the legacy `direct_api` record schema. Map keys are the team id plus, when bootstrap `teams` are supplied, the team name and short name. A missing, empty, non-list or unrecognized payload raises. Fixtures with `event: null` are skipped.
+- Planning needs a gameweek that has fixtures. A gameweek with no fixtures at all raises. A team with no fixture in a gameweek that has fixtures is a blank: `blank_teams()` reports it and `PredictionEngine.run` returns it in `blank_gameweek_players`. Blanks are never silently zero.
+- Projections that are missing, non-numeric, NaN/inf or all zero raise in `PredictionEngine.run`, `find_best_one_ft` and `optimizer.load`.
+- The planning horizon comes from the live bootstrap `events` (`is_next`, then an unfinished `is_current`). Planning or transfer windows that contain a finished or earlier gameweek raise.
+  - `TransferIntelligence`, `PredictionEngine`, `find_best_one_ft(events=...)` and `optimizer.load()` / `build_and_solve()` enforce this.
+  - Only explicit historical callers may pass past gameweeks: backtests use `gameweeks=`, certification uses `gameweeks=[3,4,5,6]`, and offline tests use `allow_past=True`.
+  - `find_best_one_ft` with neither `events` nor `gameweeks` raises. There is no hardcoded GW3-6 default.
+- User-facing commands (`fpl predict`, `fpl backtest-*`) print `CURRENT-DATA GATE FAILED: ...`, exit with code 3 and produce no recommendation.
+
+**Regression gate** (`tests/test_release_gates.py`, run by CI pytest and never skipped):
+- Live-schema parsing of the committed synthetic sample `tests/data/live_fpl_sample.json` is checked against the source fixtures.
+- Missing, empty or unrecognized fixtures raise.
+- Blank gameweeks are reported explicitly.
+- Players with fixtures get non-zero projections.
+- All-zero or NaN projections raise.
+- Transfer recommendations or predictions for played gameweeks (e.g. GW3-6, GW9) are rejected.
+- The horizon is derived from live events.
+- The CLI exits 3 on a gate failure.
+
+`current_data.py`, the gate tests and the sample are `REQUIRED_SAFETY_PATHS` in `tests/compute_release_hash.py`, so a release whose manifest drops them fails integrity verification.
+
 ## CLI Reference
 
 The CLI is packaged and installed as `fpl` (or executable via `python -m fpl_skill.cli`).
+
+### Read-only Prediction (current-data gated)
+
+```bash
+fpl predict                    # live next GW, squad from account state
+fpl predict --gw 10 --squad-ids 1,2,...   # explicit 15 element ids, no account state
+```
+Exit 3 = current-data gate failed, 2 = blocked by account state.
 
 ### Account Verification
 ```bash
