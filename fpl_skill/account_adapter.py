@@ -3,6 +3,11 @@ from typing import Dict, Any, List, Optional
 from urllib.error import HTTPError
 
 class FPLAccountAdapter:
+    """Public and authenticated FPL reads.
+
+    Authenticated calls are GET only. A session cookie is a request header,
+    not approval to write, and it is not copied into return values or errors.
+    """
     def __init__(self, team_id: str):
         self.team_id = str(team_id) if team_id is not None else ""
         self.base_url = "https://fantasy.premierleague.com/api"
@@ -23,14 +28,19 @@ class FPLAccountAdapter:
         return ""
 
     def _fetch_authenticated(self, endpoint: str) -> Optional[Dict[str, Any]]:
+        """GET one account endpoint. Never sends a body or a write method.
+
+        The cookie stays on the request. Failures return None and do not
+        include the cookie in a raised message.
+        """
         cookie = self._get_session_cookie()
+        req = urllib.request.Request(f"{self.base_url}{endpoint}", method="GET")
+        if cookie:
+            req.add_header("Cookie", cookie)
+        req.add_header("User-Agent", "Mozilla/5.0")
         try:
-            req = urllib.request.Request(f"{self.base_url}{endpoint}")
-            if cookie:
-                req.add_header('Cookie', cookie)
-            req.add_header('User-Agent', 'Mozilla/5.0')
             with urllib.request.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read().decode('utf-8'))
+                return json.loads(resp.read().decode("utf-8"))
         except Exception:
             return None
 

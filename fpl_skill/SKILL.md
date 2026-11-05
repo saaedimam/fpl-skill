@@ -791,9 +791,12 @@ Confirm the current Gameweek and deadline from the authoritative event API befor
 ### 36.6 Known limitations
 This skill does not do full live-gameweek squad optimization, and it does not provide safe autonomous live execution. `FPL_MODE=autonomous` still cannot write unless a separate interactive step has signed that exact change; the executor cannot create that signature.
 
-The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal` and the returned squad passes a constraint re-check. The legacy branch-and-bound wildcard search does not receive that certificate.
+The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal`, the objective is finite and matches an independent evaluation of `sum_g (sum_p ep[p,g] * y[p,g] + sum_p ep[p,g] * c[p,g])`, and the certificate names every constraint in the reduced wildcard model. A feasible squad with an objective value is not enough. `full_rule_optimal` stays false. The legacy branch-and-bound wildcard search does not receive that certificate.
 
 `tests/run_validation.py` is a manual harness. Part of it reads a local FPL cache or the live public API. Pytest and CI do not run it.
+
+### 36.7 Authenticated reads
+`FPLAccountAdapter` may attach `FPL_SESSION_COOKIE` to `GET /api/my-team/{team_id}/` and published picks. That request has no body and is not a write. The cookie is not approval, is not copied into the returned account state, and is not included in errors. Public bootstrap and entry reads do not send the cookie. A cookie file or keychain item cannot bypass `fpl_skill.execution`.
 
 ## 37. Release Integrity Contract
 
@@ -812,7 +815,7 @@ The canonical release hash serialization is:
 
 `SHA256("".join(path + ":" + sha256(file) + "\\n" for path in sorted(canonical_paths)))`
 
-The manifest registry and the verification script MUST agree exactly on the canonical path set and hashes.
+The manifest registry and the verification script MUST agree exactly on the canonical path set and hashes. The registry includes the account-write chokepoint, approval verifier, sandbox, evidence policy, optimality certificate, account adapter, and their regression tests. CI recomputes the file hashes and release hash from the checkout and fails if either manifest omits that set.
 
 ## 38. Backward Compatibility
 

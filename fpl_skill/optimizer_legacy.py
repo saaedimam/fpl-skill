@@ -12,7 +12,7 @@ from typing import Optional, List, Tuple, Dict, Any
 from fpl_skill.api import get_fpl_data, normalize_dataset, calculate_player_gw_ep, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
 import pulp
 
-from fpl_skill.optimality import certificate_from_solve
+from fpl_skill.optimality import certificate_from_solve, wildcard_model
 
 FORMATIONS = list(VALID_FORMATIONS)  # All legal formations
 
@@ -176,6 +176,13 @@ def build_and_solve(
     by_gw_z = {g: [k for k in K if pulp.value(z[(k,g)]) and pulp.value(z[(k,g)]) > 0.5][0] for g in gws if any(pulp.value(z[(k,g)]) and pulp.value(z[(k,g)]) > 0.5 for k in K)}
 
     squad_players = [by_id[pid] for pid in squad_ids]
+    recomputed = 0.0
+    for gameweek, xi_ids in by_gw_y.items():
+        for pid in xi_ids:
+            recomputed += float(ep[pid][gameweek])
+        captain_id = by_gw_c.get(gameweek)
+        if captain_id is not None:
+            recomputed += float(ep[captain_id][gameweek])
     certificate = certificate_from_solve(
         solver_status=status,
         objective_value=obj,
@@ -183,6 +190,7 @@ def build_and_solve(
         lineups=by_gw_y,
         captains=by_gw_c,
         budget=budget,
+        model=wildcard_model(recomputed),
     )
     return {
         "status": status, "objective": obj, "elapsed": elapsed,

@@ -2,15 +2,26 @@ from pathlib import Path
 import json
 
 from tests.compute_release_hash import (
+    REQUIRED_SAFETY_PATHS,
     collect_canonical_files,
     compute_release_hash,
+    verify_manifest_completeness,
     verify_manifest_hashes,
     verify_manifest_release_hash,
+    verify_release_integrity,
     verify_reproducibility,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_release_registry_covers_safety_files():
+    files = collect_canonical_files()
+    missing = [path for path in REQUIRED_SAFETY_PATHS if path not in files]
+    assert missing == []
+    assert verify_manifest_completeness() is True
+    assert verify_release_integrity() is True
 
 
 def test_collect_canonical_files():

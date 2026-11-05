@@ -7,6 +7,23 @@ from pathlib import Path
 
 MANIFEST_PATH = Path(__file__).resolve().parent.parent / "MANIFEST.v2.json"
 
+REQUIRED_SAFETY_PATHS = (
+    "all.python",
+    "fpl_skill/account_adapter.py",
+    "fpl_skill/approval_gate.py",
+    "fpl_skill/approval_issuer.py",
+    "fpl_skill/approval_verify.py",
+    "fpl_skill/evidence_policy.py",
+    "fpl_skill/execution.py",
+    "fpl_skill/execution_sandbox.py",
+    "fpl_skill/optimality.py",
+    "tests/test_authenticated_get.py",
+    "tests/test_certificate_contract.py",
+    "tests/test_compute_release_hash.py",
+    "tests/test_execution_safety.py",
+    "tests/compute_release_hash.py",
+)
+
 
 def _repo_root() -> Path:
     return MANIFEST_PATH.parent
@@ -89,9 +106,38 @@ def verify_manifest_release_hash(computed_hash):
     return True
 
 
+def verify_manifest_completeness(manifest=None):
+    """Fail unless both registries cover the safety layer and match each other."""
+    root = _repo_root()
+    if manifest is None:
+        manifest = _load_manifest()
+    canonical = manifest.get("canonical_files", [])
+    missing = [path for path in REQUIRED_SAFETY_PATHS if path not in canonical]
+    if missing:
+        raise AssertionError(f"Release registry omits safety files: {missing}")
+    if len(canonical) != len(set(canonical)):
+        raise AssertionError("Release registry lists a canonical path more than once")
+    packaged_path = root / "fpl_skill" / "MANIFEST.v2.json"
+    packaged = json.loads(packaged_path.read_text(encoding="utf-8"))
+    if packaged != manifest:
+        raise AssertionError("fpl_skill/MANIFEST.v2.json does not match MANIFEST.v2.json")
+    return True
+
+
+def verify_release_integrity():
+    """Check coverage, file hashes, and the derived release hash. Do not write."""
+    manifest = _load_manifest()
+    verify_manifest_completeness(manifest)
+    files = collect_canonical_files()
+    verify_manifest_hashes(files)
+    verify_manifest_release_hash(compute_release_hash(files))
+    return True
+
+
 def main():
     print("Computing release hash (run 1)...")
     files = collect_canonical_files()
+    verify_manifest_completeness()
     verify_manifest_hashes(files)
     hash1 = compute_release_hash(files)
     verify_manifest_release_hash(hash1)
