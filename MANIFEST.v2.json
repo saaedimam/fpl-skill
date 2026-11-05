@@ -142,9 +142,9 @@
     "fpl_skill/optimizer.py": "a63495af1a200d7898d7d3b1a611ba7175e28f28c3b7e2621a4d34d5ee0b91d3",
     "fpl_skill/optimizer_legacy.py": "fee380e235b4c2e74b5359d880cf9d69f567464937adb589069c968cd8d138fa",
     "fpl_skill/prediction_engine.py": "8aaf544b6ff6be5b27618229c3de1c58aeeac7722b71f8b387ffcb4adb302c40",
-    "fpl_skill/probabilistic_ep1.py": "0f7bf241a800e55d44a75be8d471046416c067eb51f94928710892e084733b4c",
+    "fpl_skill/probabilistic_ep1.py": "5f3c826271add52fba13a4d4773eaf0f2f73dbccba4aa2d33a7c7e314e2fe092",
     "fpl_skill/rank_aware_objective1.py": "758ff472e5802c2b2dad0d542e3566636bfb3a258f45565dca7b0d237ad1a648",
-    "fpl_skill/rate_normalization.py": "a7af327878d4105a1fc946d941b5bf84f9e3dba730d4f16d839c6d368112b03f",
+    "fpl_skill/rate_normalization.py": "140519223880a6469b2fe1a31647513c35de829b15ee4e39399fe816111b3d89",
     "fpl_skill/transfer_intelligence.py": "7a95a7223db8aa55857125304c3328c6eec63e45660f4662569e848f8225845c",
     "fpl_skill/watch.py": "0cf2b9ad6da2f34f3bd981028bcf38c47565c307feaa4e180256d2c99aac0ef6",
     "prompts/master_fpl_rigorous.md": "b9d21edd4e5239a2564d0e7c2d2837f37c84af90df5f58602b5c43b92471b89e",
@@ -158,7 +158,7 @@
     "tests/test_historical_data_layer.py": "75cbe3d20e4afe334a975fdbbe5d0ec54201c8295d378f9fd501a162e0a354e4",
     "tests/test_manifest_completeness.py": "0c35b07b301bcd61ba23a48e9729f3b0684f9d7bfe2b134495b1b33b19465f2e",
     "tests/test_observation.py": "6fa1304b932fa86065a06154407e1abc40c8183785b035cba799dc2d570a992c",
-    "tests/test_probabilistic_ep1_p023.py": "8e3f7fb063409c9a562de94747a775791aa8a5962b75eb3c2d87ad531434cfc8",
+    "tests/test_probabilistic_ep1_p023.py": "9575ffa19d0552f04a0ed0fc10be9b8fef3bd028d183f745bbb85cf08e43a80d",
     "tests/test_rank_aware_objective1.py": "4e9f4931f865978c0fee614ee03e3e66c97b040e9c00b1a9513bc2a0ae8e25ee",
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3",
@@ -171,8 +171,8 @@
     "tests/data/live_fpl_sample.json": "54afad74615f7bd251b12c67ba25533305884e15274cc00ee048899a963b404e",
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c"
   },
-  "release_hash": "94a3d5b31f883300198ec047daeec166c29f163754c8907db210ca9eb791394b",
+  "release_hash": "8015d65ef00c76f00217386fecb4b2c469c4689d5cbe0645c1cc137152c18dd5",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
-  "freeze_updated": "2026-11-05T17:26:00+00:00",
+  "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
 }
