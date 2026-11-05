@@ -633,7 +633,14 @@ def run_optimizer_integrity_tests():
     # TEST-OPT-008: Wildcard metadata proves branch-and-bound optimization guarantee
     wc_res = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map)
     meta = wc_res["optimization_metadata"]
-    record("TEST-OPT-008", meta["exhaustive"] is True and meta["optimality_proven"] is True and meta["branches_explored"] > 0, f"Wildcard proven optimal via {meta['optimization_method']} (Explored: {meta['branches_explored']}, Pruned: {meta['branches_pruned']})")
+    record(
+        "TEST-OPT-008",
+        meta.get("solver_status") == "NOT_SOLVED_BY_CBC"
+        and meta.get("optimality_proven") is False
+        and meta.get("branches_explored", 0) > 0,
+        "Wildcard branch-and-bound does not emit a CBC optimality certificate "
+        f"(Explored: {meta['branches_explored']}, Pruned: {meta['branches_pruned']})",
+    )
 
     # TEST-OPT-009: Team normalization verification across player pool
     sample_p = [p for p in all_players if p.get("web_name") in ["B.Fernandes", "Haaland", "Palmer", "Isak", "Semenyo"]]

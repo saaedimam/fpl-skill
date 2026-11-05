@@ -8,7 +8,7 @@
 ![Optimizer](https://img.shields.io/badge/optimizer-Exact%20MILP%20(CBC)-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Autonomous mathematical optimization engine, probabilistic forecasting system, and contract-governed advisory agent for Fantasy Premier League (FPL).**
+**Mathematical optimization, probabilistic forecasting, and a contract-governed advisory agent for Fantasy Premier League (FPL).** Account writes are not autonomous: they fail closed unless a per-change approval token, a write-permitting `FPL_MODE`, verified-current account state, and sandbox validation all pass.
 
 `fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
@@ -97,7 +97,7 @@ The mathematical contract is explicit:
       ┌──────────────────────────────┐                      ┌──────────────────────────────┐
       │   Rank-Aware Objective       │                      │    Exact MILP Wildcard       │
       │   - Elite Safe (1-50)        │                      │    - Branch & Bound (CBC)    │
-      │   - Elite Chase (51-500)     │                      │    - 15-Man Global Optimum   │
+      │   - Elite Chase (51-500)     │                      │    - 15-man squad MILP       │
       │   - Competitive (501-10k)    │                      │    - Parameterized Horizon   │
       │   - Aspirational (10k+)      │                      │    - Hard Constraints        │
       └──────────────┬───────────────┘                      └──────────────┬───────────────┘
@@ -124,9 +124,9 @@ Three operating modes configured via `FPL_MODE`:
 
 | Mode | Behaviour | Execution Safety |
 | :--- | :--- | :--- |
-| `advisory` *(default)* | Computes optimal decisions, outputs ranked recommendations with full reasoning | Read-only; zero write requests |
-| `approval` | Prepares optimal decisions, generates counterfactual diffs, halts at gate | Requires explicit human cryptographic/interactive confirmation |
-| `autonomous` | Executes certified transfers and lineup submissions within bounded contracts | Guarded: fails closed if state is not `VERIFIED_CURRENT` |
+| `advisory` *(default)* | Computes decisions and prints recommendations | No write is sent |
+| `approval` | Prepares one change and stops unless the per-change approval token matches that exact payload | Write only through `fpl_skill.execution.execute_account_mutation` |
+| `autonomous` | Same write chokepoint as `approval` | Does not skip the per-change token, `VERIFIED_CURRENT`, or the sandbox |
 
 ---
 
@@ -136,7 +136,7 @@ Every tactical action in FPL is isolated into a discrete **Decision Card** gover
 
 | Card | Core Solver / Method | Horizon | Verification Standard | Current Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Wildcard** | Exact Mixed Integer Linear Program (CBC Branch & Bound) | GW+1 to GW+4 | **Mathematical Optimality Certificate** — admissible upper bound proven exhaustive over the complete search space | `CERTIFIED` |
+| **Wildcard** | Mixed Integer Linear Program (CBC branch-and-bound), squad built from scratch | Default horizon GW3–GW6, not a live deadline | Certificate is `OPTIMAL` only when CBC status is `Optimal`, an objective value is present, and the returned squad passes a constraint re-check. Otherwise `NOT_CERTIFIED` | `NOT CERTIFIED UNLESS CBC OPTIMAL + RE-CHECK` |
 | **Captaincy** | Rank-Aware Variance / Ceiling Optimization | Single GW target | **Empirical Calibration** — historical accuracy %, MAE, and Brier score against realized outcomes | `CALIBRATED (Sample Gate Tracked)` |
 | **Bench Order** | Positional Utilization under Expected Minutes | Single GW target | **Empirical Calibration** — sub-in conversion accuracy, minutes shortfall coverage | `CALIBRATED (Sample Gate Tracked)` |
 | **1-Free Transfer** | Multi-GW Marginal Gain vs Option-Value Threshold | Multi-GW | **Empirical Backtest** — realized post-transfer points vs rolling option value | `CALIBRATED (Sample Gate Tracked)` |
@@ -206,7 +206,11 @@ Explicit percentile spreads such as `P90-P50` remain median-based ceiling/upside
 6. **Attacking Captaincy:** captain is selected jointly from legal attacking positions.
 7. **Parameterized Locks:** optional hard locks force specified player IDs into the squad/defined GW lineup while preserving positional and club constraints.
 
-If `solve=False`, the optimizer builds the formulation and returns `status: "BUILT"` without claiming an optimum. Infeasible or non-optimal states fail closed.
+If `solve=False`, the optimizer builds the formulation and returns `status: "BUILT"` without claiming an optimum. Infeasible or non-optimal solver statuses are reported as `NOT_CERTIFIED`. A constant `admissible: true` is not a certificate.
+
+### Known limitations
+
+The wildcard model builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. The default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live gameweek. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch the legacy modules at import so existing call sites keep working; those patches are compatibility shims. The sandbox budget check sums supplied `now_cost` values (tenths) against the supplied budget. It does not reconstruct selling prices.
 
 ---
 
@@ -268,14 +272,15 @@ When same-level or higher-authority sources contradict, the state is `CONFLICTED
 | **[elite_adapter.py](fpl_skill/elite_adapter.py)** | Elite Cohort Tracker | Public-only, rate-limited cohort analysis |
 | **[account_adapter.py](fpl_skill/account_adapter.py)** | Authentication & Account State | Keychain/cookie adapter and verified-current lineage |
 | **[forecast_scorecard.py](fpl_skill/forecast_scorecard.py)** | Calibration Store | Forecast-vs-actual records and error metrics |
-| **[certification.py](fpl_skill/certification.py)** | Mathematical Proof Harness | Upper-bound admissibility and optimality certificates |
+| **[certification.py](fpl_skill/certification.py)** | Optimality certificate | Admissible or proven only from bound checks, or from CBC `Optimal` plus a constraint re-check |
 | **[backtest.py](fpl_skill/backtest.py)** | Empirical Backtest Harness | Pre-GW snapshots and post-GW evaluation |
 | **[direct_api.py](fpl_skill/direct_api.py)** | Resilient API Client | Official FPL endpoint integration and cache fallback |
 | **[prediction_engine.py](fpl_skill/prediction_engine.py)** | Lineup Generation | Constrained XI and captain/vice-captain generation |
 | **[transfer_intelligence.py](fpl_skill/transfer_intelligence.py)** | Transfer Evaluator | Multi-GW marginal value and option-value thresholds |
-| **[execution_sandbox.py](fpl_skill/execution_sandbox.py)** | Dry-Run Sandbox | Deterministic execution simulation |
+| **[execution.py](fpl_skill/execution.py)** | Account-write chokepoint | Fail-closed approval, sandbox, evidence, and firewall gate. Sends nothing unless every check passes |
+| **[execution_sandbox.py](fpl_skill/execution_sandbox.py)** | Squad validator and dry-run | Budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI |
 | **[history_evidence.py](fpl_skill/history_evidence.py)** | Diagnostic Evidence Reader | Historical narrative diagnostics isolated from objectives |
-| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human Sign-Off Gate | Manual approval enforcement |
+| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human sign-off gate | Per-change token, write-permitting mode, and `VERIFIED_CURRENT` |
 | **[watch.py](fpl_skill/watch.py)** | Live State Watcher | Real-time squad change notifications |
 | **[cli.py](fpl_skill/cli.py)** | Command-Line Interface | Packaged Click CLI entry point |
 
@@ -374,6 +379,7 @@ fpl-skill/
 │   ├── cli.py
 │   ├── direct_api.py
 │   ├── elite_adapter.py
+│   ├── execution.py
 │   ├── execution_sandbox.py
 │   ├── forecast_scorecard.py
 │   ├── history_evidence.py
@@ -387,6 +393,7 @@ fpl-skill/
 ├── schemas/
 ├── tests/
 ├── CHANGELOG.md
+├── LICENSE
 ├── FPL_SKILL.md                    # Deprecated redirect → SKILL.md
 ├── MANIFEST.json                   # Legacy v1.1.0 manifest
 ├── MANIFEST.v2.json                # Active v2 release registry
@@ -413,4 +420,4 @@ Every module is bound to a versioned contract where applicable:
 
 ## License
 
-MIT License. Copyright (c) 2026. Built for mathematical correctness and competitive excellence in Fantasy Premier League.
+MIT License. Copyright (c) 2026 Saaed Imam. See [LICENSE](LICENSE).

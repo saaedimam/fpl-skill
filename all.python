@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
 """
-all.python — FPL GOAT auto-applier (team 1512229, GW4)
+all.python — FPL squad plan (team 1512229, GW4)
 
-Applies in ONE official FPL SPA call:
-    POST /api/my-team/{entry}/
-    { "chip": null,
-      "picks": [ {element, position, is_captain, is_vice_captain}, ... ] }
+Prints a 15-pick plan. ``--apply`` does not write by itself. A write is sent
+only by ``fpl_skill.execution.execute_account_mutation`` after every gate
+passes:
 
-* Transfer   : committed by picks containing Mbeumo (427) and not Cherki (399)
-* Starting XI: position 1-11
-* Bench      : position 12-15 (GK last -> correct auto-sub)
-* Captain/Vice: is_captain / is_vice_captain (server derives the 2x multiplier)
+* explicit per-change ``--approval`` token bound to this exact payload
+* ``FPL_MODE`` of ``approval`` or ``autonomous`` (``autonomous`` does not skip the token)
+* account ownership state ``VERIFIED_CURRENT``
+* sandbox validation (budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI)
 
-Auth: DEFAULT DRY-RUN. To apply you need a fresh browser cookie dump
-(Netscape format) containing at least `csrftoken` + a session cookie
-(sessionid / access_token / pl_profile). The stored keychain jar (auth/session)
-has no csrftoken and its SSO access token is expired -> FPL returns 403 for
-writes, so this script refuses to write without fresh cookies.
+The bundled plan stores lineup slots only. It has no club, price, or playing
+position, so the sandbox rejects it and no request is sent. Missing or
+invalid approval raises before cookies are read and before any HTTP call.
 
 Usage:
     python3 all.python                          # dry-run (prints plan)
-    python3 all.python --apply --cookies ~/.fpl_cookies.txt
+    python3 all.python --apply --cookies ~/.fpl_cookies.txt --approval APPROVE:<digest>
 """
-import argparse, json, os, sys, urllib.request
+import argparse, json, os, sys, urllib.request, urllib.error
 
 TEAM_ID = "1512229"
 GW      = 4
@@ -53,31 +50,47 @@ CAPTAIN = 165
 VICE    = 426
 CHIP    = None          # wildcard used GW3; save the rest
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true", help="write to FPL (needs fresh cookies)")
+    ap.add_argument("--apply", action="store_true", help="attempt a gated write (still fails closed without approval)")
     ap.add_argument("--cookies", default=os.environ.get("FPL_COOKIES_FILE"), help="Netscape cookie dump from a logged-in browser")
-    args = ap.parse_args()
+    ap.add_argument("--approval", default=None, help="per-change APPROVE:<digest> token for this exact payload")
+    args = ap.parse_args(argv)
 
     plan = build_plan()
     print(json.dumps(plan, indent=1))
 
     if not args.apply:
-        print("\n[DRY-RUN] Nothing written. Re-run with --apply --cookies <file>.")
+        print("\n[DRY-RUN] Nothing written. Re-run with --apply only after the approval gate, sandbox, and verified account state all pass.")
         return 0
 
-    csrf, jar = load_cookies(args.cookies)
-    if not csrf or not jar:
-        print("\n[ERROR] Cookies must contain 'csrftoken' + session cookie. "
-              "Re-login at fantasy.premierleague.com, export cookies (Netscape format) to the file, retry.")
+    from fpl_skill.approval_gate import ExecutionDenied
+    from fpl_skill.execution import execute_account_mutation
+
+    payload = {"chip": CHIP, "picks": plan["picks"]}
+    endpoint = f"/my-team/{TEAM_ID}/"
+    try:
+        result = execute_account_mutation(
+            team_id=TEAM_ID,
+            endpoint=endpoint,
+            payload=payload,
+            picks=plan["picks"],
+            approval_token=args.approval,
+            mode=os.environ.get("FPL_MODE"),
+            state_provider=_ownership_state,
+            transport=_build_transport(args.cookies),
+        )
+    except ExecutionDenied as exc:
+        print(f"\n[BLOCKED] {exc}")
         return 1
 
-    st, body = api_post(jar, csrf, f"/my-team/{TEAM_ID}/", {"chip": CHIP, "picks": plan["picks"]})
-    print(f"\n[save] POST /api/my-team/{TEAM_ID}/ status={st}")
-    if st < 400:
+    status = result.get("status") if isinstance(result, dict) else None
+    print(f"\n[save] POST /api/my-team/{TEAM_ID}/ status={status}")
+    if isinstance(status, int) and status < 400:
         print(f"\n[DONE] Transfer ({TRANSFER_OUT['web_name']} OUT -> {TRANSFER_IN['web_name']} IN) "
-              "+ lineup + captain/vice applied for GW{GW}. Verify: https://fantasy.premierleague.com/my-team")
+              f"+ lineup + captain/vice applied for GW{GW}. Verify: https://fantasy.premierleague.com/my-team")
         return 0
+    body = result.get("body", "") if isinstance(result, dict) else ""
     print(f"[BODY] {body[:500]}")
     print("[ERROR] Save rejected. Re-export fresh cookies and retry.")
     return 1
@@ -116,7 +129,32 @@ def load_cookies(path):
         return None, None
     return csrf, " ".join(f"{n}={v}" for n, v in pairs)
 
-def api_post(jar, csrf, endpoint, payload):
+def _ownership_state():
+    from fpl_skill.account_adapter import FPLAccountAdapter
+
+    adapter = FPLAccountAdapter(TEAM_ID)
+    state = adapter.get_state(GW)
+    return state.get("ownership_state")
+
+def _build_transport(cookie_path):
+    from fpl_skill.approval_gate import ExecutionDenied
+
+    def transport(endpoint, payload):
+        csrf, jar = load_cookies(cookie_path)
+        if not csrf or not jar:
+            raise ExecutionDenied(
+                "cookies must contain csrftoken and a session cookie; nothing was sent"
+            )
+        return _api_post(jar, csrf, endpoint, payload)
+
+    return transport
+
+def _api_post(jar, csrf, endpoint, payload):
+    from fpl_skill.approval_gate import ExecutionDenied
+    from fpl_skill.execution import TRANSPORT_ARMED
+
+    if not TRANSPORT_ARMED.get():
+        raise ExecutionDenied("direct POST refused; writes must go through execute_account_mutation")
     req = urllib.request.Request(
         "https://fantasy.premierleague.com/api" + endpoint,
         data=json.dumps(payload).encode(),
@@ -129,9 +167,9 @@ def api_post(jar, csrf, endpoint, payload):
         method="POST")
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
-            return r.status, r.read().decode()[:500]
+            return {"status": r.status, "body": r.read().decode()[:500]}
     except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()[:500]
+        return {"status": e.code, "body": e.read().decode()[:500]}
 
 if __name__ == "__main__":
     sys.exit(main())

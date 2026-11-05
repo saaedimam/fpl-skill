@@ -17,3 +17,5 @@ Locked problem (4 fixed: Calafiori/B.Fernandes/João Pedro/Haaland) optima:
 Legacy `optimize_wildcard_squad` Branch-and-Bound with `[:10]/[:30]/[:40]` truncation is a heuristic best-effort search (admissible-bound pruning only over truncated space) — does NOT guarantee global optimality. The exact MILP is the gate.
 
 Do not surface `GLOBAL_OPTIMUM_CERTIFIED = YES` for any result not produced by the exact MILP with the above objective.
+
+The squad lists and objective values above are historical notes from a previous solve. They are not a standing optimality certificate. A certificate is `OPTIMAL` only when the current CBC status is `Optimal`, the objective value is the solver value, and a constraint re-check of the returned squad passes. Any other solver status is `NOT_CERTIFIED`.

@@ -50,3 +50,15 @@ class TemporalFirewall:
         """Execute a data query only if datum passes the temporal firewall."""
         self.validate_datum(datum)
         return query_fn(datum, *args, **kwargs)
+
+
+def admit_snapshots(cutoff_utc: str, snapshots: List[Any]) -> List[ImmutableSnapshot]:
+    """Admit snapshots observed at or before ``cutoff_utc``.
+
+    A missing cutoff or any snapshot after the cutoff raises. Callers on the
+    prediction and execution paths must treat that as fail-closed.
+    """
+    if not cutoff_utc:
+        raise TemporalLeakageError("decision cutoff is required before historical snapshots can be used")
+    firewall = TemporalFirewall(cutoff_utc)
+    return [firewall.validate_snapshot(snapshot) for snapshot in snapshots]

@@ -1,6 +1,19 @@
 # Changelog — FPL Skill
 
 
+## Unreleased — fail-closed execution
+
+### Fixed
+- Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a per-change approval token, a write-permitting `FPL_MODE`, `VERIFIED_CURRENT` account state, and sandbox validation all pass. A missing or tampered approval sends no request.
+- Optimality certificates follow CBC solver status, the objective value, and a constraint re-check. Non-optimal and infeasible results stay uncertified.
+- Evidence-policy rules (L5/L6 signal-only, `CONFLICTED`, L3+ corroboration) are enforced by `fpl_skill.evidence_policy` and consulted on the execution and prediction paths. The temporal firewall is consulted before those paths accept historical snapshots.
+
+### Changed
+- README and `SKILL.md` no longer treat browser cookies or `FPL_MODE=autonomous` as sufficient authority to write.
+- `fpl_skill/MANIFEST.v2.json` is synced to the root release registry.
+- Removed the unused `requests` dependency.
+- Added an MIT `LICENSE` (Copyright 2026 Saaed Imam) and a `description` to the `SKILL.md` frontmatter.
+
 ## v2.0 — Probabilistic + Rank-Aware Engine (BUILD → AUDIT → REPAIR → FREEZE)
 ### Added
 - Observation layer `fpl_skill/observation/`: public-API elite-manager poller, diff, EventStore (thread-safe, dedup, crash-salvage), alerts, replay gate

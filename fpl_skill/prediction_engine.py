@@ -1,7 +1,10 @@
 import json, os
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Sequence
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.api import calculate_player_gw_ep, build_fixture_map, select_best_legal_xi
+from fpl_skill.evidence_policy import evaluate_evidence
+from fpl_skill.historical.exceptions import SnapshotIntegrityError, TemporalLeakageError
+from fpl_skill.historical.firewall import admit_snapshots
 
 class PredictionEngine:
     def __init__(self, team_id: str):
@@ -12,7 +15,25 @@ class PredictionEngine:
         self.fixture_map = build_fixture_map(self.fixtures)
         self.elements = {p['id']: p for p in self.bootstrap['elements']}
 
-    def run(self, target_gw: int, squad: Optional[List[Dict[str, Any]]] = None):
+    def run(
+        self,
+        target_gw: int,
+        squad: Optional[List[Dict[str, Any]]] = None,
+        *,
+        evidence_claims: Optional[Sequence[Dict[str, Any]]] = None,
+        proposed_action: Optional[str] = None,
+        decision_cutoff_utc: Optional[str] = None,
+        historical_snapshots: Optional[Sequence[Any]] = None,
+    ):
+        guard = _guard_prediction_inputs(
+            evidence_claims=evidence_claims,
+            proposed_action=proposed_action,
+            decision_cutoff_utc=decision_cutoff_utc,
+            historical_snapshots=historical_snapshots,
+        )
+        if guard.get("status") == "BLOCKED":
+            return guard
+
         if squad is None:
             state = self.adapter.get_state(target_gw)
             if state['optimization_state'] != "OPTIMIZATION_READY":
@@ -44,7 +65,7 @@ class PredictionEngine:
             "position": xi_res["captain"].get("position")
         } if xi_res.get("captain") else None
 
-        return {
+        result = {
             "xi": xi_players,
             "captain": captain,
             "formation": xi_res.get("formation"),
@@ -54,6 +75,34 @@ class PredictionEngine:
             ],
             "total_ep": xi_res.get("total_ep", 0.0)
         }
+        if "evidence" in guard:
+            result["evidence"] = guard["evidence"]
+            result["action"] = guard["evidence"]["action"]
+            result["executable"] = bool(guard["evidence"]["material_action_allowed"])
+        if "historical_snapshots_admitted" in guard:
+            result["historical_snapshots_admitted"] = guard["historical_snapshots_admitted"]
+        return result
+
+def _guard_prediction_inputs(
+    *,
+    evidence_claims,
+    proposed_action,
+    decision_cutoff_utc,
+    historical_snapshots,
+) -> Dict[str, Any]:
+    """Apply the evidence policy and temporal firewall before a prediction is used."""
+    guard: Dict[str, Any] = {}
+    if historical_snapshots is not None or decision_cutoff_utc is not None:
+        if not decision_cutoff_utc or historical_snapshots is None:
+            return {"status": "BLOCKED", "reason": "TEMPORAL_CUTOFF_REQUIRED"}
+        try:
+            admitted = admit_snapshots(decision_cutoff_utc, list(historical_snapshots))
+        except (TemporalLeakageError, SnapshotIntegrityError) as exc:
+            return {"status": "BLOCKED", "reason": "TEMPORAL_LEAKAGE", "detail": str(exc)}
+        guard["historical_snapshots_admitted"] = len(admitted)
+    if evidence_claims is not None:
+        guard["evidence"] = evaluate_evidence(evidence_claims, proposed_action=proposed_action)
+    return guard
 
 if __name__ == "__main__":
     engine = PredictionEngine(os.environ.get("FPL_TEAM_ID"))
