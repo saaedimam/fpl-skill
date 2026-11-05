@@ -303,6 +303,9 @@ class ProbabilisticEPEngine:
     def generate_distribution(self, inputs: DistributionModelInputs) -> PlayerDistribution:
         inputs.status = normalize_player_state(inputs.status)
         inputs.position = normalize_position(inputs.position)
+        # Validate fixture input before the unavailable-player short circuit.
+        # A zero forecast must not conceal malformed fixture data.
+        self._fixture_multiplier(inputs)
         if inputs.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
             return PlayerDistribution(
                 inputs.player_id,
@@ -349,10 +352,8 @@ def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: Pr
         rates = normalize_player_rates(p)
         expected_minutes = rates.expected_minutes if ("minutes" in p or "starts" in p) else 90.0
         gx, ga, _ = gw_expected_contributions(p, expected_minutes)
-        if "fixture_difficulty" in p and p["fixture_difficulty"] is not None:
-            fixture_difficulty = int(p["fixture_difficulty"])
-        else:
-            fixture_difficulty = 3
+        raw_fdr = p.get("fixture_difficulty")
+        fixture_difficulty = 3 if raw_fdr is None else int(raw_fdr)
         inp = DistributionModelInputs(
             int(p["id"]),
             p.get("position", p.get("element_type", "MID")),
@@ -378,7 +379,7 @@ def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: Pr
         missing_critical = [
             key
             for key in ("status", "chance_of_playing_next_round", "is_home", "fixture_difficulty")
-            if key not in p
+            if key not in p or (key == "fixture_difficulty" and p[key] is None)
         ]
         dist = engine.generate_distribution(inp)
         if missing_critical:
