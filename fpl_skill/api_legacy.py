@@ -728,7 +728,9 @@ def optimize_wildcard_squad(
     hard_locks: Optional[List[int]] = None
 ) -> Dict[str, Any]:
     """
-    Construct optimal legal 15-player Wildcard squad maximizing GW3-6 xPts.
+    Search for a legal 15-player Wildcard squad with high GW3-6 xPts.
+    This is a legacy search, not a certificate; it must never be reported as
+    globally optimal (only the exact MILP + re-check in optimality.py can be).
     Constraints: exactly 2 GKP, 5 DEF, 5 MID, 3 FWD, budget <= 100m, max 3 per club.
     Uses provably admissible Branch-and-Bound pruning over positional combinations.
     Supports hard_locks: list of player_ids that MUST be in the final squad.

@@ -1,8 +1,8 @@
-> NOTE: This document has been merged into canonical SKILL.md. See SKILL.md for the authoritative v2 skill contract. This file is retained for backward compatibility and historical traceability only.
+> **DEPRECATED — HISTORICAL DOCUMENT.** This document has been merged into canonical `SKILL.md`, which is the sole authoritative skill contract. This file is retained for backward compatibility and historical traceability only. Status lines below (versions, "frozen", "certified", test counts) describe the state on the date written and are not current claims.
 
 # FPL Skill v2.0 — Title-Winning Engineering Specification
 
-> v1.1.0 = frozen, certified, correctness-hardened baseline (FIX-01..07 applied, 35 tests green).
+> (Historical, as of 2026-09-06) v1.1.0 = frozen, certified, correctness-hardened baseline (FIX-01..07 applied, 35 tests green).
 > v2.0 = the upgrade program to make the engine **actually compete for #1**, not just be correct.
 > Written: 2026-09-06. Status: ENGINEERING PROGRESSION — v1.1.0 FROZEN baseline preserved; v2.0 implemented in controlled phases, never silently re-released.
 

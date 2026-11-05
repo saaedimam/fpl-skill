@@ -59,7 +59,7 @@ Unresolved gates blocking freeze sign-off:
 - Entry picks auth model: structured failure contract documented; behavior recorded (HTTP 200, 15 picks without auth)
 - Data Adapter schema: contract complete; live verification evidence recorded in evidence/api-verification-2026-09-05.json
 
-See MANIFEST.json for release hash + file inventory. See contracts/ for full specifications (runtime, data-adapter, 4d-prediction, counterfactual, calibration).
+See archive/MANIFEST.v1.1.0.json (historical v1.1.0 manifest; the active registry is MANIFEST.v2.json) for release hash + file inventory. See contracts/ for full specifications (runtime, data-adapter, 4d-prediction, counterfactual, calibration).
 
 
 **Parent:** v1.0.0 (FROZEN). v1.0.0 was not modified.
@@ -88,7 +88,7 @@ See MANIFEST.json for release hash + file inventory. See contracts/ for full spe
 No v1.0.0 command, output-contract field, or scoring rule was changed or removed. v1.1.0 is purely additive: new commands (`/predict`, `/counterfactual`, `/calibrate`), and existing algorithms now consume D3 future-state values instead of raw current-form values as their expected-points input.
 
 ### Known limitation / honesty note on release hash
-A prior recorded SHA256 (`45587d465947ac855ea4abd4215c060a7c66b0d8e738b0d5db59957089cccbf9`) was computed over an earlier version of this package *before* the Calibration contract was added, and was already flagged as stale by the calibration contract itself. This build regenerates the full canonical file tree from scratch (this package did not previously exist as real files in any repository this system could reach — only as prose summaries on Notion pages) and computes a new release hash over the actual files in `MANIFEST.json`. The old hash is superseded, not reproduced, because it was never computed over a file set this system has access to.
+A prior recorded SHA256 (`45587d465947ac855ea4abd4215c060a7c66b0d8e738b0d5db59957089cccbf9`) was computed over an earlier version of this package *before* the Calibration contract was added, and was already flagged as stale by the calibration contract itself. This build regenerates the full canonical file tree from scratch (this package did not previously exist as real files in any repository this system could reach — only as prose summaries on Notion pages) and computes a new release hash over the actual files in `MANIFEST.json` (now archived as `archive/MANIFEST.v1.1.0.json`). The old hash is superseded, not reproduced, because it was never computed over a file set this system has access to.
 
 ### Not verified in this build
 - Live FPL API response shapes for the v1.0.0 Data Adapter (`fantasy.premierleague.com`) — this environment has no network path to that host. This is a v1.0.0/Data-Adapter-layer concern, out of scope for v1.1.0's own content, but it means the v1.0.0 dependency chain (Runtime Contract, Validation Suite, Data Adapter — all still DRAFT with 34 PENDING tests per their own pages) has not been resolved, and this release does not claim otherwise.

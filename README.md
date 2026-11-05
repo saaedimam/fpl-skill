@@ -12,7 +12,7 @@
 
 `fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
-**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `SKILL_V2.md` and `FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
+**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `archive/SKILL_V2.md` and `archive/FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
 
 The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-signed `v2.0.0` release. Phase 1 only establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity; it does not redesign the forecasting model.
 
@@ -44,8 +44,8 @@ The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-
 Use [`SKILL.md`](SKILL.md) as the only active FPL agent contract.
 
 Legacy compatibility paths:
-- `SKILL_V2.md` → [`SKILL.md`](SKILL.md)
-- `FPL_SKILL.md` → [`SKILL.md`](SKILL.md)
+- `SKILL_V2.md` (archived at [`archive/SKILL_V2.md`](archive/SKILL_V2.md)) → [`SKILL.md`](SKILL.md)
+- `FPL_SKILL.md` (archived at [`archive/FPL_SKILL.md`](archive/FPL_SKILL.md)) → [`SKILL.md`](SKILL.md)
 
 The deprecated files may be retained for historical traceability, but agents must not execute, fork, or silently extend them as independent contracts.
 
@@ -278,11 +278,72 @@ When same-level or higher-authority sources contradict, the state is `CONFLICTED
 | **[prediction_engine.py](fpl_skill/prediction_engine.py)** | Lineup Generation | Constrained XI and captain/vice-captain generation |
 | **[transfer_intelligence.py](fpl_skill/transfer_intelligence.py)** | Transfer Evaluator | Multi-GW marginal value and option-value thresholds |
 | **[execution.py](fpl_skill/execution.py)** | Account-write chokepoint | Fail-closed approval, sandbox, evidence, and firewall gate. Sends nothing unless every check passes |
+| **[approval_issuer.py](fpl_skill/approval_issuer.py)** | Interactive approval signer | Shows the exact change, requires typing `approve` at a TTY, and signs it with the operator's Ed25519 private key |
+| **[approval_verify.py](fpl_skill/approval_verify.py)** | Approval verifier | Checks the signature with the public key only, the binding, the expiry, and the single-use nonce ledger |
 | **[execution_sandbox.py](fpl_skill/execution_sandbox.py)** | Squad validator and dry-run | Budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI |
 | **[history_evidence.py](fpl_skill/history_evidence.py)** | Diagnostic Evidence Reader | Historical narrative diagnostics isolated from objectives |
-| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human sign-off gate | Per-change token, write-permitting mode, and `VERIFIED_CURRENT` |
+| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human sign-off gate | Mode check only (`FPL_MODE` must be `approval` or `autonomous`). Passing it does not approve a change |
 | **[watch.py](fpl_skill/watch.py)** | Live State Watcher | Real-time squad change notifications |
 | **[cli.py](fpl_skill/cli.py)** | Command-Line Interface | Packaged Click CLI entry point |
+
+---
+
+## Account-Write Approval Architecture
+
+Every account write goes through one function, `fpl_skill.execution.execute_account_mutation`. It refuses to send anything unless every step below passes, in this order:
+
+1. **Mode check** (`approval_gate.ApprovalGate.check_mode`). `FPL_MODE` must be `approval` or `autonomous`; `advisory` (the default) never writes. `autonomous` does not skip any later step.
+2. **Signed approval record.** A missing record is refused. The record is verified by `fpl_skill.approval_verify.verify_approval_record` against the public key from `FPL_APPROVAL_PUBLIC_KEY` (a file path). The signature covers the team ID, endpoint, SHA-256 of the canonical JSON body, nonce, and expiry. A different team, endpoint, or body, a bad signature, or an expired record is refused.
+3. **Squad validation** against a fresh bootstrap player index (`execution_sandbox.validate_picks`): budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI.
+4. **Evidence policy and temporal firewall**, when evidence claims or historical snapshots are supplied.
+5. **Fresh account read.** Ownership is re-read through the account adapter for the given team ID; anything other than `VERIFIED_CURRENT` is refused. No cached flag is used.
+6. **Nonce consumption.** The nonce is recorded in a single-use ledger (`FPL_APPROVAL_NONCE_DIR`, default `~/.cache/fpl-skill/approval-nonces`, files created with mode 0600). A second use of the same record is refused.
+7. **Explicit transport.** Without an explicit `transport` or `session`, no network connection is opened.
+
+### Issuing an approval
+
+Approvals are created out of band by the operator, never by the agent process:
+
+```bash
+export FPL_TEAM_ID=YOUR_ENTRY_ID
+python -m fpl_skill.approval_issuer \
+  --endpoint /my-team/YOUR_ENTRY_ID/ \
+  --payload-file change.json \
+  --signing-key /path/outside/repo/fpl-approval-private.pem \
+  --out approval.json
+```
+
+The issuer prints the team ID, endpoint, and exact body, then requires typing `approve` on an interactive TTY. It generates a random 32-byte nonce and an expiry (default 10 minutes) and writes the signed record. Signing and verification use `openssl pkeyutl` with an Ed25519 key, so `openssl` must be installed; any openssl failure counts as an invalid signature.
+
+### Key handling
+
+* Generate a key pair with `openssl genpkey -algorithm ED25519 -out private.pem` and `openssl pkey -in private.pem -pubout -out public.pem`.
+* The process that runs the executor should hold only the **public** key (`FPL_APPROVAL_PUBLIC_KEY`). The verifier rejects any key text containing `PRIVATE KEY`.
+* Keep the private key (`--signing-key` or `FPL_APPROVAL_SIGNING_KEY`) outside the repository and out of reach of any agent or automated process. Anyone who can read it can approve writes.
+* `FPL_TEAM_ID` is read from the environment; it is not hard-coded.
+
+---
+
+## Credential Security
+
+Authenticated reads use an FPL session cookie that the account adapter reads from the macOS Keychain (service `fpl-agent`, account `auth/session`).
+
+* **Store it** with `-w` as the last argument and no value, so `security` prompts for it and the cookie stays out of shell history and the process list:
+  ```bash
+  security add-generic-password -s fpl-agent -a auth/session -w
+  ```
+* **Scope:** the cookie is a full login session for your FPL account. Treat it like a password. Never commit it, paste it into prompts or logs, or put it in environment files in the repository.
+* **Access:** macOS may ask you to allow access the first time the tools read the item. Allow only the tools you trust.
+* **Rotate or remove** it when you are done or if it may have leaked (logging out of FPL also invalidates the session):
+  ```bash
+  security delete-generic-password -s fpl-agent -a auth/session
+  ```
+
+---
+
+## Release Registry
+
+`MANIFEST.v2.json` is the active release registry; `fpl_skill/MANIFEST.v2.json` is a byte-identical packaged copy. `tests/test_manifest_completeness.py` (run by CI through pytest) requires every non-empty module under `fpl_skill/`, the safety paths in `tests/compute_release_hash.py`, `SKILL.md`, `certification/NOTICE.md`, `prompts/master_fpl_rigorous.md`, `evidence/evidence-policy.md`, and every `contracts/*.md` to be listed in `canonical_files`. After changing any registered file, update `file_hashes` and `release_hash`, then run `python tests/compute_release_hash.py` to verify. Historical artifacts live in `archive/` and `evidence/archive/` and are not part of the active registry.
 
 ---
 
@@ -332,9 +393,8 @@ pip install -e .
 ### 3. Configure Credentials & Environment
 Keep authenticated session credentials outside the repository, preferably in the macOS Keychain:
 ```bash
-security add-generic-password \
-  -s fpl-agent -a auth/session \
-  -w '<your-fpl-session-cookie>'
+# Prompts for the cookie so it stays out of shell history (see Credential Security)
+security add-generic-password -s fpl-agent -a auth/session -w
 ```
 
 ```bash
@@ -391,17 +451,15 @@ fpl-skill/
 │   ├── rank_aware_objective1.py
 │   ├── transfer_intelligence.py
 │   └── watch.py
+├── archive/                        # Historical, not active: MANIFEST.v1.1.0.json, SKILL_V2.md, FPL_SKILL.md
 ├── contracts/
 ├── schemas/
 ├── tests/
 ├── CHANGELOG.md
 ├── LICENSE
-├── FPL_SKILL.md                    # Deprecated redirect → SKILL.md
-├── MANIFEST.json                   # Legacy v1.1.0 manifest
 ├── MANIFEST.v2.json                # Active v2 release registry
 ├── README.md
 ├── SKILL.md                        # Sole canonical agent skill contract
-├── SKILL_V2.md                     # Deprecated redirect → SKILL.md
 ├── VERSION
 └── pyproject.toml
 ```
