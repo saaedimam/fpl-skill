@@ -1,5 +1,6 @@
 ---
 name: fpl
+description: "Advisory Fantasy Premier League skill. Account writes fail closed unless a signed out-of-band approval, a write-permitting FPL_MODE, a fresh verified account read, and sandbox validation all pass. Autonomous mode is not unattended live execution."
 version: 2.1.0-rc1
 status: active
 scope: global
@@ -9,7 +10,7 @@ parent_release: 2.0.0
 
 # FPL Skill v2.1.0-rc1 — Canonical Agent Contract
 
-This file is the sole canonical agent entrypoint for the FPL skill. Legacy `SKILL_V2.md` and `FPL_SKILL.md` are retained for backward compatibility and historical traceability only; they are not executable authority.
+This file is the sole canonical agent entrypoint for the FPL skill. Legacy `archive/SKILL_V2.md` and `archive/FPL_SKILL.md` are retained for backward compatibility and historical traceability only; they are not executable authority.
 
 The v2.1.0-rc1 line descends from the immutable, SSH-signed v2.0.0 release at commit `ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c`. Phase 1 establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity. It does not introduce new forecasting heuristics or Phase 2 probabilistic-model changes.
 
@@ -512,9 +513,9 @@ The parent `v2.0.0` release remains immutable. This RC line may change until sep
 
 Exactly one canonical agent contract exists: `SKILL.md`.
 
-`SKILL_V2.md` is a deprecated v2 progression document kept for historical/backward-compatible references only.
+`archive/SKILL_V2.md` is a deprecated v2 progression document kept for historical/backward-compatible references only.
 
-`FPL_SKILL.md` is a deprecated legacy draft kept for historical/backward-compatible references only.
+`archive/FPL_SKILL.md` is a deprecated legacy draft kept for historical/backward-compatible references only.
 
 Neither deprecated file may be treated as executable authority when `SKILL.md` is available.
 
@@ -759,14 +760,21 @@ Live execution knowledge is operational and does not redefine the mathematical m
 
 ### 36.1 Live API endpoints
 - `GET /api/my-team/{team_id}/` — current picks, bank, value
-- `POST /api/my-team/{team_id}/` — apply full 15-pick state
+- `POST /api/my-team/{team_id}/` — FPL's own apply endpoint. This skill must not call it directly.
 
 The modern React SPA uses `/api/my-team/` for current editable squad state; do not substitute historical `/api/entry/.../picks/` state for current editable state.
 
 ### 36.2 Authoritative write
-When authorized execution is explicitly requested, the authoritative non-destructive browser-context path is a same-origin API POST containing the complete 15-pick array. DOM clicks are not authoritative state transitions.
+Account mutations are forbidden unless every condition below is true. If any one is missing or invalid, raise and send no request:
 
-Execution must remain blocked unless the account state is `VERIFIED_CURRENT` and the configured approval/execution policy permits the action.
+1. A signed approval record for this exact action: team id, endpoint, canonical body, nonce, and expiry. The record is created only by a separate interactive confirmation (`python -m fpl_skill.approval_issuer`) that shows the payload and signs it with a private key. The executor verifies that signature with the public key and does not hold the signing key. A hash of the payload is not an approval. Each nonce works once and expires. `FPL_MODE=autonomous` does not skip this record and cannot mint it.
+2. `FPL_MODE` is `approval` or `autonomous`. The default `advisory` never writes. `autonomous` is not unattended or safe live execution.
+3. A fresh authenticated account read inside the write chokepoint returns `VERIFIED_CURRENT`. A caller-supplied state string is not accepted.
+4. The proposed squad passes sandbox validation against authoritative bootstrap data: each element id exists once, and its team, position, and price match that bootstrap, then budget, 15 players in a 2/5/5/3 shape, at most 3 from one club, a legal formation, and both captain and vice-captain in the starting XI.
+
+The only supported write path is `fpl_skill.execution.execute_account_mutation`. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client. A same-origin browser request is not an approval. DOM clicks are not authoritative state transitions.
+
+`all.python --apply` calls that chokepoint. It reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval. Without `--approval-file` it fails closed and does not send a request.
 
 ### 36.3 Bench / formation backend constraints
 - Starting XI positions are 1–11.
@@ -779,6 +787,16 @@ Use FPL element ID as the canonical player key. Names are display-only and must 
 
 ### 36.5 Freshness
 Confirm the current Gameweek and deadline from the authoritative event API before a deadline-sensitive action.
+
+### 36.6 Known limitations
+This skill does not do full live-gameweek squad optimization, and it does not provide safe autonomous live execution. `FPL_MODE=autonomous` still cannot write unless a separate interactive step has signed that exact change; the executor cannot create that signature.
+
+The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal`, the objective is finite and matches an independent evaluation of `sum_g (sum_p ep[p,g] * y[p,g] + sum_p ep[p,g] * c[p,g])`, and the certificate names every constraint in the reduced wildcard model. A feasible squad with an objective value is not enough. `full_rule_optimal` stays false. The legacy branch-and-bound wildcard search does not receive that certificate.
+
+`tests/run_validation.py` is a manual harness. Part of it reads a local FPL cache or the live public API. Pytest and CI do not run it.
+
+### 36.7 Authenticated reads
+`FPLAccountAdapter` may attach `FPL_SESSION_COOKIE` to `GET /api/my-team/{team_id}/` and published picks. That request has no body and is not a write. The cookie is not approval, is not copied into the returned account state, and is not included in errors. Public bootstrap and entry reads do not send the cookie. A cookie file or keychain item cannot bypass `fpl_skill.execution`.
 
 ## 37. Release Integrity Contract
 
@@ -797,15 +815,15 @@ The canonical release hash serialization is:
 
 `SHA256("".join(path + ":" + sha256(file) + "\\n" for path in sorted(canonical_paths)))`
 
-The manifest registry and the verification script MUST agree exactly on the canonical path set and hashes.
+The manifest registry and the verification script MUST agree exactly on the canonical path set and hashes. The registry includes the account-write chokepoint, approval verifier, sandbox, evidence policy, optimality certificate, account adapter, and their regression tests. CI recomputes the file hashes and release hash from the checkout and fails if either manifest omits that set.
 
 ## 38. Backward Compatibility
 
 Legacy references resolve as follows:
 
 ```text
-SKILL_V2.md  → SKILL.md
-FPL_SKILL.md → SKILL.md
+SKILL_V2.md  (now archive/SKILL_V2.md)  → SKILL.md
+FPL_SKILL.md (now archive/FPL_SKILL.md) → SKILL.md
 ```
 
 Legacy documents are informational/historical only. They must not supersede the active `SKILL.md` contract.

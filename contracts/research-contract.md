@@ -146,7 +146,7 @@ For every fetch: `{ url, status, observed_at_utc, response_bytes_sha256, content
 - Source authority:`contracts/source-contract.md`
 - Prediction chain:`contracts/prediction-contract.md`(L0 inputs only elite signal; elite picks derived observations, not L0 facts own squad)
 - Runtime pipeline:`contracts/runtime-contract.md`(RESEARCH stage where contract executes)
-- File package truth:`SKILL.md``MANIFEST.json`
+- File package truth: `SKILL.md` + `MANIFEST.v2.json` (the v1.1.0 `MANIFEST.json` is historical, archived at `archive/MANIFEST.v1.1.0.json`)
 
 ## 14. MONITOR — Continuous Observation Operation
 

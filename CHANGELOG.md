@@ -1,6 +1,21 @@
 # Changelog — FPL Skill
 
 
+## Unreleased — fail-closed execution
+
+### Fixed
+- Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a signed out-of-band approval, a write-permitting `FPL_MODE`, a fresh `VERIFIED_CURRENT` account read, and sandbox validation all pass. The executor cannot mint the signature. A hash of the payload, a replayed or expired approval, or a caller-supplied state string sends no request.
+- `all.python` reads `FPL_TEAM_ID` and stops when it is missing.
+- Optimality certificates require a finite CBC objective, an independent evaluation of the encoded wildcard objective, and the complete reduced-model constraint set. A feasible squad with an objective value is not a proof. Non-finite bounds are rejected. `full_rule_optimal` stays false.
+- The release registry lists the account-write and certificate modules and their regression tests. CI recomputes that registry instead of trusting the stored hash.
+- Evidence-policy rules (L5/L6 signal-only, `CONFLICTED`, L3+ corroboration) are enforced by `fpl_skill.evidence_policy` and consulted on the execution and prediction paths. The temporal firewall is consulted before those paths accept historical snapshots.
+
+### Changed
+- README and `SKILL.md` no longer treat browser cookies or `FPL_MODE=autonomous` as sufficient authority to write.
+- `fpl_skill/MANIFEST.v2.json` is synced to the root release registry.
+- Removed the unused `requests` dependency.
+- Added an MIT `LICENSE` (Copyright 2026 Saaed Imam) and a `description` to the `SKILL.md` frontmatter.
+
 ## v2.0 — Probabilistic + Rank-Aware Engine (BUILD → AUDIT → REPAIR → FREEZE)
 ### Added
 - Observation layer `fpl_skill/observation/`: public-API elite-manager poller, diff, EventStore (thread-safe, dedup, crash-salvage), alerts, replay gate
@@ -44,7 +59,7 @@ Unresolved gates blocking freeze sign-off:
 - Entry picks auth model: structured failure contract documented; behavior recorded (HTTP 200, 15 picks without auth)
 - Data Adapter schema: contract complete; live verification evidence recorded in evidence/api-verification-2026-09-05.json
 
-See MANIFEST.json for release hash + file inventory. See contracts/ for full specifications (runtime, data-adapter, 4d-prediction, counterfactual, calibration).
+See archive/MANIFEST.v1.1.0.json (historical v1.1.0 manifest; the active registry is MANIFEST.v2.json) for release hash + file inventory. See contracts/ for full specifications (runtime, data-adapter, 4d-prediction, counterfactual, calibration).
 
 
 **Parent:** v1.0.0 (FROZEN). v1.0.0 was not modified.
@@ -73,7 +88,7 @@ See MANIFEST.json for release hash + file inventory. See contracts/ for full spe
 No v1.0.0 command, output-contract field, or scoring rule was changed or removed. v1.1.0 is purely additive: new commands (`/predict`, `/counterfactual`, `/calibrate`), and existing algorithms now consume D3 future-state values instead of raw current-form values as their expected-points input.
 
 ### Known limitation / honesty note on release hash
-A prior recorded SHA256 (`45587d465947ac855ea4abd4215c060a7c66b0d8e738b0d5db59957089cccbf9`) was computed over an earlier version of this package *before* the Calibration contract was added, and was already flagged as stale by the calibration contract itself. This build regenerates the full canonical file tree from scratch (this package did not previously exist as real files in any repository this system could reach — only as prose summaries on Notion pages) and computes a new release hash over the actual files in `MANIFEST.json`. The old hash is superseded, not reproduced, because it was never computed over a file set this system has access to.
+A prior recorded SHA256 (`45587d465947ac855ea4abd4215c060a7c66b0d8e738b0d5db59957089cccbf9`) was computed over an earlier version of this package *before* the Calibration contract was added, and was already flagged as stale by the calibration contract itself. This build regenerates the full canonical file tree from scratch (this package did not previously exist as real files in any repository this system could reach — only as prose summaries on Notion pages) and computes a new release hash over the actual files in `MANIFEST.json` (now archived as `archive/MANIFEST.v1.1.0.json`). The old hash is superseded, not reproduced, because it was never computed over a file set this system has access to.
 
 ### Not verified in this build
 - Live FPL API response shapes for the v1.0.0 Data Adapter (`fantasy.premierleague.com`) — this environment has no network path to that host. This is a v1.0.0/Data-Adapter-layer concern, out of scope for v1.1.0's own content, but it means the v1.0.0 dependency chain (Runtime Contract, Validation Suite, Data Adapter — all still DRAFT with 34 PENDING tests per their own pages) has not been resolved, and this release does not claim otherwise.

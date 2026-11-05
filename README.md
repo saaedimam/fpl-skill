@@ -8,11 +8,11 @@
 ![Optimizer](https://img.shields.io/badge/optimizer-Exact%20MILP%20(CBC)-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Autonomous mathematical optimization engine, probabilistic forecasting system, and contract-governed advisory agent for Fantasy Premier League (FPL).**
+**Mathematical optimization, probabilistic forecasting, and a contract-governed advisory agent for Fantasy Premier League (FPL).** This is not safe autonomous live execution and it does not optimize a live gameweek end to end. Account writes fail closed unless a separate interactive step has signed that exact change, `FPL_MODE` permits a write, a fresh account read is `VERIFIED_CURRENT`, and the squad matches authoritative bootstrap data. The executor cannot mint the signature.
 
 `fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
-**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `SKILL_V2.md` and `FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
+**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `archive/SKILL_V2.md` and `archive/FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
 
 The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-signed `v2.0.0` release. Phase 1 only establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity; it does not redesign the forecasting model.
 
@@ -44,8 +44,8 @@ The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-
 Use [`SKILL.md`](SKILL.md) as the only active FPL agent contract.
 
 Legacy compatibility paths:
-- `SKILL_V2.md` → [`SKILL.md`](SKILL.md)
-- `FPL_SKILL.md` → [`SKILL.md`](SKILL.md)
+- `SKILL_V2.md` (archived at [`archive/SKILL_V2.md`](archive/SKILL_V2.md)) → [`SKILL.md`](SKILL.md)
+- `FPL_SKILL.md` (archived at [`archive/FPL_SKILL.md`](archive/FPL_SKILL.md)) → [`SKILL.md`](SKILL.md)
 
 The deprecated files may be retained for historical traceability, but agents must not execute, fork, or silently extend them as independent contracts.
 
@@ -97,7 +97,7 @@ The mathematical contract is explicit:
       ┌──────────────────────────────┐                      ┌──────────────────────────────┐
       │   Rank-Aware Objective       │                      │    Exact MILP Wildcard       │
       │   - Elite Safe (1-50)        │                      │    - Branch & Bound (CBC)    │
-      │   - Elite Chase (51-500)     │                      │    - 15-Man Global Optimum   │
+      │   - Elite Chase (51-500)     │                      │    - 15-man squad MILP       │
       │   - Competitive (501-10k)    │                      │    - Parameterized Horizon   │
       │   - Aspirational (10k+)      │                      │    - Hard Constraints        │
       └──────────────┬───────────────┘                      └──────────────┬───────────────┘
@@ -124,9 +124,9 @@ Three operating modes configured via `FPL_MODE`:
 
 | Mode | Behaviour | Execution Safety |
 | :--- | :--- | :--- |
-| `advisory` *(default)* | Computes optimal decisions, outputs ranked recommendations with full reasoning | Read-only; zero write requests |
-| `approval` | Prepares optimal decisions, generates counterfactual diffs, halts at gate | Requires explicit human cryptographic/interactive confirmation |
-| `autonomous` | Executes certified transfers and lineup submissions within bounded contracts | Guarded: fails closed if state is not `VERIFIED_CURRENT` |
+| `advisory` *(default)* | Computes decisions and prints recommendations | No write is sent |
+| `approval` | Prepares one change and stops unless a signed out-of-band approval matches that exact payload | Write only through `fpl_skill.execution.execute_account_mutation` |
+| `autonomous` | Same write chokepoint as `approval` | Not unattended live execution. It cannot mint a signature and does not skip the fresh account read or the sandbox |
 
 ---
 
@@ -136,7 +136,7 @@ Every tactical action in FPL is isolated into a discrete **Decision Card** gover
 
 | Card | Core Solver / Method | Horizon | Verification Standard | Current Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Wildcard** | Exact Mixed Integer Linear Program (CBC Branch & Bound) | GW+1 to GW+4 | **Mathematical Optimality Certificate** — admissible upper bound proven exhaustive over the complete search space | `CERTIFIED` |
+| **Wildcard** | Mixed Integer Linear Program (CBC branch-and-bound), squad built from scratch | Default horizon GW3–GW6. This is not a live-gameweek optimizer | Certificate is `OPTIMAL` only when CBC status is `Optimal`, an objective value is present, and the returned squad passes a constraint re-check. Otherwise `NOT_CERTIFIED` | `NOT CERTIFIED UNLESS CBC OPTIMAL + RE-CHECK` |
 | **Captaincy** | Rank-Aware Variance / Ceiling Optimization | Single GW target | **Empirical Calibration** — historical accuracy %, MAE, and Brier score against realized outcomes | `CALIBRATED (Sample Gate Tracked)` |
 | **Bench Order** | Positional Utilization under Expected Minutes | Single GW target | **Empirical Calibration** — sub-in conversion accuracy, minutes shortfall coverage | `CALIBRATED (Sample Gate Tracked)` |
 | **1-Free Transfer** | Multi-GW Marginal Gain vs Option-Value Threshold | Multi-GW | **Empirical Backtest** — realized post-transfer points vs rolling option value | `CALIBRATED (Sample Gate Tracked)` |
@@ -206,7 +206,11 @@ Explicit percentile spreads such as `P90-P50` remain median-based ceiling/upside
 6. **Attacking Captaincy:** captain is selected jointly from legal attacking positions.
 7. **Parameterized Locks:** optional hard locks force specified player IDs into the squad/defined GW lineup while preserving positional and club constraints.
 
-If `solve=False`, the optimizer builds the formulation and returns `status: "BUILT"` without claiming an optimum. Infeasible or non-optimal states fail closed.
+If `solve=False`, the optimizer builds the formulation and returns `status: "BUILT"` without claiming an optimum. Infeasible or non-optimal solver statuses are reported as `NOT_CERTIFIED`. A constant `admissible: true` is not a certificate.
+
+### Known limitations
+
+The wildcard model builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain, and it does not follow the live gameweek. The default horizon is gameweeks 3–6 (`horizon=(3, 6)`). `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch the legacy modules at import so existing call sites keep working; those patches are compatibility shims. A write checks each player's id, team, position, and price against bootstrap data. That check is not selling-price or free-transfer accounting.
 
 ---
 
@@ -268,16 +272,78 @@ When same-level or higher-authority sources contradict, the state is `CONFLICTED
 | **[elite_adapter.py](fpl_skill/elite_adapter.py)** | Elite Cohort Tracker | Public-only, rate-limited cohort analysis |
 | **[account_adapter.py](fpl_skill/account_adapter.py)** | Authentication & Account State | Keychain/cookie adapter and verified-current lineage |
 | **[forecast_scorecard.py](fpl_skill/forecast_scorecard.py)** | Calibration Store | Forecast-vs-actual records and error metrics |
-| **[certification.py](fpl_skill/certification.py)** | Mathematical Proof Harness | Upper-bound admissibility and optimality certificates |
+| **[certification.py](fpl_skill/certification.py)** | Optimality certificate | Admissible or proven only from bound checks, or from CBC `Optimal` plus a constraint re-check |
 | **[backtest.py](fpl_skill/backtest.py)** | Empirical Backtest Harness | Pre-GW snapshots and post-GW evaluation |
 | **[direct_api.py](fpl_skill/direct_api.py)** | Resilient API Client | Official FPL endpoint integration and cache fallback |
 | **[prediction_engine.py](fpl_skill/prediction_engine.py)** | Lineup Generation | Constrained XI and captain/vice-captain generation |
 | **[transfer_intelligence.py](fpl_skill/transfer_intelligence.py)** | Transfer Evaluator | Multi-GW marginal value and option-value thresholds |
-| **[execution_sandbox.py](fpl_skill/execution_sandbox.py)** | Dry-Run Sandbox | Deterministic execution simulation |
+| **[execution.py](fpl_skill/execution.py)** | Account-write chokepoint | Fail-closed approval, sandbox, evidence, and firewall gate. Sends nothing unless every check passes |
+| **[approval_issuer.py](fpl_skill/approval_issuer.py)** | Interactive approval signer | Shows the exact change, requires typing `approve` at a TTY, and signs it with the operator's Ed25519 private key |
+| **[approval_verify.py](fpl_skill/approval_verify.py)** | Approval verifier | Checks the signature with the public key only, the binding, the expiry, and the single-use nonce ledger |
+| **[execution_sandbox.py](fpl_skill/execution_sandbox.py)** | Squad validator and dry-run | Budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI |
 | **[history_evidence.py](fpl_skill/history_evidence.py)** | Diagnostic Evidence Reader | Historical narrative diagnostics isolated from objectives |
-| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human Sign-Off Gate | Manual approval enforcement |
+| **[approval_gate.py](fpl_skill/approval_gate.py)** | Human sign-off gate | Mode check only (`FPL_MODE` must be `approval` or `autonomous`). Passing it does not approve a change |
 | **[watch.py](fpl_skill/watch.py)** | Live State Watcher | Real-time squad change notifications |
 | **[cli.py](fpl_skill/cli.py)** | Command-Line Interface | Packaged Click CLI entry point |
+
+---
+
+## Account-Write Approval Architecture
+
+Every account write goes through one function, `fpl_skill.execution.execute_account_mutation`. It refuses to send anything unless every step below passes, in this order:
+
+1. **Mode check** (`approval_gate.ApprovalGate.check_mode`). `FPL_MODE` must be `approval` or `autonomous`; `advisory` (the default) never writes. `autonomous` does not skip any later step.
+2. **Signed approval record.** A missing record is refused. The record is verified by `fpl_skill.approval_verify.verify_approval_record` against the public key from `FPL_APPROVAL_PUBLIC_KEY` (a file path). The signature covers the team ID, endpoint, SHA-256 of the canonical JSON body, nonce, and expiry. A different team, endpoint, or body, a bad signature, or an expired record is refused.
+3. **Squad validation** against a fresh bootstrap player index (`execution_sandbox.validate_picks`): budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI.
+4. **Evidence policy and temporal firewall**, when evidence claims or historical snapshots are supplied.
+5. **Fresh account read.** Ownership is re-read through the account adapter for the given team ID; anything other than `VERIFIED_CURRENT` is refused. No cached flag is used.
+6. **Nonce consumption.** The nonce is recorded in a single-use ledger (`FPL_APPROVAL_NONCE_DIR`, default `~/.cache/fpl-skill/approval-nonces`, files created with mode 0600). A second use of the same record is refused.
+7. **Explicit transport.** Without an explicit `transport` or `session`, no network connection is opened.
+
+### Issuing an approval
+
+Approvals are created out of band by the operator, never by the agent process:
+
+```bash
+export FPL_TEAM_ID=YOUR_ENTRY_ID
+python -m fpl_skill.approval_issuer \
+  --endpoint /my-team/YOUR_ENTRY_ID/ \
+  --payload-file change.json \
+  --signing-key /path/outside/repo/fpl-approval-private.pem \
+  --out approval.json
+```
+
+The issuer prints the team ID, endpoint, and exact body, then requires typing `approve` on an interactive TTY. It generates a random 32-byte nonce and an expiry (default 10 minutes) and writes the signed record. Signing and verification use `openssl pkeyutl` with an Ed25519 key, so `openssl` must be installed; any openssl failure counts as an invalid signature.
+
+### Key handling
+
+* Generate a key pair with `openssl genpkey -algorithm ED25519 -out private.pem` and `openssl pkey -in private.pem -pubout -out public.pem`.
+* The process that runs the executor should hold only the **public** key (`FPL_APPROVAL_PUBLIC_KEY`). The verifier rejects any key text containing `PRIVATE KEY`.
+* Keep the private key (`--signing-key` or `FPL_APPROVAL_SIGNING_KEY`) outside the repository and out of reach of any agent or automated process. Anyone who can read it can approve writes.
+* `FPL_TEAM_ID` is read from the environment; it is not hard-coded.
+
+---
+
+## Credential Security
+
+Authenticated reads use an FPL session cookie that the account adapter reads from the macOS Keychain (service `fpl-agent`, account `auth/session`).
+
+* **Store it** with `-w` as the last argument and no value, so `security` prompts for it and the cookie stays out of shell history and the process list:
+  ```bash
+  security add-generic-password -s fpl-agent -a auth/session -w
+  ```
+* **Scope:** the cookie is a full login session for your FPL account. Treat it like a password. Never commit it, paste it into prompts or logs, or put it in environment files in the repository.
+* **Access:** macOS may ask you to allow access the first time the tools read the item. Allow only the tools you trust.
+* **Rotate or remove** it when you are done or if it may have leaked (logging out of FPL also invalidates the session):
+  ```bash
+  security delete-generic-password -s fpl-agent -a auth/session
+  ```
+
+---
+
+## Release Registry
+
+`MANIFEST.v2.json` is the active release registry; `fpl_skill/MANIFEST.v2.json` is a byte-identical packaged copy. `tests/test_manifest_completeness.py` (run by CI through pytest) requires every non-empty module under `fpl_skill/`, the safety paths in `tests/compute_release_hash.py`, `SKILL.md`, `certification/NOTICE.md`, `prompts/master_fpl_rigorous.md`, `evidence/evidence-policy.md`, and every `contracts/*.md` to be listed in `canonical_files`. After changing any registered file, update `file_hashes` and `release_hash`, then run `python tests/compute_release_hash.py` to verify. Historical artifacts live in `archive/` and `evidence/archive/` and are not part of the active registry.
 
 ---
 
@@ -287,7 +353,7 @@ The CLI is packaged and installed as `fpl` (or executable via `python -m fpl_ski
 
 ### Account Verification
 ```bash
-export FPL_TEAM_ID=123456
+export FPL_TEAM_ID=YOUR_ENTRY_ID
 fpl verify
 ```
 
@@ -327,9 +393,8 @@ pip install -e .
 ### 3. Configure Credentials & Environment
 Keep authenticated session credentials outside the repository, preferably in the macOS Keychain:
 ```bash
-security add-generic-password \
-  -s fpl-agent -a auth/session \
-  -w '<your-fpl-session-cookie>'
+# Prompts for the cookie so it stays out of shell history (see Credential Security)
+security add-generic-password -s fpl-agent -a auth/session -w
 ```
 
 ```bash
@@ -356,6 +421,8 @@ python -m compileall fpl_skill tests
 
 Phase 1 additionally requires the manifest/hash tests and explicit expected-point semantic tests to pass.
 
+`tests/run_validation.py` is a manual live-data check. It is not collected by pytest and CI does not run it. The script's later cases read a local FPL cache or the public API, including `optimize_wildcard_squad` against that data. Run it by hand only when that cache or a deliberate live read is intended. `tests/validation-suite.md` describes the cases; it does not execute them.
+
 ---
 
 ## Repository Layout
@@ -374,6 +441,7 @@ fpl-skill/
 │   ├── cli.py
 │   ├── direct_api.py
 │   ├── elite_adapter.py
+│   ├── execution.py
 │   ├── execution_sandbox.py
 │   ├── forecast_scorecard.py
 │   ├── history_evidence.py
@@ -383,16 +451,15 @@ fpl-skill/
 │   ├── rank_aware_objective1.py
 │   ├── transfer_intelligence.py
 │   └── watch.py
+├── archive/                        # Historical, not active: MANIFEST.v1.1.0.json, SKILL_V2.md, FPL_SKILL.md
 ├── contracts/
 ├── schemas/
 ├── tests/
 ├── CHANGELOG.md
-├── FPL_SKILL.md                    # Deprecated redirect → SKILL.md
-├── MANIFEST.json                   # Legacy v1.1.0 manifest
+├── LICENSE
 ├── MANIFEST.v2.json                # Active v2 release registry
 ├── README.md
 ├── SKILL.md                        # Sole canonical agent skill contract
-├── SKILL_V2.md                     # Deprecated redirect → SKILL.md
 ├── VERSION
 └── pyproject.toml
 ```
@@ -413,4 +480,4 @@ Every module is bound to a versioned contract where applicable:
 
 ## License
 
-MIT License. Copyright (c) 2026. Built for mathematical correctness and competitive excellence in Fantasy Premier League.
+MIT License. Copyright (c) 2026 Saaed Imam. See [LICENSE](LICENSE).

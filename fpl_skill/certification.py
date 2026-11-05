@@ -62,42 +62,25 @@ def get_data_hash() -> str:
     return hashlib.sha256(data_str.encode()).hexdigest()[:16]
 
 
-def prove_upper_bound_admissible() -> Dict[str, Any]:
+def prove_upper_bound_admissible(bound_checks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Report upper-bound admissibility only when checks are supplied.
+
+    The intended bound is ``g_score + f_score + d_score + max_mid_ub`` on
+    ``fast_eval_squad_ep``. That statement is not itself evidence. Each check
+    is ``{"bound": ..., "true_score": ...}`` and admissibility requires every
+    bound to be at least the evaluated score. No checks means not admissible.
     """
-    MATHEMATICAL PROOF: The upper bound used in Branch-and-Bound is admissible.
+    from fpl_skill.optimality import prove_bound_checks
 
-    Upper Bound: g_score + f_score + d_score + max_mid_ub
-    where:
-    - g_score = max possible GKP points for GW3-6 (best GKP in partial solution)
-    - f_score = max possible FWD points for GW3-6 (best 3 FWD in partial solution)
-    - d_score = max possible DEF points for GW3-6 (best 5 DEF in partial solution)
-    - max_mid_ub = max possible MID points for GW3-6 (best 5 MID overall)
-
-    PROOF:
-    fast_eval_squad_ep(gks, defs, mids, fwds) for GW3-6 computes:
-    For each GW: max over 7 formations of (best_gk + sum(best_n_def) + sum(best_n_mid) + sum(best_n_fwd)) + best_attacker
-
-    For any partial combination (g, f, d), the true score with any mid completion m is:
-    sum_gw max_formation(...) + best_attacker
-
-    The upper bound uses:
-    - For GK: max(g[0].ep_gw[gw], g[1].ep_gw[gw]) = g_val (exact for given GKs)
-    - For FWD: sum of top 3 f_vals (exact for given FWDs, as we always use top 3)
-    - For DEF: sum of top 5 d_vals (exact for given DEFs, as we always use up to 5)
-    - For MID: max possible = max_mid_ub (which is the absolute best 5 MIDs overall)
-
-    Since for any MID completion, the actual MID contribution <= max_mid_ub,
-    and the formation maximization can only decrease or stay same when MIDs are suboptimal,
-    the upper bound is ADMISSIBLE (never underestimates true maximum).
-
-    QED: upper_bound >= true_score for any completion.
-    """
+    evidence = prove_bound_checks(bound_checks)
     return {
         "theorem": "Branch_and_Bound_Upper_Bound_Admissibility",
-        "statement": "For any partial combination (GK, FWD, DEF), the bound g_score + f_score + d_score + max_mid_ub is an admissible upper bound on fast_eval_squad_ep for any MID completion.",
-        "proof": "The fast_eval_squad_ep function computes, for each GW, the maximum over 7 legal formations of (gk + sum(def) + sum(mid) + sum(fwd)) + best_attacker. For fixed GK/FWD/DEF, the MID contribution is maximized when we have the absolute best 5 MIDs (max_mid_ub). Any other MID combination yields <= this value. Formation maximization is monotonic in MID quality. Therefore bound >= true optimum for any completion.",
-        "admissible": True,
-        "verified": True,
+        "statement": "For any partial combination (GK, FWD, DEF), the bound g_score + f_score + d_score + max_mid_ub is an admissible upper bound on fast_eval_squad_ep for any MID completion only when checked against evaluated scores.",
+        "proof_note": "Admissibility is true only when bound checks are supplied and none of them underestimate the evaluated score.",
+        "admissible": evidence["admissible"],
+        "verified": evidence["verified"],
+        "checks": evidence["checks"],
+        "failures": evidence["failures"],
     }
 
 
@@ -276,7 +259,7 @@ def constraint_verification(squad: List[Dict[str, Any]], budget: float = 100.0) 
         "valid": len(violations) == 0,
         "violations": violations,
         "pos_counts": dict(pos_counts),
-        "max_per_club": max(team_counts.values()),
+        "max_per_club": max(team_counts.values()) if team_counts else 0,
         "total_cost_m": total_cost / 10.0,
     }
 
@@ -386,8 +369,24 @@ def generate_certificate(bb_result: Dict[str, Any],
                           constraint_check: Dict[str, Any],
                           formation_check: Dict[str, Any],
                           sensitivity: Dict[str, Any],
-                          data_hash: str) -> Dict[str, Any]:
-    """Generate formal optimality certificate."""
+                          data_hash: str,
+                          bound_checks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Generate an optimality certificate from solver evidence, not a constant."""
+    upper = prove_upper_bound_admissible(bound_checks)
+    verified_constraints = constraint_verification(bb_result.get("squad") or [])
+    milp_cert = bb_result.get("optimality_certificate")
+    if isinstance(milp_cert, dict) and milp_cert.get("optimality_proven") and verified_constraints.get("valid"):
+        proven = True
+        solver_status = milp_cert.get("solver_status")
+        objective_value = milp_cert.get("objective_value")
+    else:
+        proven = False
+        metadata = bb_result.get("optimization_metadata") or {}
+        solver_status = metadata.get("solver_status", "UNVERIFIED")
+        objective_value = metadata.get("best_score")
+    if constraint_check.get("valid") is False:
+        proven = False
+        verified_constraints = constraint_check
     cert = {
         "certification_type": "FPL_Wildcard_Global_Optimality",
         "version": "2.0",
@@ -406,7 +405,10 @@ def generate_certificate(bb_result: Dict[str, Any],
             "evaluation_horizon": [3, 4, 5, 6],
             "data_source": "FPL_DIRECT_API (live)",
         },
-        "upper_bound_proof": prove_upper_bound_admissible(),
+        "solver_status": solver_status,
+        "objective_value": objective_value,
+        "optimality_proven": proven,
+        "upper_bound_proof": upper,
         "branch_and_bound": {
             "method": "BRANCH_AND_BOUND_INTEGER_PROGRAM",
             "candidate_space_size": bb_result["optimization_metadata"]["candidate_space_size"],
@@ -415,7 +417,8 @@ def generate_certificate(bb_result: Dict[str, Any],
             "pruning_bound": bb_result["optimization_metadata"]["pruning_bound"],
             "score": bb_result["optimization_metadata"]["best_score"],
             "exhaustive": bb_result["optimization_metadata"]["exhaustive"],
-            "optimality_proven": bb_result["optimization_metadata"]["optimality_proven"],
+            "claimed_optimality_proven": bb_result["optimization_metadata"].get("optimality_proven"),
+            "optimality_proven": proven,
         },
         "exhaustive_verification": {
             "total_search_space": exhaustive_result["total_combinations"],
@@ -426,7 +429,7 @@ def generate_certificate(bb_result: Dict[str, Any],
             "max_mid_ub": exhaustive_result["max_mid_ub"],
         },
         "equivalence_verification": verify_bb_against_exhaustive(bb_result, exhaustive_result),
-        "constraint_verification": constraint_verification(bb_result["squad"]),
+        "constraint_verification": verified_constraints,
         "formation_verification": formation_check,
         "sensitivity_analysis": sensitivity,
         "optimal_squad": {
@@ -549,12 +552,12 @@ def run_full_certification() -> Dict[str, Any]:
     print(f"Certificate: {cert_path}")
 
     overall_pass = (
-        cert['equivalence_verification']['verification'] == 'PASSED' and
-        cert['upper_bound_proof']['admissible'] and
-        cert['constraint_verification']['valid'] and
-        cert['formation_verification']['formation_valid'] and
-        cert['formation_verification']['captain_attacking'] and
-        cert['formation_verification']['vice_captain_attacking']
+        cert.get("optimality_proven") is True
+        and cert["solver_status"] == "Optimal"
+        and cert['constraint_verification']['valid']
+        and cert['formation_verification']['formation_valid']
+        and cert['formation_verification']['captain_attacking']
+        and cert['formation_verification']['vice_captain_attacking']
     )
 
     print(f"\nOVERALL: {'✅ CERTIFIED OPTIMAL' if overall_pass else '❌ CERTIFICATION FAILED'}")

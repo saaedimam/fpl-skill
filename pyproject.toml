@@ -5,14 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fpl-skill"
 version = "2.1.0rc1"
-description = "Autonomous MILP optimization engine and advisory agent skill for Fantasy Premier League"
+description = "Advisory MILP tools and agent skill for Fantasy Premier League. Account writes fail closed."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
   "click>=8.0.0",
   "pulp>=2.7.0",
-  "requests>=2.28.0",
 ]
 
 [project.optional-dependencies]

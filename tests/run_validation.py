@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
-FPL Skill v1.1.0 — Executable Validation Suite.
+FPL Skill v1.1.0 — Manual validation harness.
 
-Every TEST-* function below performs a real assertion against sample data
-structures / logic implementations, and reports PASS or FAIL. Nothing here
-is asserted without being checked. Run with: python3 run_validation.py
+This file is not part of pytest or CI. The schema and sample-data cases are
+self-contained, but `test_direct_api_caching`, `run_30_regression_tests`, and
+`run_optimizer_integrity_tests` read a local FPL cache or call the public API.
+Do not treat a green `pytest` run as a run of this script.
+
+Run by hand, only when that cache or a deliberate live read is intended:
+
+    python3 tests/run_validation.py
 """
 import json
 import math
@@ -633,7 +638,14 @@ def run_optimizer_integrity_tests():
     # TEST-OPT-008: Wildcard metadata proves branch-and-bound optimization guarantee
     wc_res = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map)
     meta = wc_res["optimization_metadata"]
-    record("TEST-OPT-008", meta["exhaustive"] is True and meta["optimality_proven"] is True and meta["branches_explored"] > 0, f"Wildcard proven optimal via {meta['optimization_method']} (Explored: {meta['branches_explored']}, Pruned: {meta['branches_pruned']})")
+    record(
+        "TEST-OPT-008",
+        meta.get("solver_status") == "NOT_SOLVED_BY_CBC"
+        and meta.get("optimality_proven") is False
+        and meta.get("branches_explored", 0) > 0,
+        "Wildcard branch-and-bound does not emit a CBC optimality certificate "
+        f"(Explored: {meta['branches_explored']}, Pruned: {meta['branches_pruned']})",
+    )
 
     # TEST-OPT-009: Team normalization verification across player pool
     sample_p = [p for p in all_players if p.get("web_name") in ["B.Fernandes", "Haaland", "Palmer", "Isak", "Semenyo"]]

@@ -1,6 +1,6 @@
 # GLOBAL 15-Player Certification Contract (D0→D4)
 
-**Status:** `REQUIRED` for Top 0.03% (2,500 pt trajectory). Currently `NOT_CERTIFIED`.
+**Status:** `REQUIRED` for Top 0.03% (2,500 pt trajectory). Certification status is not recorded in this document; it is determined per solve by `fpl_skill/optimality.py` (`OPTIMAL` only for CBC `Optimal` plus a passing constraint re-check, otherwise `NOT_CERTIFIED`).
 
 ## Proven objective (frozen)
 - `calculate_player_gw_ep(player, gw, fixture_map)` — GW-specific xPts from role/minutes/availability/xG/xA/FDR/venue. NOT raw form or point totals.
@@ -14,12 +14,12 @@
 
 ## What "GLOBAL 15 CERTIFIED" means
 A claim is GLOBAL if:
-1. The 15 was solved over the COMPLETE search space (no truncation — `[:10]/[:30]/[:40]` removed in this branch);
+1. The 15 was solved over the COMPLETE search space (no truncation — the old `[:10]/[:30]/[:40]` limits are removed);
 2. The optimizer is an exact encoding of the proven production objective (the MILP in `fpl_skill/optimizer.py` does this: squad + per-GW XI (legal formations) + attacking captain + budget + club-max-3 + parameterized hard locks, solved by CBC);
 3. The solution is reproducible: dataset hash + squad IDs + GW-by-GW XI/captain are recorded.
 
-## Current state
-- Branch-and-bound in `fpl_apify_skill.py` had `[:10]/[:30]/[:40]` truncation — heuristic best-effort, NOT globally optimal (fixed in this branch).
+## Optimizer status
+- `optimize_wildcard_squad` in `fpl_skill/api_legacy.py` is a branch-and-bound over the full filtered positional pools. It is not a certificate and must never be reported as globally optimal.
 - Local 1-/2-swap search on `fast_eval_squad_ep` is a local 2-optimum only (see `certification/NOTICE.md`).
 - An exact MILP (`fpl_skill/optimizer.py`) exists that encodes the full production objective over the parameterized domain.
 
@@ -29,4 +29,9 @@ A claim is GLOBAL if:
 - GW3 XI + captain/vice + bench with `gw_ep` (bench re-calculated via `calculate_player_gw_ep`, not stale `p['gw_ep']`).
 - GW3-GW4 and GW3-GW6 totals via `evaluate_squad_multi_gw(..., hard_xi_locks)` (GW3-locked, GW4-6 unlocked).
 - D4 counterfactual: best 1-FT from the exact D0 via `find_best_one_ft` evaluated on verified EP (NOT form).
-- Historical-matchup and strategy evidence layers: diagnostic-only, never overrides `gw_ep` leader; provided via `fpl_history_evidence.py`, `schemas/prediction.schema.json`.
+- Historical-matchup and strategy evidence layers: diagnostic-only, never overrides `gw_ep` leader; provided via `fpl_skill/history_evidence.py`, `schemas/prediction.schema.json`.
+
+## Historical provenance
+These notes describe earlier code that is no longer in this repository. They are kept for traceability only and are not current requirements.
+- The original branch-and-bound lived in `fpl_apify_skill.py` and used `[:10]/[:30]/[:40]` truncation, a heuristic best-effort search that was not globally optimal. The truncation was later removed (see `fpl_skill/api_legacy.py`).
+- Historical-matchup evidence was originally provided by `fpl_history_evidence.py`; the current module is `fpl_skill/history_evidence.py`.

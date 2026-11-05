@@ -1,7 +1,6 @@
 {
-  "release_hash": "c4ed43c59332b9cdd4ab2deeb54fdd6b52bfa97a408f4640a8d0ea728367805b",
-  "files_hashed": 41,
+  "release_hash": "6903fb28e2467eb31a2c25120f70efc2e66697fc13e12bff960c611009986cdf",
+  "files_hashed": 70,
   "reproducible": true,
-  "method": "SHA256 over sorted canonical files (fpl_skill/, contracts/, schemas/)",
-  "timestamp": "2026-09-10T20:32:55.587460"
+  "method": "SHA256 over sorted path:sha256\\n records declared by MANIFEST.v2.json"
 }

@@ -6,45 +6,35 @@ Validates the source-authority hierarchy rules documented in:
 - evidence/evidence-policy.md   (operating summary: silence-override, CONFLICTED,
   corroboration-promotion rules)
 
-The evidence *enforcement layer* (an evaluator that consumes claims and returns
-decisions/states) is NOT yet coded in fpl_skill/ as of v1.1.0. The L0-L6 hierarchy,
-CONFLICTED resolution, and corroboration gates exist as *contract prose* only.
-
-Per task spec: structural-rule tests may be placeholders / XFAIL as long as at least
-one test is executable and each test documents the rule it validates.
+The enforcement layer is ``fpl_skill.evidence_policy.evaluate_evidence``. It is
+called by the execution chokepoint and the prediction engine when claims are
+attached. These tests exercise that function directly.
 """
-import pytest
-import re
 from pathlib import Path
+
+from fpl_skill.evidence_policy import evaluate_evidence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_CONTRACT = REPO_ROOT / "contracts" / "source-contract.md"
 EVIDENCE_POLICY = REPO_ROOT / "evidence" / "evidence-policy.md"
 
 
-@pytest.mark.xfail(
-    reason="Structural rule only: L5/L6-solo rejection is documented in "
-           "source-contract.md, but no decision/evidence evaluator exists in "
-           "fpl_skill/ to enforce it (v1.1.0). Becomes executable when the "
-           "evidence layer is integrated (Phase 3+).",
-    strict=False,
-)
 def test_l5_l6_solo_rejection():
-    """
-    L5/L6 evidence alone must never trigger a MATERIAL decision.
-    """
-    # Test structure:
-    # 1. Create evidence with source_level = "L5" or "L6"
-    # 2. Call decision function / evidence evaluator
-    # 3. Assert decision.confidence != "high" or decision.action != BUY/SELL/etc.
-    #    OR assert explicitly that L5 solo is rejected for material decisions
-    #
-    # For v1.1.0: structural test only — the rule is encoded in the contract
-    # prose ("lower-authority source never silently overrides a higher-authority
-    # source"), not in a callable decision layer. When fpl_skill gains an
-    # evidence evaluator, implement: L5/L6-only claims MUST NOT yield a
-    # confidence above "signal_only" / any MATERIAL action.
-    assert False, "Structural placeholder — see docstring for enforcement spec"
+    """L5/L6 evidence alone must never trigger a MATERIAL decision."""
+    for level in ("L5", "L6"):
+        decision = evaluate_evidence(
+            [{
+                "level": level,
+                "claim": "Player should be bought",
+                "fact_key": "transfer",
+                "source": "podcast" if level == "L5" else "social",
+            }],
+            proposed_action="BUY",
+        )
+        assert decision["material_action_allowed"] is False
+        assert decision["confidence"] == "signal_only"
+        assert decision["action"] == "HOLD"
+        assert decision["action"] != "BUY"
 
 
 def test_source_hierarchy_ordering():
@@ -76,56 +66,48 @@ def test_source_hierarchy_ordering():
         assert rank == int(level[1]), f"{level} rank mismatch"
 
 
-@pytest.mark.xfail(
-    reason="Structural rule only: conflicting same-or-higher-authority claims must be "
-           "marked CONFLICTED per evidence-policy.md, but no evaluate_evidence() "
-           "function exists in fpl_skill/ to assert against (v1.1.0). Becomes "
-           "executable when evidence resolution layer lands.",
-    strict=False,
-)
 def test_conflicted_evidence_state():
+    """Same-or-higher authority disagreements stay CONFLICTED.
+
+    A lower source does not override a higher one, and it does not create a
+    conflict by itself. L0 injured vs L1 available resolves to the L0 claim.
+    Two L0 claims that disagree stay CONFLICTED.
     """
-    When two authority sources conflict, mark as CONFLICTED — never silently resolved.
-    """
-    # Test:
-    # 1. FPL API says player injured (L0)
-    # 2. Club says player available (L1)
-    # 3. Assert state == "CONFLICTED", not silently "injured" or "available"
-    #
-    # Mock: conflicting evidence dict
-    conflicting_evidence = {
-        "L0_source": "FPL API",
-        "L0_claim": "Player injured",
-        "L1_source": "Club statement",
-        "L1_claim": "Player available",
-    }
-    #
-    # Evidence-policy.md: "Conflicting same-or-higher-authority claims -> CONFLICTED
-    # carried through output, never silently resolved."
-    # Structural placeholder — no evaluate_evidence(conflicting_evidence) exists yet.
-    # Future assertion:
-    #   result = evaluate_evidence(conflicting_evidence)
-    #   assert result["state"] == "CONFLICTED"
-    assert False, "Structural placeholder — see docstring for enforcement spec"
+    conflicted = evaluate_evidence([
+        {"level": "L0", "claim": "Player injured", "fact_key": "status", "source": "FPL API"},
+        {"level": "L0", "claim": "Player available", "fact_key": "status", "source": "FPL status mirror"},
+    ])
+    assert conflicted["state"] == "CONFLICTED"
+    assert conflicted["material_action_allowed"] is False
+    assert conflicted["action"] == "HOLD"
+    assert conflicted["resolved_claim"] is None
+
+    lower_does_not_override = evaluate_evidence([
+        {"level": "L0", "claim": "Player injured", "fact_key": "status", "source": "FPL API"},
+        {"level": "L1", "claim": "Player available", "fact_key": "status", "source": "Club statement"},
+    ])
+    assert lower_does_not_override["state"] != "CONFLICTED"
+    assert lower_does_not_override["resolved_claim"] == "Player injured"
+    assert lower_does_not_override["material_action_allowed"] is True
 
 
-@pytest.mark.xfail(
-    reason="Structural rule only: L5 corroboration gate is documented in "
-           "source-contract.md (lower source must be corroborated at/above the level "
-           "of the claim it contradicts), but no confidence-downgrade logic is coded "
-           "in fpl_skill/ (v1.1.0). Becomes executable when evidence layer integrates.",
-    strict=False,
-)
 def test_l5_requires_l0_corroboration():
-    """
-    L5 signal alone = no action. L5 + L0-L4 corroboration = actionable.
-    """
-    # Test:
-    # 1. L5 only: "Podcast says player hot" -> confidence = "signal_only"
-    # 2. L5 + L0: "Podcast + form trending" -> confidence can be "medium"
-    #
-    # Structural rule (source-contract.md): "a lower source must be corroborated by a
-    # source at or above the level of the claim it contradicts, or must itself be
-    # promoted to OFFICIAL/VERIFIED_CURRENT_STATE via the state machines."
-    # Structural placeholder — no confidence-downgrade function exists yet.
-    assert False, "Structural placeholder — see docstring for enforcement spec"
+    """L5 signal alone is not actionable. L5 corroborated at L0 can be medium."""
+    solo = evaluate_evidence(
+        [{"level": "L5", "claim": "Player is hot", "fact_key": "form", "source": "podcast"}],
+        proposed_action="BUY",
+    )
+    assert solo["confidence"] == "signal_only"
+    assert solo["material_action_allowed"] is False
+    assert solo["action"] == "HOLD"
+
+    corroborated = evaluate_evidence(
+        [
+            {"level": "L5", "claim": "Player is hot", "fact_key": "form", "source": "podcast"},
+            {"level": "L0", "claim": "Player is hot", "fact_key": "form", "source": "FPL API"},
+        ],
+        proposed_action="BUY",
+    )
+    assert corroborated["confidence"] == "medium"
+    assert corroborated["material_action_allowed"] is True
+    assert corroborated["action"] == "BUY"

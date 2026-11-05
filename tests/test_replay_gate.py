@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Realtime acceptance gate — public-data replay.
 
-Uses a real manager (entry 1449315, "Young Guns") and the real GW3 window.
+Uses a placeholder entry id and a fixed GW3 window. The id is not a live account.
 The gate proves the observation layer is deterministic and restart-safe:
   1. identical snapshots -> zero events
   2. one genuine state transition -> exactly one event
@@ -22,7 +22,7 @@ from fpl_skill.observation import ingest, store, watcher
 from fpl_skill.observation.diff import (normalize_history, normalize_picks,
                                         transfer_keys)
 
-MID = "1449315"
+MID = "1"
 
 
 def build(old_picks, old_hist, old_tr, new_picks, new_hist, new_tr, path):

@@ -50,3 +50,16 @@ FREEZE_SIGN_OFF.md
 # v2 freeze artifacts (manifest + evidence are canonical, must be tracked)
 !MANIFEST.v2.json
 !evidence/v2-adversarial-audit-2026-09-09.json
+
+# Tool caches and local editor files
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.swp
+
+# Approval signing keys must never be committed
+*.pem

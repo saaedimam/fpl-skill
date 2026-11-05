@@ -30,10 +30,15 @@ jobs:
           pip install -r requirements.txt
           pip install .
 
+      - name: Verify release manifest
+        run: |
+          python -c "from tests.compute_release_hash import verify_release_integrity; verify_release_integrity()"
+
       - name: Compile check
         run: |
           python -m compileall fpl_skill
 
       - name: Run test suite
         run: |
+          # tests/run_validation.py is a manual live-data harness and is not collected here.
           python -m pytest tests/ -ra

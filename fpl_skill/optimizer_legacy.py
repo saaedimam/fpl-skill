@@ -12,6 +12,8 @@ from typing import Optional, List, Tuple, Dict, Any
 from fpl_skill.api import get_fpl_data, normalize_dataset, calculate_player_gw_ep, VALID_FORMATIONS, select_best_legal_xi, evaluate_squad_multi_gw
 import pulp
 
+from fpl_skill.optimality import certificate_from_solve, wildcard_model
+
 FORMATIONS = list(VALID_FORMATIONS)  # All legal formations
 
 def load(horizon: Tuple[int, int] = (3, 6)):
@@ -35,7 +37,8 @@ def build_and_solve(
     player_locks: Optional[List[int]] = None,
     horizon: Tuple[int, int] = (3, 6),
     solve: bool = True,
-    time_limit: int = 60
+    time_limit: int = 60,
+    msg: bool = True,
 ) -> Dict[str, Any]:
     player_locks = list(player_locks or [])
     budget_int = int(round(budget * 10))
@@ -128,10 +131,15 @@ def build_and_solve(
             "variables_count": len(prob.variables()),
             "constraints_count": len(prob.constraints() if callable(prob.constraints) else prob.constraints),
             "data_hash": data_hash,
-            "players": players
+            "players": players,
+            "optimality_certificate": certificate_from_solve(
+                solver_status="BUILT",
+                objective_value=None,
+                budget=budget,
+            ),
         }
 
-    solver = pulp.PULP_CBC_CMD(msg=True, timeLimit=time_limit, gapRel=0, gapAbs=0)
+    solver = pulp.PULP_CBC_CMD(msg=msg, timeLimit=time_limit, gapRel=0, gapAbs=0)
     t0 = time.time()
     prob.solve(solver)
     elapsed = time.time() - t0
@@ -151,7 +159,12 @@ def build_and_solve(
             "raw": raw,
             "players": players,
             "ep": ep,
-            "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None)
+            "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None),
+            "optimality_certificate": certificate_from_solve(
+                solver_status=status,
+                objective_value=None,
+                budget=budget,
+            ),
         }
 
     obj = pulp.value(prob.objective)
@@ -162,11 +175,29 @@ def build_and_solve(
     by_gw_c = {g: [pid for pid in by_id if pulp.value(c[(pid,g)]) and pulp.value(c[(pid,g)]) > 0.5][0] for g in gws if any(pulp.value(c[(pid,g)]) and pulp.value(c[(pid,g)]) > 0.5 for pid in by_id)}
     by_gw_z = {g: [k for k in K if pulp.value(z[(k,g)]) and pulp.value(z[(k,g)]) > 0.5][0] for g in gws if any(pulp.value(z[(k,g)]) and pulp.value(z[(k,g)]) > 0.5 for k in K)}
 
+    squad_players = [by_id[pid] for pid in squad_ids]
+    recomputed = 0.0
+    for gameweek, xi_ids in by_gw_y.items():
+        for pid in xi_ids:
+            recomputed += float(ep[pid][gameweek])
+        captain_id = by_gw_c.get(gameweek)
+        if captain_id is not None:
+            recomputed += float(ep[captain_id][gameweek])
+    certificate = certificate_from_solve(
+        solver_status=status,
+        objective_value=obj,
+        squad=squad_players,
+        lineups=by_gw_y,
+        captains=by_gw_c,
+        budget=budget,
+        model=wildcard_model(recomputed),
+    )
     return {
         "status": status, "objective": obj, "elapsed": elapsed,
         "squad_ids": squad_ids, "by_gw_y": by_gw_y, "by_gw_c": by_gw_c, "by_gw_z": by_gw_z,
         "data_hash": data_hash, "raw": raw, "players": players, "ep": ep,
-        "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None)
+        "fm": next(iter([p.get("fixture_map") for p in players if p.get("fixture_map")]), None),
+        "optimality_certificate": certificate,
     }
 
 if __name__ == "__main__":
