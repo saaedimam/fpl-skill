@@ -207,10 +207,13 @@ def test_replayed_approval_sends_nothing(tmp_path):
     private_pem, public_pem = _openssl_keys(tmp_path)
     record = _issue(private_pem, payload)
     store = NonceStore(tmp_path / "nonces")
-    first = _run(
-        tmp_path, picks=picks, approval=record, public_key_pem=public_pem, nonce_store=store,
-    )
-    assert len(first.calls) == 1
+    first = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
+        _run(
+            tmp_path, picks=picks, approval=record, public_key_pem=public_pem,
+            nonce_store=store, session=first,
+        )
+    assert first.calls == []
     second = RecordingSession()
     with pytest.raises(ExecutionDenied, match="already used"):
         _run(
@@ -318,8 +321,10 @@ def test_account_state_is_read_fresh_inside_the_chokepoint(tmp_path, monkeypatch
 
     monkeypatch.setattr("fpl_skill.account_adapter.FPLAccountAdapter", FakeAdapter)
     picks = legal_picks()
-    first = _run(tmp_path, picks=picks, account_state_reader=None)
-    assert len(first.calls) == 1
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
+        _run(tmp_path, picks=picks, account_state_reader=None, session=session)
+    assert session.calls == []
     assert ("state", 4) in calls
     second = RecordingSession()
     with pytest.raises(ExecutionDenied, match="VERIFIED_CURRENT"):
@@ -458,19 +463,19 @@ def test_future_snapshot_sends_nothing(tmp_path):
     assert session.calls == []
 
 
-def test_authorized_write_uses_the_mock_session_once(tmp_path):
-    session = _run(tmp_path, mode="approval")
-    assert len(session.calls) == 1
+def test_valid_approval_still_sends_nothing(tmp_path):
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
+        _run(tmp_path, mode="approval", session=session)
+    assert session.calls == []
     assert session.state_calls == ["VERIFIED_CURRENT"]
-    call = session.calls[0]
-    assert call["url"].endswith(ENDPOINT)
-    assert "Cookie" not in call["headers"]
-    assert "cookie" not in {key.lower() for key in call["headers"]}
 
 
-def test_autonomous_still_requires_a_signed_approval(tmp_path):
-    session = _run(tmp_path, mode="autonomous")
-    assert len(session.calls) == 1
+def test_autonomous_approval_still_sends_nothing(tmp_path):
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
+        _run(tmp_path, mode="autonomous", session=session)
+    assert session.calls == []
     assert session.state_calls == ["VERIFIED_CURRENT"]
 
 
@@ -479,7 +484,7 @@ def test_library_refuses_to_open_its_own_connection(tmp_path):
     payload = _payload(picks)
     private_pem, public_pem = _openssl_keys(tmp_path)
     record = _issue(private_pem, payload)
-    with pytest.raises(ExecutionDenied, match="network"):
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
         execute_account_mutation(
             team_id=TEAM_ID,
             endpoint=ENDPOINT,
@@ -533,14 +538,13 @@ def test_script_transport_posts_only_after_the_gate(monkeypatch, tmp_path):
     picks = legal_picks()
     payload = _payload(picks)
     transport = module._build_transport(str(cookies))
-    with pytest.raises(ExecutionDenied, match="direct POST"):
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
         transport(ENDPOINT, payload)
     assert calls == []
 
-    _run(tmp_path, picks=picks, transport=transport)
-    assert len(calls) == 1
-    assert calls[0].get_method() == "POST"
-    assert calls[0].full_url.endswith(ENDPOINT)
+    with pytest.raises(ExecutionDenied, match="does not authorize"):
+        _run(tmp_path, picks=picks, transport=transport)
+    assert calls == []
 
 
 def test_all_python_apply_without_approval_fails_closed(monkeypatch, tmp_path):
@@ -621,9 +625,11 @@ def test_optimality_certificate_follows_cbc_status(monkeypatch):
     certificate = solved["optimality_certificate"]
     assert solved["status"] == "Optimal"
     assert certificate["solver_status"] == "Optimal"
-    assert certificate["optimality_proven"] is True
-    assert certificate["admissible"] is True
-    assert certificate["certificate"] == "OPTIMAL"
+    assert certificate["optimality_proven"] is False
+    assert certificate["admissible"] is False
+    assert certificate["full_rule_optimal"] is False
+    assert certificate["reduced_model_checked"] is True
+    assert certificate["certificate"] == "NOT_CERTIFIED"
     assert isinstance(certificate["objective_value"], float)
     assert certificate["constraint_recheck"]["valid"] is True
 
@@ -742,10 +748,7 @@ def test_write_verbs_exist_only_on_the_chokepoint():
             if isinstance(node, ast.keyword) and node.arg == "method" and isinstance(node.value, ast.Constant):
                 if str(node.value.value).upper() in {"POST", "PUT", "DELETE", "PATCH"}:
                     hits.append((relative, str(node.value.value).upper()))
-    assert set(hits) == {
-        ("fpl_skill/execution.py", "post"),
-        ("all.python", "POST"),
-    }
+    assert set(hits) == set()
     for path in roots:
         text = path.read_text(encoding="utf-8")
         assert "import requests" not in text

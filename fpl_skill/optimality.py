@@ -1,16 +1,9 @@
 """Evidence-backed optimality certificates for the reduced wildcard MILP.
 
-``optimality_proven`` is true only when all of the following hold:
-
-- CBC status is ``Optimal``
-- the solver objective is a finite number
-- that number matches an independent evaluation of the encoded objective
-- the certificate names the complete reduced-model constraint set
-- the returned squad, lineup, and attacking captain pass a constraint re-check
-
-A feasible squad plus an objective value is not a proof. ``full_rule_optimal``
-is always false: free transfers, hits, selling prices, and vice-captain are
-outside this model. Non-finite bounds and scores are rejected.
+``optimality_proven`` is always false. A finite CBC objective, a matching
+recomputation, and a constraint re-check can mark ``reduced_model_checked``.
+That is not proof of full-rule or global optimality. ``full_rule_optimal`` is
+always false, and ``certificate`` stays ``NOT_CERTIFIED``.
 """
 from __future__ import annotations
 
@@ -34,9 +27,10 @@ REQUIRED_MODEL_CONSTRAINTS = (
     "attacking_captain",
 )
 _LIMITATIONS = (
-    "Certificate scope is the reduced wildcard MILP only.",
+    "A reduced-model check is not proof of full-rule or global optimality.",
     "Free transfers, hits, selling prices, and vice-captain are not certified.",
     "full_rule_optimal is always false.",
+    "optimality_proven is always false.",
 )
 _OBJECTIVE_TOLERANCE = 1e-4
 
@@ -78,7 +72,7 @@ def certificate_from_solve(
     budget: float = 100.0,
     model: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build a certificate from solver status, the model contract, and a re-check."""
+    """Record a reduced-model check. Never issue a full-rule optimality proof."""
     if solver_status != "Optimal":
         return _refused(
             solver_status,
@@ -98,17 +92,18 @@ def certificate_from_solve(
         budget=budget,
     )
     model_check = _check_model(model, objective)
-    proven = objective is not None and recheck["valid"] and model_check["valid"]
+    reduced_checked = objective is not None and recheck["valid"] and model_check["valid"]
     return {
         "solver_status": solver_status,
         "objective_value": objective,
         "constraint_recheck": recheck,
         "model_check": model_check,
-        "admissible": proven,
-        "optimality_proven": proven,
+        "admissible": False,
+        "optimality_proven": False,
+        "reduced_model_checked": reduced_checked,
         "full_rule_optimal": False,
-        "claim_scope": "reduced_wildcard_milp" if proven else "none",
-        "certificate": "OPTIMAL" if proven else "NOT_CERTIFIED",
+        "claim_scope": "reduced_wildcard_milp" if reduced_checked else "none",
+        "certificate": "NOT_CERTIFIED",
         "limitations": list(_LIMITATIONS),
     }
 
@@ -121,6 +116,7 @@ def _refused(solver_status: str, recheck: Dict[str, Any], model_check: Dict[str,
         "model_check": model_check,
         "admissible": False,
         "optimality_proven": False,
+        "reduced_model_checked": False,
         "full_rule_optimal": False,
         "claim_scope": "none",
         "certificate": "NOT_CERTIFIED",

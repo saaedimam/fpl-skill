@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -15,6 +16,36 @@ from fpl_skill.probabilistic_ep1 import (
     ProbabilisticEPEngine, DistributionModelInputs, PlayerState, PlayerDistribution
 )
 from fpl_skill.optimizer import build_and_solve
+
+
+
+_EVENTS_NEXT_GW3 = [
+    {"id": g, "finished": g < 3, "data_checked": g < 3, "is_current": g == 2, "is_next": g == 3}
+    for g in range(1, 39)
+]
+
+_OFFLINE_SAMPLE = json.loads(
+    (Path(__file__).parent / "data" / "live_fpl_sample.json").read_text(encoding="utf-8")
+)
+
+
+def _offline_bootstrap(*, events=None):
+    """Bootstrap/fixtures from the committed live-schema sample (no network)."""
+    return {
+        "teams": _OFFLINE_SAMPLE["teams"],
+        "elements": _OFFLINE_SAMPLE["elements"],
+        "events": list(events) if events is not None else list(_OFFLINE_SAMPLE["events"]),
+    }
+
+
+def _offline_transfer_intelligence(*, events=None):
+    bootstrap = _offline_bootstrap(events=events)
+    profile = {"id": 12345, "last_deadline_bank": 50, "name": "Test FC"}
+    return (
+        patch.object(FPLAccountAdapter, "get_bootstrap", return_value=bootstrap),
+        patch.object(FPLAccountAdapter, "get_fixtures", return_value=_OFFLINE_SAMPLE["fixtures"]),
+        patch.object(FPLAccountAdapter, "get_profile", return_value=profile),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -71,16 +102,9 @@ def test_account_adapter_ownership_state_lineage():
 # 2. P0-BUG-002: Transfer Intelligence & EP Distinctions
 # ---------------------------------------------------------------------------
 
-_EVENTS_NEXT_GW3 = [
-    {"id": g, "finished": g < 3, "data_checked": g < 3, "is_current": g == 2, "is_next": g == 3}
-    for g in range(1, 39)
-]
 
 
 def test_transfer_intelligence_distinguishes_total_ep_and_gain():
-    ti = TransferIntelligence("12345")
-    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
-
     # Mock state, squad, and find_best_one_ft
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
@@ -95,6 +119,9 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence(events=_EVENTS_NEXT_GW3)
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 205.0}):
@@ -115,8 +142,6 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
 
 
 def test_transfer_intelligence_holds_when_gain_below_threshold():
-    ti = TransferIntelligence("12345")
-    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -130,6 +155,9 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence(events=_EVENTS_NEXT_GW3)
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 200.0}):
@@ -143,8 +171,6 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
 
 
 def test_transfer_intelligence_hit_threshold():
-    ti = TransferIntelligence("12345")
-    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -156,6 +182,9 @@ def test_transfer_intelligence_hit_threshold():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence(events=_EVENTS_NEXT_GW3)
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 200.0}):
@@ -212,8 +241,19 @@ def test_cli_verify_and_calibrate():
     assert res.exit_code == 1
     assert "FPL_TEAM_ID not set" in res.output
 
-    # Test verify with FPL_TEAM_ID
-    res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
+    # Test verify with FPL_TEAM_ID — mock account reads so the offline suite
+    # does not depend on live FPL connectivity (blocked by the test net guard).
+    with patch.object(FPLAccountAdapter, "get_active_event_id", return_value=1), \
+         patch.object(
+             FPLAccountAdapter,
+             "get_state",
+             return_value={
+                 "ownership_state": "UNAVAILABLE",
+                 "optimization_state": "OPTIMIZATION_BLOCKED",
+                 "squad_ids": [],
+             },
+         ):
+        res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
     assert res_with_id.exit_code == 0
     assert "FPL ACCOUNT" in res_with_id.output
     assert "Team ID: 12345" in res_with_id.output
@@ -333,8 +373,36 @@ def test_probabilistic_ep_scenario_probabilities_invariants():
 # 6. Optimizer solve=False and Infeasible Handling
 # ---------------------------------------------------------------------------
 
-def test_optimizer_solve_false_does_not_claim_optimum():
-    res = build_and_solve(budget=100.0, solve=False)
+
+
+def _offline_optimizer_load(horizon=(3, 6)):
+    """Synthetic optimizer load so build_and_solve tests need no live FPL."""
+    pos = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
+    teams = {t["id"]: t.get("name", str(t["id"])) for t in _OFFLINE_SAMPLE["teams"]}
+    gws = list(range(horizon[0], horizon[1] + 1)) if isinstance(horizon, tuple) else list(horizon)
+    players = []
+    for el in _OFFLINE_SAMPLE["elements"]:
+        players.append({
+            "player_id": el["id"],
+            "web_name": el.get("web_name", str(el["id"])),
+            "team": teams.get(el.get("team"), str(el.get("team"))),
+            "position": pos.get(el.get("element_type"), "MID"),
+            "now_cost": el.get("now_cost", 50),
+            "cost_int": el.get("now_cost", 50),
+            "form": float(el.get("form") or 0),
+            "selected_by_percent": float(el.get("selected_by_percent") or 0),
+            "minutes": int(el.get("minutes") or 0),
+            "status": el.get("status") or "a",
+        })
+    ep = {p["player_id"]: {gw: 1.0 for gw in gws} for p in players}
+    fm = {gw: {} for gw in gws}
+    return players, fm, ep, "offline-hash", {"source": "live_fpl_sample"}, gws
+
+
+def test_optimizer_solve_false_does_not_claim_optimum(monkeypatch):
+    import fpl_skill.optimizer_legacy as legacy
+    monkeypatch.setattr(legacy, "load", lambda horizon=None: _offline_optimizer_load((3, 6)))
+    res = build_and_solve(budget=100.0, solve=False, horizon=(3, 6), allow_past=True)
     assert res["status"] == "BUILT"
     assert res["objective"] is None
     assert res["squad_ids"] == []

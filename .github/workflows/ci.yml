@@ -29,6 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install .
+          # iproute2 provides `ip` for bringing loopback up inside the test netns.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iproute2
 
       - name: Verify release manifest
         run: |
@@ -38,7 +41,28 @@ jobs:
         run: |
           python -m compileall fpl_skill
 
-      - name: Run test suite
+      - name: Prove network namespace has no external egress
+        run: |
+          # Authoritative kernel boundary for tests.
+          # GitHub-hosted runners reject unprivileged user namespaces
+          # (`unshare --user --map-root-user` → uid_map Operation not permitted),
+          # so CI uses passwordless sudo + a root netns instead. Locally,
+          # `unshare --user --map-root-user --net` remains fine when permitted.
+          PYTHON_BIN="$(command -v python)"
+          sudo unshare --net -- env \
+            PATH="$PATH" \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            PYTHON_BIN="$PYTHON_BIN" \
+            bash -c 'ip link set lo up && "$PYTHON_BIN" tests/prove_netns_egress_denied.py'
+
+      - name: Run test suite (network namespace, loopback only)
         run: |
           # tests/run_validation.py is a manual live-data harness and is not collected here.
-          python -m pytest tests/ -ra
+          # FPL_TEST_NETNS=1 enables the libc connect(2)/ENETUNREACH netns proof in tests.
+          PYTHON_BIN="$(command -v python)"
+          sudo unshare --net -- env \
+            PATH="$PATH" \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            PYTHON_BIN="$PYTHON_BIN" \
+            FPL_TEST_NETNS=1 \
+            bash -c 'ip link set lo up && "$PYTHON_BIN" -m pytest tests/ -ra'

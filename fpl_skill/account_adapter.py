@@ -52,8 +52,24 @@ class FPLAccountAdapter:
         with urllib.request.urlopen(f"{self.base_url}/fixtures/", timeout=10) as resp:
             return json.loads(resp.read().decode('utf-8'))
 
+    def _fetch_entry(self) -> Optional[Dict[str, Any]]:
+        try:
+            req = urllib.request.Request(
+                f"{self.base_url}/entry/{self.team_id}/",
+                headers={"User-Agent": "Mozilla/5.0"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+
     def get_profile(self) -> Dict[str, Any]:
-        """Fetch manager profile including bank, rank, and squad value."""
+        """Fetch manager profile including bank, overall rank, and team name.
+
+        An empty team id does not open a connection. Otherwise the public
+        entry is read first, then an authenticated GET may update the bank.
+        """
         if not self.team_id:
             return {
                 "id": None,
@@ -61,28 +77,9 @@ class FPLAccountAdapter:
                 "last_deadline_bank": 0,
                 "overall_rank": 0,
                 "total_points": 0,
-                "source": "DEFAULT"
+                "source": "DEFAULT",
             }
 
-        profile = {
-            "id": self.team_id,
-            "name": f"Team {self.team_id}",
-            "last_deadline_bank": 0,
-            "overall_rank": 0,
-            "total_points": 0,
-            "source": "PUBLIC_ENTRY"
-        }
-
-    def _fetch_entry(self) -> Optional[Dict[str, Any]]:
-        try:
-            req = urllib.request.Request(f"{self.base_url}/entry/{self.team_id}/", headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                return json.loads(resp.read().decode('utf-8'))
-        except Exception:
-            return None
-
-    def get_profile(self) -> Dict[str, Any]:
-        """Fetch manager profile including bank, overall rank, and team name."""
         profile = {
             "id": int(self.team_id) if str(self.team_id).isdigit() else self.team_id,
             "name": "Unknown",

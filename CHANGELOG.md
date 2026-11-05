@@ -3,10 +3,19 @@
 
 ## Unreleased — fail-closed execution
 
+### Added
+- Test-only network isolation: CI runs pytest inside `sudo unshare --net` with only loopback (GH runners block unprivileged user namespaces), plus an autouse pytest guard (`tests/conftest.py`, `tests/network_isolation.py`) that blocks non-loopback connects and FPL-host POST/PUT/PATCH/DELETE via socket/urllib/http.client. Documented limits: monkeypatches are incomplete; the namespace is the real CI boundary (`tests/README.md`).
+- `FPL_ALLOW_TEST_NETWORK=1` is ignored when `CI`/`GITHUB_ACTIONS` is set (pytest guard stays on); a warning is emitted when the local opt-out is honored.
+
+### Changed
+- `tests/test_forensic_repairs.py` no longer depends on live FPL GETs during TransferIntelligence construction or `cli verify` (mocked for the offline suite / netns CI).
+
 ### Fixed
 - Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a signed out-of-band approval, a write-permitting `FPL_MODE`, a fresh `VERIFIED_CURRENT` account read, and sandbox validation all pass. The executor cannot mint the signature. A hash of the payload, a replayed or expired approval, or a caller-supplied state string sends no request.
 - `all.python` reads `FPL_TEAM_ID` and stops when it is missing.
-- Optimality certificates require a finite CBC objective, an independent evaluation of the encoded wildcard objective, and the complete reduced-model constraint set. A feasible squad with an objective value is not a proof. Non-finite bounds are rejected. `full_rule_optimal` stays false.
+- Account mutations are refused before any outbound write. A signed approval, `FPL_MODE`, and an injected transport cannot authorize transmission.
+- Optimality reports stay `NOT_CERTIFIED`. A reduced MILP check does not set `optimality_proven` or `full_rule_optimal`.
+- `FPLAccountAdapter.get_profile` is defined once. An empty team id does not open a connection.
 - The release registry lists the account-write and certificate modules and their regression tests. CI recomputes that registry instead of trusting the stored hash.
 - Evidence-policy rules (L5/L6 signal-only, `CONFLICTED`, L3+ corroboration) are enforced by `fpl_skill.evidence_policy` and consulted on the execution and prediction paths. The temporal firewall is consulted before those paths accept historical snapshots.
 
