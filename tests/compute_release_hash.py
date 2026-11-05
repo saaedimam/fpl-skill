@@ -22,6 +22,9 @@ REQUIRED_SAFETY_PATHS = (
     "tests/test_certificate_contract.py",
     "tests/test_compute_release_hash.py",
     "tests/test_execution_safety.py",
+    "tests/test_network_guard.py",
+    "tests/network_isolation.py",
+    "tests/conftest.py",
     "tests/compute_release_hash.py",
 )
 

@@ -17,6 +17,38 @@ from fpl_skill.probabilistic_ep1 import (
 from fpl_skill.optimizer import build_and_solve
 
 
+
+def _offline_bootstrap():
+    """Minimal bootstrap so TransferIntelligence can construct without network."""
+    teams = [{"id": i, "name": f"Club{i}"} for i in range(1, 21)]
+    elements = []
+    for i in range(1, 16):
+        if i == 1:
+            et = 1
+        elif i <= 5:
+            et = 2
+        elif i <= 10:
+            et = 3
+        else:
+            et = 4
+        elements.append({
+            "id": i,
+            "element_type": et,
+            "now_cost": 45,
+            "team": ((i - 1) % 20) + 1,
+            "web_name": f"Player{i}",
+        })
+    return {"teams": teams, "elements": elements, "events": []}
+
+
+def _offline_transfer_intelligence():
+    bootstrap = _offline_bootstrap()
+    profile = {"id": 12345, "last_deadline_bank": 50, "name": "Test FC"}
+    return patch.object(FPLAccountAdapter, "get_bootstrap", return_value=bootstrap), \
+        patch.object(FPLAccountAdapter, "get_fixtures", return_value=[]), \
+        patch.object(FPLAccountAdapter, "get_profile", return_value=profile)
+
+
 # ---------------------------------------------------------------------------
 # 1. P0-BUG-001 & Account Adapter / Profile / Ownership Tests
 # ---------------------------------------------------------------------------
@@ -72,8 +104,6 @@ def test_account_adapter_ownership_state_lineage():
 # ---------------------------------------------------------------------------
 
 def test_transfer_intelligence_distinguishes_total_ep_and_gain():
-    ti = TransferIntelligence("12345")
-
     # Mock state, squad, and find_best_one_ft
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
@@ -88,6 +118,9 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence()
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 205.0}):
@@ -108,7 +141,6 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
 
 
 def test_transfer_intelligence_holds_when_gain_below_threshold():
-    ti = TransferIntelligence("12345")
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -122,6 +154,9 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence()
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 200.0}):
@@ -135,7 +170,6 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
 
 
 def test_transfer_intelligence_hit_threshold():
-    ti = TransferIntelligence("12345")
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -147,6 +181,9 @@ def test_transfer_intelligence_hit_threshold():
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
+    boot, fix, prof = _offline_transfer_intelligence()
+    with boot, fix, prof:
+        ti = TransferIntelligence("12345")
     with patch.object(ti.adapter, "get_state", return_value=mock_state), \
          patch("fpl_skill.transfer_intelligence.find_best_one_ft", return_value=mock_best), \
          patch("fpl_skill.transfer_intelligence.evaluate_squad_multi_gw", return_value={"total_ep": 200.0}):
@@ -203,8 +240,19 @@ def test_cli_verify_and_calibrate():
     assert res.exit_code == 1
     assert "FPL_TEAM_ID not set" in res.output
 
-    # Test verify with FPL_TEAM_ID
-    res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
+    # Test verify with FPL_TEAM_ID — mock account reads so the offline suite
+    # does not depend on live FPL connectivity (blocked by the test net guard).
+    with patch.object(FPLAccountAdapter, "get_active_event_id", return_value=1), \
+         patch.object(
+             FPLAccountAdapter,
+             "get_state",
+             return_value={
+                 "ownership_state": "UNAVAILABLE",
+                 "optimization_state": "OPTIMIZATION_BLOCKED",
+                 "squad_ids": [],
+             },
+         ):
+        res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
     assert res_with_id.exit_code == 0
     assert "FPL ACCOUNT" in res_with_id.output
     assert "Team ID: 12345" in res_with_id.output

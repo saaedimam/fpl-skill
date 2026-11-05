@@ -29,6 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install .
+          # iproute2 provides `ip` for bringing loopback up inside the test netns.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iproute2
 
       - name: Verify release manifest
         run: |
@@ -38,7 +41,17 @@ jobs:
         run: |
           python -m compileall fpl_skill
 
-      - name: Run test suite
+      - name: Prove network namespace has no external egress
+        run: |
+          # Authoritative kernel boundary for tests: user+net namespace with only
+          # loopback. If this step fails on the runner, do not treat the
+          # Python monkeypatch alone as sufficient protection.
+          unshare --user --map-root-user --net -- sh -c \
+            'ip link set lo up && python tests/prove_netns_egress_denied.py'
+
+      - name: Run test suite (network namespace, loopback only)
         run: |
           # tests/run_validation.py is a manual live-data harness and is not collected here.
-          python -m pytest tests/ -ra
+          # FPL_TEST_NETNS=1 enables the netns-only interface assertion in tests.
+          unshare --user --map-root-user --net -- sh -c \
+            'ip link set lo up && export FPL_TEST_NETNS=1 && python -m pytest tests/ -ra'
