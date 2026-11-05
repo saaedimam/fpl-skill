@@ -71,8 +71,15 @@ def test_account_adapter_ownership_state_lineage():
 # 2. P0-BUG-002: Transfer Intelligence & EP Distinctions
 # ---------------------------------------------------------------------------
 
+_EVENTS_NEXT_GW3 = [
+    {"id": g, "finished": g < 3, "data_checked": g < 3, "is_current": g == 2, "is_next": g == 3}
+    for g in range(1, 39)
+]
+
+
 def test_transfer_intelligence_distinguishes_total_ep_and_gain():
     ti = TransferIntelligence("12345")
+    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
 
     # Mock state, squad, and find_best_one_ft
     mock_state = {
@@ -84,7 +91,7 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
     mock_best = {
         "player_out": {"web_name": "PlayerA"},
         "player_in": {"web_name": "PlayerB"},
-        "gw3_6_ep": 210.0,
+        "horizon_ep": 210.0,
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
@@ -101,14 +108,15 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
         assert res["ep_gain"] == 5.0
         assert res["threshold_used"] == FREE_TRANSFER_OPTION_VALUE
         suggestion = res["suggestions"][0]
-        assert suggestion["TOTAL_EP_GW3_6"] == 210.0
-        assert suggestion["BASELINE_EP_GW3_6"] == 205.0
-        assert suggestion["EP_GAIN_GW3_6"] == 5.0
+        assert suggestion["TOTAL_EP"] == 210.0
+        assert suggestion["BASELINE_EP"] == 205.0
+        assert suggestion["EP_GAIN"] == 5.0
         assert suggestion["THRESHOLD"] == FREE_TRANSFER_OPTION_VALUE
 
 
 def test_transfer_intelligence_holds_when_gain_below_threshold():
     ti = TransferIntelligence("12345")
+    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -118,7 +126,7 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
     mock_best = {
         "player_out": {"web_name": "PlayerA"},
         "player_in": {"web_name": "PlayerB"},
-        "gw3_6_ep": 200.8,
+        "horizon_ep": 200.8,
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 
@@ -136,6 +144,7 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
 
 def test_transfer_intelligence_hit_threshold():
     ti = TransferIntelligence("12345")
+    ti.bootstrap = dict(ti.bootstrap, events=_EVENTS_NEXT_GW3)  # release gate: GW3 must be upcoming
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -143,7 +152,7 @@ def test_transfer_intelligence_hit_threshold():
     mock_best = {
         "player_out": {"web_name": "PlayerA"},
         "player_in": {"web_name": "PlayerB"},
-        "gw3_6_ep": 204.0,
+        "horizon_ep": 204.0,
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
 

@@ -65,6 +65,10 @@ AUTHORITATIVE_CURRENT_SQUAD_SPECS = [
 # Phase 2: Normalization & Classification
 # ---------------------------------------------------------------------------
 
+from . import current_data as _current_data
+from .current_data import CurrentDataError, assert_future_gameweeks, assert_projections_valid, planning_horizon
+
+
 def parse_json_field(val: Any) -> Any:
     """Safely parse JSON strings (e.g., gameweek_history)."""
     if isinstance(val, str):
@@ -150,28 +154,16 @@ def normalize_dataset(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def build_fixture_map(fixtures: List[Dict[str, Any]]) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
-    """Build lookup: fixture_map[gameweek][team_name] -> list of {opp, is_home, fdr}.
+def build_fixture_map(fixtures: Any, teams: Optional[List[Dict[str, Any]]] = None) -> Dict[int, Dict[Any, List[Dict[str, Any]]]]:
+    """Build lookup ``fixture_map[gameweek][team] -> [{opp, is_home, fdr, ...}]``.
 
-    Stores a LIST per (gw, team) so that Double Gameweek fixtures are both
-    preserved. Blank Gameweek teams have an empty list ([] → EP = 0).
-    Single GW teams have a one-element list (standard behaviour).
+    Delegates to the single normalizer in ``fpl_skill.current_data`` which
+    parses the live FPL ``/api/fixtures/`` schema and the legacy record schema,
+    and raises ``CurrentDataError`` on a missing, empty or unrecognized payload
+    (no silent empty map). DGW fixtures are preserved as lists; blank-GW teams
+    are absent for that GW (use ``current_data.blank_teams`` to report them).
     """
-    team_gw_info: Dict[int, Dict[str, List[Dict[str, Any]]]] = {gw: {} for gw in range(1, 39)}
-    for f in fixtures:
-        gh = f.get("gameweek_history") or f.get("fixture_details")
-        if isinstance(gh, str):
-            gh = parse_json_field(gh)
-        if isinstance(gh, dict):
-            gw = gh.get("gameweek")
-            ht = gh.get("home_team")
-            at = gh.get("away_team")
-            h_diff = f.get("team_h_difficulty", 3)
-            a_diff = f.get("team_a_difficulty", 3)
-            if gw and ht and at:
-                team_gw_info[gw].setdefault(ht, []).append({"opp": at, "is_home": True, "fdr": h_diff})
-                team_gw_info[gw].setdefault(at, []).append({"opp": ht, "is_home": False, "fdr": a_diff})
-    return team_gw_info
+    return _current_data.build_fixture_map(fixtures, teams=teams)
 
 
 # ---------------------------------------------------------------------------
@@ -594,20 +586,49 @@ def resolve_current_squad(normalized_data: Any, squad_specs: Optional[List[Dict[
 # Phase 6: Free Transfer Optimization (1 FT)
 # ---------------------------------------------------------------------------
 
+def _resolve_horizon(gameweeks: Optional[List[int]], events: Optional[Any]) -> List[int]:
+    """Planning horizon: explicit ``gameweeks`` or the live next-event window.
+
+    With ``events`` (bootstrap events) the horizon is validated against the
+    live calendar and already-played gameweeks are refused. Without events an
+    explicit ``gameweeks`` list is required (historical/backtest use only).
+    """
+    if events is not None:
+        gws = list(gameweeks) if gameweeks else planning_horizon(events)
+        assert_future_gameweeks(gws, events)
+        return gws
+    if not gameweeks:
+        raise CurrentDataError(
+            "No planning horizon: pass bootstrap `events` (live planning) or explicit `gameweeks` (historical)."
+        )
+    return list(gameweeks)
+
+
 def find_best_one_ft(
     current_squad: List[Dict[str, Any]],
     all_players: List[Dict[str, Any]],
     bank: float = 0.0,
-    fixture_map: Optional[Dict[int, Dict[str, Any]]] = None
+    fixture_map: Optional[Dict[int, Dict[str, Any]]] = None,
+    gameweeks: Optional[List[int]] = None,
+    events: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Find best legal 1 Free Transfer move maximizing GW3-6 projected points.
+    Find best legal 1 Free Transfer move maximizing projected points over the
+    planning horizon (live next-event window when ``events`` is given).
     Preserves 15 players, positional composition, budget, and club limits.
+    Raises ``CurrentDataError`` for played gameweeks or all-zero projections.
     """
+    gws = _resolve_horizon(gameweeks, events)
+    short = gws[:2]
+    _current_data.assert_gameweeks_have_fixtures(fixture_map or {}, gws)
+    assert_projections_valid(
+        {p.get("player_id"): sum(calculate_player_gw_ep(p, g, fixture_map) for g in gws) for p in current_squad},
+        context=f"1-FT search over GW{gws}",
+    )
     best_move = None
     best_squad = current_squad
-    best_gw3_4_ep = -1.0
-    best_gw3_6_ep = -1.0
+    best_short_ep = -1.0
+    best_full_ep = -1.0
 
     current_pids = set(p["player_id"] for p in current_squad)
 
@@ -628,12 +649,10 @@ def find_best_one_ft(
             if any(v > 3 for v in tc.values()):
                 continue
 
-            res_3_4 = evaluate_squad_multi_gw(new_squad, [3, 4], fixture_map)
-            res_3_6 = evaluate_squad_multi_gw(new_squad, [3, 4, 5, 6], fixture_map)
-
-            if res_3_6["total_ep"] > best_gw3_6_ep:
-                best_gw3_6_ep = res_3_6["total_ep"]
-                best_gw3_4_ep = res_3_4["total_ep"]
+            res_full = evaluate_squad_multi_gw(new_squad, gws, fixture_map)
+            if res_full["total_ep"] > best_full_ep:
+                best_full_ep = res_full["total_ep"]
+                best_short_ep = evaluate_squad_multi_gw(new_squad, short, fixture_map)["total_ep"]
                 best_move = (p_out, p_in)
                 best_squad = new_squad
 
@@ -643,8 +662,12 @@ def find_best_one_ft(
         "player_in": best_move[1] if best_move else None,
         "move_str": f"{best_move[0]['web_name']} OUT -> {best_move[1]['web_name']} IN" if best_move else "None",
         "squad": best_squad,
-        "gw3_4_ep": round(best_gw3_4_ep, 2),
-        "gw3_6_ep": round(best_gw3_6_ep, 2),
+        "horizon": gws,
+        "horizon_ep": round(best_full_ep, 2),
+        "horizon_short_ep": round(best_short_ep, 2),
+        # Backward-compatible aliases (first two GWs / full horizon); names are historical.
+        "gw3_4_ep": round(best_short_ep, 2),
+        "gw3_6_ep": round(best_full_ep, 2),
     }
 
 
@@ -725,10 +748,13 @@ def optimize_wildcard_squad(
     all_players: List[Dict[str, Any]],
     budget: float = 100.0,
     fixture_map: Optional[Dict[int, Dict[str, Any]]] = None,
-    hard_locks: Optional[List[int]] = None
+    hard_locks: Optional[List[int]] = None,
+    gameweeks: Optional[List[int]] = None,
+    events: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Search for a legal 15-player Wildcard squad with high GW3-6 xPts.
+    Search for a legal 15-player Wildcard squad with high xPts over a 4-GW horizon
+    (live next-event window when ``events`` is given; explicit ``gameweeks`` otherwise).
     This is a legacy search, not a certificate; it must never be reported as
     globally optimal (only the exact MILP + re-check in optimality.py can be).
     Constraints: exactly 2 GKP, 5 DEF, 5 MID, 3 FWD, budget <= 100m, max 3 per club.
@@ -736,9 +762,12 @@ def optimize_wildcard_squad(
     Supports hard_locks: list of player_ids that MUST be in the final squad.
     """
     hard_locks = hard_locks or []
+    gws = _resolve_horizon(gameweeks, events)
+    if len(gws) != 4:
+        raise CurrentDataError(f"Wildcard search needs a 4-gameweek horizon, got {gws}.")
 
     for p in all_players:
-        p["ep_gw"] = [calculate_player_gw_ep(p, gw, fixture_map) for gw in [3, 4, 5, 6]]
+        p["ep_gw"] = [calculate_player_gw_ep(p, gw, fixture_map) for gw in gws]
         p["ep_3_6"] = sum(p["ep_gw"])
         p["cost_int"] = p.get("now_cost") or int(p.get("cost_m", 5.0) * 10)
 
@@ -851,8 +880,8 @@ def optimize_wildcard_squad(
     if not best_squad:
         raise RuntimeError("Failed to optimize Wildcard squad within constraints")
 
-    res_3_4 = evaluate_squad_multi_gw(best_squad, [3, 4], fixture_map, hard_locks if hard_locks else None)
-    res_3_6 = evaluate_squad_multi_gw(best_squad, [3, 4, 5, 6], fixture_map, hard_locks if hard_locks else None)
+    res_3_4 = evaluate_squad_multi_gw(best_squad, gws[:2], fixture_map, hard_locks if hard_locks else None)
+    res_3_6 = evaluate_squad_multi_gw(best_squad, gws, fixture_map, hard_locks if hard_locks else None)
     total_cost = sum(p.get("cost_m", 5.0) for p in best_squad)
 
     return {
@@ -929,7 +958,9 @@ def run_wildcard_decision_pipeline(
     squad_specs: Optional[List[Dict[str, Any]]] = None,
     bank: float = 0.0,
     free_transfers: int = 1,
-    hard_locks: Optional[List[int]] = None
+    hard_locks: Optional[List[int]] = None,
+    gameweeks: Optional[List[int]] = None,
+    events: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Execute complete production Wildcard decision pipeline against authoritative local data.
@@ -946,18 +977,19 @@ def run_wildcard_decision_pipeline(
     fixture_map = norm["fixture_map"]
 
     current_squad = resolve_current_squad(norm, squad_specs)
+    gws = _resolve_horizon(gameweeks, events)
 
-    cur_gw3 = select_best_legal_xi(current_squad, 3, fixture_map)
-    cur_gw3_4 = evaluate_squad_multi_gw(current_squad, [3, 4], fixture_map)
-    cur_gw3_6 = evaluate_squad_multi_gw(current_squad, [3, 4, 5, 6], fixture_map)
+    cur_gw3 = select_best_legal_xi(current_squad, gws[0], fixture_map)
+    cur_gw3_4 = evaluate_squad_multi_gw(current_squad, gws[:2], fixture_map)
+    cur_gw3_6 = evaluate_squad_multi_gw(current_squad, gws, fixture_map)
 
-    best_1ft = find_best_one_ft(current_squad, all_players, bank, fixture_map)
+    best_1ft = find_best_one_ft(current_squad, all_players, bank, fixture_map, gameweeks=gws)
 
-    wc_result = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map, hard_locks=hard_locks)
+    wc_result = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map, hard_locks=hard_locks, gameweeks=gws)
     wc_squad = wc_result["squad"]
     wc_gw3_4_ep = wc_result["gw3_4_ep"]
     wc_gw3_6_ep = wc_result["gw3_6_ep"]
-    wc_gw3_info = wc_result["gw_details"][3]
+    wc_gw3_info = wc_result["gw_details"][gws[0]]
 
     wc_gain_vs_1ft_3_4 = round(wc_gw3_4_ep - best_1ft["gw3_4_ep"], 1)
     wc_gain_vs_1ft_3_6 = round(wc_gw3_6_ep - best_1ft["gw3_6_ep"], 1)
@@ -968,6 +1000,7 @@ def run_wildcard_decision_pipeline(
 
     return {
         "pipeline_status": "PASS",
+        "horizon": gws,
         "data_source": raw_data.get("source", "FPL_DIRECT_API"),
         "apify_used": "NO",
         "current_squad": current_squad,

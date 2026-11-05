@@ -78,10 +78,17 @@ def test_audit_bug_d_prediction_engine_legal_xi():
         })
         pid += 1
 
-    # Mock fixture_map to return our assigned EP
-    dummy_fixture_map = {}
+    # Give the squad real inputs so projections are non-zero (previously all EP were 0.0,
+    # which made this test vacuous). FWDs are deliberately weak.
+    for p in squad:
+        weak = p["position"] == "FWD"
+        p.update(status="a", minutes=900, form=0.5 if weak else 8.0,
+                 expected_goals=0.1 if weak else 3.0, expected_assists=0.1 if weak else 2.0)
+    # Release gate: every team has a GW1 fixture (all-zero projections are refused).
+    dummy_fixture_map = {1: {t: [{"opp": 99, "is_home": True, "fdr": 3}] for t in range(1, 20)}}
     engine = PredictionEngine.__new__(PredictionEngine)
     engine.fixture_map = dummy_fixture_map
+    engine.events = [{"id": g, "finished": False, "is_current": False, "is_next": g == 1} for g in range(1, 39)]
     engine.elements = {p["id"]: p for p in squad}
 
     # Run selection
@@ -125,7 +132,7 @@ def test_audit_bug_f_cache_path():
 
 def test_audit_bug_e_optimizer_parameterization():
     """AUDIT-BUG-E: optimizer accepts budget, player_locks, horizon parameters without KeyError."""
-    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False, allow_past=True)
     assert res["status"] == "BUILT"
     assert res["variables_count"] > 0
     assert res["constraints_count"] > 0
@@ -198,7 +205,7 @@ def test_finding_b_pulp_variable_and_constraint_compatibility():
     This asserts the constructed PuLP model has exactly the dimensions the MILP encoding implies,
     catching regressions while remaining robust to roster changes.
     """
-    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False, allow_past=True)
     assert res["status"] == "BUILT"
     players = res["players"]
     P = len(players)

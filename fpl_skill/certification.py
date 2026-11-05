@@ -484,7 +484,7 @@ def run_full_certification() -> Dict[str, Any]:
 
     # Run Branch-and-Bound (existing pipeline)
     print("\n2. Running Branch-and-Bound optimization...")
-    bb_result = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map)
+    bb_result = optimize_wildcard_squad(all_players, budget=100.0, fixture_map=fixture_map, gameweeks=[3, 4, 5, 6])  # historical GW3 certification artifact (explicit, not a live plan)
     print(f"   BB Score: {bb_result['optimization_metadata']['best_score']:.2f}")
     print(f"   Branches explored: {bb_result['optimization_metadata']['branches_explored']:,}")
     print(f"   Branches pruned: {bb_result['optimization_metadata']['branches_pruned']:,}")

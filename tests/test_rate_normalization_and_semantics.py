@@ -67,7 +67,7 @@ def test_optimizer_load_binds_mean_not_p50():
          "expected_goals":0,"expected_assists":0,"expected_goals_conceded":0,"form":0,"selected_by_percent":0,"chance_of_playing_next_round":None,"gameweek_history":"[]"},
         {"position":"FIXTURE","player_id":None,"gameweek_history":{"fixture_id":1,"gameweek":5,"home_team":"MCI","away_team":"SUN"},"team_h_difficulty":2,"team_a_difficulty":5}]
     with patch("fpl_skill.optimizer.get_fpl_data",return_value={"records":records}):
-        players,_,ep,_,_,_=load(horizon=(5,5))
+        players,_,ep,_,_,_=load(horizon=(5,5),allow_past=True)  # offline historical unit check
     p=next(x for x in players if x["player_id"]==411); d=p["_distribution_diagnostics"][5]
     assert ep[411][5]==pytest.approx(d["mean"]); assert d["mean"]!=d["p50"]; assert d["mean"]>0
 
