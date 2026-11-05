@@ -229,15 +229,34 @@ def test_egress_blocked_under_guard():
         socket.create_connection(("1.1.1.1", 53), timeout=1)
 
 
-def test_netns_only_loopback_when_flagged():
-    """When CI sets FPL_TEST_NETNS=1, assert the kernel view is loopback-only."""
+def test_netns_kernel_denies_external_connect_when_flagged():
+    """CI sets FPL_TEST_NETNS=1 inside ``unshare --net``.
+
+    ``sit0`` is a kernel stub with no address and no route. Interface names
+    are not the boundary. libc ``connect(2)`` must fail with ENETUNREACH,
+    which the pytest monkeypatch cannot imitate.
+    """
+    import ctypes
+    import errno
     import os
+    import struct
 
     if os.environ.get("FPL_TEST_NETNS", "").strip() != "1":
         pytest.skip("FPL_TEST_NETNS not set (not running inside CI netns harness)")
-    non_loop = []
-    for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
-        name = line.split(":", 1)[0].strip()
-        if name and name != "lo":
-            non_loop.append(name)
-    assert non_loop == [], f"expected only loopback in netns, found {non_loop}"
+    routes = [
+        line
+        for line in Path("/proc/net/route").read_text(encoding="utf-8").splitlines()[1:]
+        if line.strip()
+    ]
+    assert routes == [], f"IPv4 routes present: {routes}"
+    libc = ctypes.CDLL(None, use_errno=True)
+    fd = libc.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+    assert fd >= 0
+    address = struct.pack("=H", socket.AF_INET) + struct.pack("!H", 53) + socket.inet_aton("1.1.1.1") + b"\x00" * 8
+    try:
+        rc = libc.connect(fd, address, len(address))
+        err = ctypes.get_errno()
+    finally:
+        libc.close(fd)
+    assert rc != 0
+    assert err == errno.ENETUNREACH

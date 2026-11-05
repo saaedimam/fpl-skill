@@ -163,9 +163,9 @@
     "tests/conftest.py": "321aaad5ddc4c5156e0a7d4ae900f0af2cb91dce7ccd3ff81fb7be5c2bd1c52a",
     "tests/network_isolation.py": "b88f6daa83c854a834f04188777477f262738fa9205b785a098b76e3edc6cc42",
     "tests/prove_netns_egress_denied.py": "24c579a08536d9ca993be9cdb63b7e0b3a0dd51477c2cd1cb188788f9d02f673",
-    "tests/test_network_guard.py": "4021783e871cb49c71238fa7328f9ddf17027c09f6cd86d6645db2701e39a925"
+    "tests/test_network_guard.py": "6ce5942427f5b4442ab07ffb9af016823e40985899d6a2a3325670f4ca50e58d"
   },
-  "release_hash": "9a0dc8d7de5b079ea24f73ff1728f4135bf593384cf63405b407422f9f615e02",
+  "release_hash": "d0761737befd8c3946dbc69ca7262edfb713484e17d0b3279b37b0a31f86299d",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-09-13T01:09:00+00:00"
 }
