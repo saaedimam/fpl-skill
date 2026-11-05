@@ -1,6 +1,8 @@
 # Validation Suite — v1.1.0
 
-Executable harness: `tests/run_validation.py` (Python 3 + `jsonschema`). Every test below is actually executed by that script against sample data structures — this document records what each test checks and why; it does not itself assert PASS/FAIL. See the script's own output (and `MANIFEST.json`) for the real run result.
+Manual harness: `tests/run_validation.py` (Python 3 + `jsonschema`). This document records what each case checks. It does not execute them, and CI does not run the script.
+
+The early cases use sample data. From `test_direct_api_caching` onward the script reads a local FPL cache or the public API. That is a manual live-data check, not a mocked unit test.
 
 | Test | Checks |
 |---|---|

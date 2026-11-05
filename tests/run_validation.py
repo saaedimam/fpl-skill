@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
-FPL Skill v1.1.0 — Executable Validation Suite.
+FPL Skill v1.1.0 — Manual validation harness.
 
-Every TEST-* function below performs a real assertion against sample data
-structures / logic implementations, and reports PASS or FAIL. Nothing here
-is asserted without being checked. Run with: python3 run_validation.py
+This file is not part of pytest or CI. The schema and sample-data cases are
+self-contained, but `test_direct_api_caching`, `run_30_regression_tests`, and
+`run_optimizer_integrity_tests` read a local FPL cache or call the public API.
+Do not treat a green `pytest` run as a run of this script.
+
+Run by hand, only when that cache or a deliberate live read is intended:
+
+    python3 tests/run_validation.py
 """
 import json
 import math

@@ -1,6 +1,6 @@
 ---
 name: fpl
-description: "Advisory Fantasy Premier League skill. Account writes fail closed unless a per-change approval token, a write-permitting FPL_MODE, verified-current account state, and sandbox validation all pass."
+description: "Advisory Fantasy Premier League skill. Account writes fail closed unless a signed out-of-band approval, a write-permitting FPL_MODE, a fresh verified account read, and sandbox validation all pass. Autonomous mode is not unattended live execution."
 version: 2.1.0-rc1
 status: active
 scope: global
@@ -767,14 +767,14 @@ The modern React SPA uses `/api/my-team/` for current editable squad state; do n
 ### 36.2 Authoritative write
 Account mutations are forbidden unless every condition below is true. If any one is missing or invalid, raise and send no request:
 
-1. An explicit per-change approval token for the exact payload (`APPROVE:` plus the SHA-256 of the canonical team id, endpoint, and body). A token for a different body does not authorize this change. `autonomous` does not skip this token.
-2. `FPL_MODE` is `approval` or `autonomous`. The default `advisory` never writes.
-3. Account ownership state is `VERIFIED_CURRENT`.
-4. The proposed squad passes sandbox validation: budget, 15 players in a 2/5/5/3 shape, at most 3 from one club, a legal formation, and both captain and vice-captain in the starting XI.
+1. A signed approval record for this exact action: team id, endpoint, canonical body, nonce, and expiry. The record is created only by a separate interactive confirmation (`python -m fpl_skill.approval_issuer`) that shows the payload and signs it with a private key. The executor verifies that signature with the public key and does not hold the signing key. A hash of the payload is not an approval. Each nonce works once and expires. `FPL_MODE=autonomous` does not skip this record and cannot mint it.
+2. `FPL_MODE` is `approval` or `autonomous`. The default `advisory` never writes. `autonomous` is not unattended or safe live execution.
+3. A fresh authenticated account read inside the write chokepoint returns `VERIFIED_CURRENT`. A caller-supplied state string is not accepted.
+4. The proposed squad passes sandbox validation against authoritative bootstrap data: each element id exists once, and its team, position, and price match that bootstrap, then budget, 15 players in a 2/5/5/3 shape, at most 3 from one club, a legal formation, and both captain and vice-captain in the starting XI.
 
-The only supported write path is `fpl_skill.execution.execute_account_mutation`. Do not POST `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client as a substitute. A same-origin browser POST is not an approval gate. DOM clicks are not authoritative state transitions.
+The only supported write path is `fpl_skill.execution.execute_account_mutation`. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client. A same-origin browser request is not an approval. DOM clicks are not authoritative state transitions.
 
-`all.python --apply` calls that chokepoint. Without a matching approval token it fails closed and does not read cookies into a request.
+`all.python --apply` calls that chokepoint. It reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval. Without `--approval-file` it fails closed and does not send a request.
 
 ### 36.3 Bench / formation backend constraints
 - Starting XI positions are 1–11.
@@ -789,7 +789,11 @@ Use FPL element ID as the canonical player key. Names are display-only and must 
 Confirm the current Gameweek and deadline from the authoritative event API before a deadline-sensitive action.
 
 ### 36.6 Known limitations
-The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not a live deadline lookup. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. A sandbox budget check sums supplied `now_cost` values against the supplied budget and does not reconstruct selling prices. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal` and the returned squad passes a constraint re-check. The legacy branch-and-bound wildcard search does not receive that certificate.
+This skill does not do full live-gameweek squad optimization, and it does not provide safe autonomous live execution. `FPL_MODE=autonomous` still cannot write unless a separate interactive step has signed that exact change; the executor cannot create that signature.
+
+The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal` and the returned squad passes a constraint re-check. The legacy branch-and-bound wildcard search does not receive that certificate.
+
+`tests/run_validation.py` is a manual harness. Part of it reads a local FPL cache or the live public API. Pytest and CI do not run it.
 
 ## 37. Release Integrity Contract
 

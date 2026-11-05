@@ -212,12 +212,21 @@ def validate_picks(
     budget: float = 100.0,
     require_vice: bool = True,
     require_captain: bool = True,
+    bootstrap: Optional[Mapping[Any, Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Validate a proposed 15-pick write, including lineup and armbands.
+    """Validate a proposed 15-pick write against authoritative bootstrap data.
 
-    FPL's wire ``position`` field is the lineup slot (1-15). The playing
-    position is read from ``element_type`` or an explicit ``role``.
+    FPL's wire ``position`` field is the lineup slot (1-15). Playing position,
+    club, and price are taken from ``bootstrap`` and must match any values
+    the caller supplied. Aggregate squad rules run on that authoritative
+    data. Without bootstrap data the write is rejected.
     """
+    if bootstrap is None:
+        return {"valid": False, "violations": ["bootstrap: authoritative player data is required"]}
+    identity = _bootstrap_identity_violations(picks, bootstrap)
+    if identity:
+        return {"valid": False, "violations": identity}
+    picks = _picks_from_bootstrap(picks, bootstrap)
     violations = validate_squad_players(picks, budget=budget)
     slots = []
     for pick in picks:
@@ -266,6 +275,76 @@ def validate_picks(
     return {"valid": not deduped, "violations": deduped}
 
 
+def _bootstrap_index(bootstrap: Mapping[Any, Mapping[str, Any]]) -> Dict[int, Mapping[str, Any]]:
+    indexed: Dict[int, Mapping[str, Any]] = {}
+    for key, record in bootstrap.items():
+        element_id = record.get("id", key)
+        indexed[int(element_id)] = record
+    return indexed
+
+
+def _bootstrap_identity_violations(
+    picks: Sequence[Mapping[str, Any]],
+    bootstrap: Mapping[Any, Mapping[str, Any]],
+) -> List[str]:
+    violations: List[str] = []
+    indexed = _bootstrap_index(bootstrap)
+    seen = []
+    for pick in picks:
+        element_id = _element_id(pick)
+        if element_id is None:
+            violations.append("bootstrap: pick is missing an element id")
+            continue
+        seen.append(element_id)
+        record = indexed.get(element_id)
+        if record is None:
+            violations.append(f"bootstrap: element {element_id} is not in the authoritative bootstrap")
+            continue
+        incomplete = False
+        for field in ("element_type", "now_cost", "team"):
+            if field not in record or record[field] in (None, ""):
+                violations.append(f"bootstrap: element {element_id} is missing {field}")
+                incomplete = True
+        if incomplete:
+            continue
+        if "element_type" in pick and int(pick["element_type"]) != int(record["element_type"]):
+            violations.append(
+                f"bootstrap: element {element_id} element_type does not match authoritative data"
+            )
+        if "now_cost" in pick and int(pick["now_cost"]) != int(record["now_cost"]):
+            violations.append(
+                f"bootstrap: element {element_id} now_cost does not match authoritative data"
+            )
+        if ("team" in pick or "club" in pick) and _club(pick) != str(record.get("team")):
+            violations.append(
+                f"bootstrap: element {element_id} team does not match authoritative data"
+            )
+    if len(seen) != len(set(seen)):
+        violations.append("squad: duplicate element")
+    return list(dict.fromkeys(violations))
+
+
+def _picks_from_bootstrap(
+    picks: Sequence[Mapping[str, Any]],
+    bootstrap: Mapping[Any, Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    indexed = _bootstrap_index(bootstrap)
+    normalized = []
+    for pick in picks:
+        element_id = _element_id(pick)
+        record = indexed[int(element_id)]
+        normalized.append({
+            "element": element_id,
+            "element_type": int(record["element_type"]),
+            "position": _lineup_slot(pick),
+            "team": str(record["team"]),
+            "now_cost": int(record["now_cost"]),
+            "is_captain": pick.get("is_captain") is True,
+            "is_vice_captain": pick.get("is_vice_captain") is True,
+        })
+    return normalized
+
+
 class ExecutionSandbox:
     def __init__(self, team_id: str):
         self.team_id = team_id
@@ -291,6 +370,7 @@ class ExecutionSandbox:
             checked = validate_picks(
                 requested_actions["picks"],
                 budget=requested_actions.get("budget", 100.0),
+                bootstrap=requested_actions.get("bootstrap"),
             )
             if not checked["valid"]:
                 return {

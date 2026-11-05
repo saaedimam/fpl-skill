@@ -4,7 +4,8 @@
 ## Unreleased — fail-closed execution
 
 ### Fixed
-- Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a per-change approval token, a write-permitting `FPL_MODE`, `VERIFIED_CURRENT` account state, and sandbox validation all pass. A missing or tampered approval sends no request.
+- Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a signed out-of-band approval, a write-permitting `FPL_MODE`, a fresh `VERIFIED_CURRENT` account read, and sandbox validation all pass. The executor cannot mint the signature. A hash of the payload, a replayed or expired approval, or a caller-supplied state string sends no request.
+- `all.python` reads `FPL_TEAM_ID` and stops when it is missing.
 - Optimality certificates follow CBC solver status, the objective value, and a constraint re-check. Non-optimal and infeasible results stay uncertified.
 - Evidence-policy rules (L5/L6 signal-only, `CONFLICTED`, L3+ corroboration) are enforced by `fpl_skill.evidence_policy` and consulted on the execution and prediction paths. The temporal firewall is consulted before those paths accept historical snapshots.
 

@@ -1,83 +1,95 @@
 #!/usr/bin/env python3
 """
-all.python — FPL squad plan (team 1512229, GW4)
+all.python — print an FPL squad plan and optionally attempt a gated write.
 
-Prints a 15-pick plan. ``--apply`` does not write by itself. A write is sent
-only by ``fpl_skill.execution.execute_account_mutation`` after every gate
-passes:
-
-* explicit per-change ``--approval`` token bound to this exact payload
-* ``FPL_MODE`` of ``approval`` or ``autonomous`` (``autonomous`` does not skip the token)
-* account ownership state ``VERIFIED_CURRENT``
-* sandbox validation (budget, 2/5/5/3, max 3 per club, legal XI, captain and vice in the XI)
+The team id comes from ``FPL_TEAM_ID``. If that variable is missing the
+script stops. ``--apply`` does not write by itself. A write is sent only by
+``fpl_skill.execution.execute_account_mutation`` after a signed out-of-band
+approval, a fresh ``VERIFIED_CURRENT`` account read, and sandbox validation.
+``FPL_MODE=autonomous`` does not skip the signed approval. This script cannot
+sign an approval; it only reads a record produced by
+``python -m fpl_skill.approval_issuer``.
 
 The bundled plan stores lineup slots only. It has no club, price, or playing
-position, so the sandbox rejects it and no request is sent. Missing or
-invalid approval raises before cookies are read and before any HTTP call.
+position, so the sandbox rejects it and no request is sent.
 
 Usage:
-    python3 all.python                          # dry-run (prints plan)
-    python3 all.python --apply --cookies ~/.fpl_cookies.txt --approval APPROVE:<digest>
+    FPL_TEAM_ID=YOUR_ENTRY_ID python3 all.python
+    FPL_TEAM_ID=YOUR_ENTRY_ID FPL_MODE=approval \\
+        python3 all.python --apply --approval-file approval.json --cookies ~/.fpl_cookies.txt
 """
 import argparse, json, os, sys, urllib.request, urllib.error
 
-TEAM_ID = "1512229"
-GW      = 4
+GW = 4
 
-# Recommended GW4 state (GOAT analysis, live API data)
-TRANSFER_IN  = {"element": 427, "web_name": "Mbeumo"}   # Man Utd MID 7.9
-TRANSFER_OUT = {"element": 399, "web_name": "Cherki"}   # Man City MID 7.8
+# Illustrative plan only. Player ids are public element ids, not an account.
+TRANSFER_IN  = {"element": 427, "web_name": "Mbeumo"}
+TRANSFER_OUT = {"element": 399, "web_name": "Cherki"}
 
-# Full 15 after the transfer: (element, web_name, position)
+# Full 15 after the transfer: (element, web_name, lineup slot)
 SQUAD = [
-    (109, "Verbruggen",   1),   # GK
-    (115, "De Cuyper",    2),   # DEF
-    (8,   "Calafiori",    3),   # DEF
-    (388, "Guéhi",        4),   # DEF
-    (426, "B.Fernandes",  5),   # MID
-    (427, "Mbeumo",       6),   # MID  <- transfer in
-    (367, "Gakpo",        7),   # MID
-    (124, "Groß",         8),   # MID
-    (165, "João Pedro",   9),   # FWD  CAPTAIN
-    (411, "Haaland",     10),   # FWD
-    (249, "Barry",       11),   # FWD
-    (565, "M.Sangaré",   12),   # bench 1
-    (279, "Ajayi",       13),   # bench 2
-    (277, "Egan",        14),   # bench 3
-    (572, "Tzolakis",    15),   # bench 4 (GK last)
+    (109, "Verbruggen",   1),
+    (115, "De Cuyper",    2),
+    (8,   "Calafiori",    3),
+    (388, "Guéhi",        4),
+    (426, "B.Fernandes",  5),
+    (427, "Mbeumo",       6),
+    (367, "Gakpo",        7),
+    (124, "Groß",         8),
+    (165, "João Pedro",   9),
+    (411, "Haaland",     10),
+    (249, "Barry",       11),
+    (565, "M.Sangaré",   12),
+    (279, "Ajayi",       13),
+    (277, "Egan",        14),
+    (572, "Tzolakis",    15),
 ]
 CAPTAIN = 165
 VICE    = 426
-CHIP    = None          # wildcard used GW3; save the rest
+CHIP    = None
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true", help="attempt a gated write (still fails closed without approval)")
+    ap.add_argument("--apply", action="store_true", help="attempt a gated write (fails closed without a signed approval)")
     ap.add_argument("--cookies", default=os.environ.get("FPL_COOKIES_FILE"), help="Netscape cookie dump from a logged-in browser")
-    ap.add_argument("--approval", default=None, help="per-change APPROVE:<digest> token for this exact payload")
+    ap.add_argument("--approval-file", default=None, help="JSON approval record from python -m fpl_skill.approval_issuer")
     args = ap.parse_args(argv)
+
+    team_id = os.environ.get("FPL_TEAM_ID", "").strip()
+    if not team_id:
+        print("\n[BLOCKED] FPL_TEAM_ID is not set. Nothing was written.")
+        return 1
 
     plan = build_plan()
     print(json.dumps(plan, indent=1))
 
     if not args.apply:
-        print("\n[DRY-RUN] Nothing written. Re-run with --apply only after the approval gate, sandbox, and verified account state all pass.")
+        print("\n[DRY-RUN] Nothing written. A write needs a signed approval file, a fresh verified account, and a sandbox pass.")
         return 0
+
+    if not args.approval_file:
+        print("\n[BLOCKED] --approval-file is required. This script cannot sign its own approval.")
+        return 1
 
     from fpl_skill.approval_gate import ExecutionDenied
     from fpl_skill.execution import execute_account_mutation
 
+    try:
+        approval = json.loads(open(args.approval_file, "r", encoding="utf-8").read())
+    except (OSError, json.JSONDecodeError):
+        print("\n[BLOCKED] Approval file could not be read.")
+        return 1
+
     payload = {"chip": CHIP, "picks": plan["picks"]}
-    endpoint = f"/my-team/{TEAM_ID}/"
+    endpoint = f"/my-team/{team_id}/"
     try:
         result = execute_account_mutation(
-            team_id=TEAM_ID,
+            team_id=team_id,
             endpoint=endpoint,
             payload=payload,
             picks=plan["picks"],
-            approval_token=args.approval,
+            approval=approval,
             mode=os.environ.get("FPL_MODE"),
-            state_provider=_ownership_state,
             transport=_build_transport(args.cookies),
         )
     except ExecutionDenied as exc:
@@ -85,14 +97,14 @@ def main(argv=None):
         return 1
 
     status = result.get("status") if isinstance(result, dict) else None
-    print(f"\n[save] POST /api/my-team/{TEAM_ID}/ status={status}")
+    print(f"\n[save] POST /api/my-team/{team_id}/ status={status}")
     if isinstance(status, int) and status < 400:
         print(f"\n[DONE] Transfer ({TRANSFER_OUT['web_name']} OUT -> {TRANSFER_IN['web_name']} IN) "
-              f"+ lineup + captain/vice applied for GW{GW}. Verify: https://fantasy.premierleague.com/my-team")
+              f"+ lineup + captain/vice submitted for GW{GW}. Confirm the squad on the FPL site.")
         return 0
     body = result.get("body", "") if isinstance(result, dict) else ""
     print(f"[BODY] {body[:500]}")
-    print("[ERROR] Save rejected. Re-export fresh cookies and retry.")
+    print("[ERROR] Save rejected.")
     return 1
 
 def build_plan():
@@ -128,13 +140,6 @@ def load_cookies(path):
     if not pairs:
         return None, None
     return csrf, " ".join(f"{n}={v}" for n, v in pairs)
-
-def _ownership_state():
-    from fpl_skill.account_adapter import FPLAccountAdapter
-
-    adapter = FPLAccountAdapter(TEAM_ID)
-    state = adapter.get_state(GW)
-    return state.get("ownership_state")
 
 def _build_transport(cookie_path):
     from fpl_skill.approval_gate import ExecutionDenied

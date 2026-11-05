@@ -36,4 +36,5 @@ jobs:
 
       - name: Run test suite
         run: |
+          # tests/run_validation.py is a manual live-data harness and is not collected here.
           python -m pytest tests/ -ra

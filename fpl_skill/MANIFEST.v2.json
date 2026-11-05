@@ -45,9 +45,9 @@
     "tests/test_replay_gate.py"
   ],
   "file_hashes": {
-    "CHANGELOG.md": "a5716418ad19203729a459a527897709aff692f784b53d0d43ddc0a306a4e9ee",
-    "SKILL.md": "d3b417057ef03b60c4fd157e8faab3f9fd6b1a506d42f0d70433afc4021e7870",
-    "all.python": "61a002d72d7137d79415800f6bcfd4c70dac106c4bcbe99ebcc9b93fa2950594",
+    "CHANGELOG.md": "8612e3c8576a5895e1570c2a6c26503246d561506e1c3d2936b7c139010d4a0e",
+    "SKILL.md": "4687db38535a9944c72e8dee276502c70a50c5279103d636238506abf81475ff",
+    "all.python": "a228b7a0a0b1491cd1f691e22d8c6df59bafd8512f661e1f3ca88ef04dfd496f",
     "contracts/research-contract.md": "168d9b12441f72be09b28b6d78abe338f850838bed1831c1d4680e871c19e49e",
     "evidence/v2-adversarial-audit-2026-09-09.json": "bce1897e5253a206af6bdff2e191ec2346bd05909b6bffa7099c654831dc8780",
     "fpl_skill/historical/__init__.py": "7e6c375c1c419bb1a59b4d5e7b5435410b71c816634d8a33c4f47637b6edfbf1",
@@ -75,9 +75,9 @@
     "tests/test_probabilistic_ep1_p023.py": "8e3f7fb063409c9a562de94747a775791aa8a5962b75eb3c2d87ad531434cfc8",
     "tests/test_rank_aware_objective1.py": "4e9f4931f865978c0fee614ee03e3e66c97b040e9c00b1a9513bc2a0ae8e25ee",
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
-    "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28"
+    "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3"
   },
-  "release_hash": "b2b34bfd84a1bc5d2ef7dfca3e230d501580090f9ca50f68d0fef160ae74ef77",
+  "release_hash": "4599dbf5e82285434d74c981e41e67dfad302cb4b2b1a0c0b9ba220cfb8ca5c2",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-09-13T01:09:00+00:00"
 }

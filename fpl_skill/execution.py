@@ -1,19 +1,25 @@
 """Single chokepoint for FPL account mutations.
 
-Nothing is sent unless every gate passes. The default is to refuse rather
-than open a connection: callers must pass an explicit transport or session,
-and that callable is invoked only after approval, mode, sandbox, evidence,
-temporal-firewall, and account-state checks succeed.
+Nothing is sent unless every gate passes. The executor cannot mint an
+approval: it only verifies a signature with a public key. Account state is
+read by a fresh call inside this function. Caller-supplied state strings are
+not accepted.
 """
 from __future__ import annotations
 
 import contextvars
-import hashlib
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from fpl_skill.approval_gate import ApprovalGate, ExecutionDenied
+from fpl_skill.approval_verify import (
+    NonceStore,
+    default_nonce_store,
+    load_public_key_pem,
+    verify_approval_record,
+)
 from fpl_skill.evidence_policy import evaluate_evidence
 from fpl_skill.execution_sandbox import validate_picks
 from fpl_skill.historical.exceptions import SnapshotIntegrityError, TemporalLeakageError
@@ -22,21 +28,24 @@ from fpl_skill.historical.firewall import admit_snapshots
 # Set only for the duration of a transport call that has already passed every gate.
 TRANSPORT_ARMED = contextvars.ContextVar("fpl_write_transport_armed", default=False)
 
-
-def change_digest(team_id: str, endpoint: str, payload: Mapping[str, Any]) -> str:
-    """SHA-256 of the canonical team, endpoint, and payload."""
-    body = {
-        "team_id": str(team_id),
-        "endpoint": endpoint,
-        "payload": payload,
-    }
-    raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+__all__ = ["TRANSPORT_ARMED", "execute_account_mutation", "load_bootstrap_elements", "load_fresh_ownership"]
 
 
-def expected_approval_token(team_id: str, endpoint: str, payload: Mapping[str, Any]) -> str:
-    """Explicit per-change confirmation bound to ``change_digest``."""
-    return "APPROVE:" + change_digest(team_id, endpoint, payload)
+def load_fresh_ownership(team_id: str) -> str:
+    """Return ownership from a new account-adapter read. No cached flag."""
+    from fpl_skill.account_adapter import FPLAccountAdapter
+
+    adapter = FPLAccountAdapter(str(team_id))
+    state = adapter.get_state(adapter.get_active_event_id())
+    return str(state.get("ownership_state") or "")
+
+
+def load_bootstrap_elements() -> dict:
+    """Return the current bootstrap element index. No squad-price cache."""
+    from fpl_skill.direct_api import DirectFPLClient
+
+    master = DirectFPLClient().fetch_master()
+    return {int(player["id"]): player for player in master.get("players", [])}
 
 
 def execute_account_mutation(
@@ -44,14 +53,17 @@ def execute_account_mutation(
     team_id: str,
     endpoint: str,
     payload: Mapping[str, Any],
-    approval_token: Optional[str],
-    ownership_state: Optional[str] = None,
+    approval: Any = None,
+    public_key_pem: Optional[str] = None,
     picks: Optional[Sequence[Mapping[str, Any]]] = None,
     budget: float = 100.0,
     mode: Optional[str] = None,
     session: Any = None,
     transport: Optional[Callable[..., Any]] = None,
-    state_provider: Optional[Callable[[], Optional[str]]] = None,
+    account_state_reader: Optional[Callable[[], str]] = None,
+    bootstrap_reader: Optional[Callable[[], Any]] = None,
+    nonce_store: Optional[NonceStore] = None,
+    clock: Optional[Callable[[], datetime]] = None,
     evidence_claims: Optional[Sequence[Mapping[str, Any]]] = None,
     proposed_action: Optional[str] = None,
     decision_cutoff_utc: Optional[str] = None,
@@ -59,22 +71,34 @@ def execute_account_mutation(
 ) -> Any:
     """Authorize one account write and only then call ``transport`` or ``session``.
 
-    ``picks`` is the squad view used for sandbox checks. When omitted, the
-    ``picks`` list inside ``payload`` is validated. The approval token is
-    computed from ``payload``, so a token minted for a different body does
-    not authorize this call.
+    ``approval`` is a signed record produced by ``fpl_skill.approval_issuer``.
+    A hash of the payload is not an approval. ``FPL_MODE=autonomous`` does
+    not skip the signature, the fresh account read, or the sandbox.
     """
     if mode is None:
         mode = os.environ.get("FPL_MODE", "advisory")
-    gate = ApprovalGate(mode)
-    expected = expected_approval_token(team_id, endpoint, payload)
-    # Mode and token first, so a missing approval cannot fall through to the
-    # account lookup. The full authorize() call repeats these checks with the
-    # resolved ownership state immediately before the transport runs.
-    gate.check_confirmation(approval_token, expected)
+    ApprovalGate(mode).check_mode()
+    if approval is None:
+        raise ExecutionDenied("missing out-of-band approval record")
+
+    now = clock() if clock is not None else datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    public_key = load_public_key_pem(public_key_pem)
+    nonce = verify_approval_record(
+        approval,
+        team_id=team_id,
+        endpoint=endpoint,
+        payload=payload,
+        public_key_pem=public_key,
+        now=now,
+    )
 
     squad = list(picks) if picks is not None else list(payload.get("picks") or [])
-    checked = validate_picks(squad, budget=budget)
+    elements = bootstrap_reader() if bootstrap_reader is not None else load_bootstrap_elements()
+    if isinstance(elements, list):
+        elements = {int(player["id"]): player for player in elements}
+    checked = validate_picks(squad, budget=budget, bootstrap=elements)
     if not checked["valid"]:
         detail = "; ".join(checked["violations"])
         raise ExecutionDenied(f"sandbox rejected the squad: {detail}")
@@ -94,14 +118,15 @@ def execute_account_mutation(
         except (TemporalLeakageError, SnapshotIntegrityError) as exc:
             raise ExecutionDenied(f"temporal firewall refused the change: {exc}") from exc
 
-    resolved_state = ownership_state
-    if resolved_state is None and state_provider is not None:
-        resolved_state = state_provider()
-    gate.authorize(
-        ownership_state=resolved_state,
-        approval_token=approval_token,
-        expected_token=expected,
+    ownership_state = (
+        account_state_reader() if account_state_reader is not None else load_fresh_ownership(team_id)
     )
+    if ownership_state != "VERIFIED_CURRENT":
+        raise ExecutionDenied(f"account state is not VERIFIED_CURRENT ({ownership_state})")
+
+    store = nonce_store if nonce_store is not None else default_nonce_store()
+    if not store.consume(nonce):
+        raise ExecutionDenied("approval nonce was already used")
 
     if transport is None and session is None:
         raise ExecutionDenied("refusing to open a network connection without an explicit transport")

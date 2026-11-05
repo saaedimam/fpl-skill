@@ -5,16 +5,25 @@ injected session are asserted unused whenever a write is refused.
 """
 from __future__ import annotations
 
+import ast
 import copy
+import hashlib
 import importlib.util
+import io
+import json
+import subprocess
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+import fpl_skill.execution as execution_module
 from fpl_skill.approval_gate import ExecutionDenied
+from fpl_skill.approval_issuer import issue_approval
+from fpl_skill.approval_verify import NonceStore
 from fpl_skill.certification import generate_certificate, prove_upper_bound_admissible
-from fpl_skill.execution import execute_account_mutation, expected_approval_token
+from fpl_skill.execution import execute_account_mutation
 from fpl_skill.historical import ImmutableSnapshot, Provenance, compute_sha256
 from fpl_skill.optimality import certificate_from_solve
 from fpl_skill.prediction_engine import PredictionEngine
@@ -25,17 +34,45 @@ ENDPOINT = "/my-team/1/"
 TEAM_ID = "1"
 
 
+FIXED_NOW = datetime(2026, 11, 5, 16, 0, tzinfo=timezone.utc)
+
+
 class RecordingSession:
     def __init__(self):
         self.calls = []
+        self.state_calls = []
+        self.bootstrap_calls = []
 
     def post(self, url, data=None, headers=None, **kwargs):
         self.calls.append({"url": url, "data": data, "headers": headers or {}, "kwargs": kwargs})
         return {"status": 200}
 
 
-def _no_lookup():
-    raise AssertionError("account lookup must not run for this refusal")
+def _openssl_keys(directory: Path):
+    private_path = directory / "sign.pem"
+    public_path = directory / "verify.pem"
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private_path)],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "pkey", "-in", str(private_path), "-pubout", "-out", str(public_path)],
+        check=True, capture_output=True,
+    )
+    return private_path.read_text(encoding="utf-8"), public_path.read_text(encoding="utf-8")
+
+
+def _issue(private_pem, payload, *, expires_at=None, confirm="approve\n"):
+    return issue_approval(
+        team_id=TEAM_ID,
+        endpoint=ENDPOINT,
+        payload=payload,
+        private_key_pem=private_pem,
+        stdin=io.StringIO(confirm),
+        stdout=io.StringIO(),
+        now=FIXED_NOW,
+        expires_at=expires_at,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -76,153 +113,327 @@ def _payload(picks):
     return {"chip": None, "picks": picks}
 
 
-def _run(picks=None, *, token="valid", mode="approval", state="VERIFIED_CURRENT", **kwargs):
+def bootstrap_for(picks):
+    return {
+        pick["element"]: {
+            "id": pick["element"],
+            "element_type": pick["element_type"],
+            "team": pick["team"],
+            "now_cost": pick["now_cost"],
+        }
+        for pick in picks
+    }
+
+
+def _run(tmp_path, picks=None, *, approval="valid", mode="approval", state="VERIFIED_CURRENT", **kwargs):
     picks = legal_picks() if picks is None else picks
     payload = kwargs.pop("payload", _payload(picks))
-    if token == "valid":
-        approval = expected_approval_token(TEAM_ID, ENDPOINT, payload)
-    elif token == "missing":
-        approval = None
+    private_pem, public_pem = _openssl_keys(tmp_path)
+    if approval == "valid":
+        approval_record = _issue(private_pem, payload, expires_at=kwargs.pop("expires_at", None))
+    elif approval == "missing":
+        kwargs.pop("expires_at", None)
+        approval_record = None
     else:
-        approval = token
+        kwargs.pop("expires_at", None)
+        approval_record = approval
     session = kwargs.pop("session", RecordingSession())
+    bootstrap = kwargs.pop("bootstrap", bootstrap_for(picks))
+
+    def state_reader():
+        session.state_calls.append(state)
+        return state
+
+    def bootstrap_reader():
+        session.bootstrap_calls.append(1)
+        return bootstrap
+
     execute_account_mutation(
-        team_id=TEAM_ID,
-        endpoint=ENDPOINT,
+        team_id=kwargs.pop("team_id", TEAM_ID),
+        endpoint=kwargs.pop("endpoint", ENDPOINT),
         payload=payload,
         picks=picks,
-        approval_token=approval,
-        ownership_state=state,
+        approval=approval_record,
+        public_key_pem=kwargs.pop("public_key_pem", public_pem),
         mode=mode,
         session=session,
-        state_provider=kwargs.pop("state_provider", _no_lookup),
+        account_state_reader=kwargs.pop("account_state_reader", state_reader),
+        bootstrap_reader=kwargs.pop("bootstrap_reader", bootstrap_reader),
+        nonce_store=kwargs.pop("nonce_store", NonceStore(tmp_path / "nonces")),
+        clock=kwargs.pop("clock", lambda: FIXED_NOW),
         budget=kwargs.pop("budget", 100.0),
+        transport=kwargs.pop("transport", None),
         **kwargs,
     )
     return session
 
 
-def test_missing_approval_sends_nothing():
+def test_missing_approval_sends_nothing(tmp_path):
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="approval"):
-        _run(token="missing", session=session)
+        _run(tmp_path, approval="missing", session=session)
     assert session.calls == []
+    assert session.bootstrap_calls == []
+    assert session.state_calls == []
 
 
-def test_empty_approval_sends_nothing():
+def test_empty_approval_sends_nothing(tmp_path):
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="approval"):
-        _run(token="   ", session=session)
+        _run(tmp_path, approval="   ", session=session)
     assert session.calls == []
 
 
-@pytest.mark.parametrize("mode", ["advisory", "execute", "auto", ""])
-def test_mode_that_does_not_permit_writes_sends_nothing(mode):
-    session = RecordingSession()
-    with pytest.raises(ExecutionDenied, match="FPL_MODE"):
-        _run(mode=mode, session=session)
-    assert session.calls == []
-
-
-def test_autonomous_without_token_sends_nothing():
+def test_caller_cannot_authorize_with_a_computed_hash(tmp_path):
+    assert not hasattr(execution_module, "expected_approval_token")
+    source = (REPO / "fpl_skill" / "execution.py").read_text(encoding="utf-8")
+    assert "expected_approval_token" not in source
+    assert "FPL_APPROVAL_SIGNING_KEY" not in source
+    picks = legal_picks()
+    payload = _payload(picks)
+    forged = "APPROVE:" + hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="approval"):
-        _run(mode="autonomous", token="missing", session=session)
+        _run(tmp_path, picks=picks, approval=forged, session=session)
     assert session.calls == []
+    assert session.state_calls == []
 
 
-def test_tampered_payload_sends_nothing():
+def test_replayed_approval_sends_nothing(tmp_path):
+    picks = legal_picks()
+    payload = _payload(picks)
+    private_pem, public_pem = _openssl_keys(tmp_path)
+    record = _issue(private_pem, payload)
+    store = NonceStore(tmp_path / "nonces")
+    first = _run(
+        tmp_path, picks=picks, approval=record, public_key_pem=public_pem, nonce_store=store,
+    )
+    assert len(first.calls) == 1
+    second = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="already used"):
+        _run(
+            tmp_path, picks=picks, approval=record, public_key_pem=public_pem,
+            nonce_store=store, session=second,
+        )
+    assert second.calls == []
+
+
+def test_expired_approval_sends_nothing(tmp_path):
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="expired"):
+        _run(tmp_path, expires_at="2020-01-01T00:00:00Z", session=session)
+    assert session.calls == []
+    assert session.bootstrap_calls == []
+    assert session.state_calls == []
+
+
+def test_mismatched_payload_sends_nothing(tmp_path):
     picks = legal_picks()
     original = _payload(picks)
-    token = expected_approval_token(TEAM_ID, ENDPOINT, original)
+    private_pem, public_pem = _openssl_keys(tmp_path)
+    record = _issue(private_pem, original)
     tampered = copy.deepcopy(original)
     tampered["chip"] = "wildcard"
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="does not match"):
-        _run(picks=picks, payload=tampered, token=token, session=session)
+        _run(
+            tmp_path, picks=picks, payload=tampered, approval=record,
+            public_key_pem=public_pem, session=session,
+        )
     assert session.calls == []
+    assert session.state_calls == []
 
 
-def test_tampered_token_sends_nothing():
-    picks = legal_picks()
-    token = expected_approval_token(TEAM_ID, ENDPOINT, _payload(picks))
-    flipped = token[:-1] + ("0" if token[-1] != "0" else "1")
+@pytest.mark.parametrize("mode", ["advisory", "execute", "auto", ""])
+def test_mode_that_does_not_permit_writes_sends_nothing(tmp_path, mode):
     session = RecordingSession()
-    with pytest.raises(ExecutionDenied, match="does not match"):
-        _run(picks=picks, token=flipped, session=session)
+    with pytest.raises(ExecutionDenied, match="FPL_MODE"):
+        _run(tmp_path, mode=mode, session=session)
+    assert session.calls == []
+    assert session.state_calls == []
+
+
+def test_autonomous_without_approval_sends_nothing(tmp_path):
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="approval"):
+        _run(tmp_path, mode="autonomous", approval="missing", session=session)
     assert session.calls == []
 
 
 @pytest.mark.parametrize("state", ["PUBLISHED_EVENT_PICKS", "HISTORICAL_FALLBACK", "UNAVAILABLE", ""])
-def test_unverified_account_state_sends_nothing(state):
+def test_unverified_account_state_sends_nothing(tmp_path, state):
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="VERIFIED_CURRENT"):
-        _run(state=state, session=session)
+        _run(tmp_path, state=state, session=session)
     assert session.calls == []
+    assert session.state_calls == [state]
 
 
-def test_missing_account_state_sends_nothing():
+def test_caller_supplied_state_string_cannot_unlock_a_write(tmp_path, monkeypatch):
+    picks = legal_picks()
+    payload = _payload(picks)
+    private_pem, public_pem = _openssl_keys(tmp_path)
+    record = _issue(private_pem, payload)
     session = RecordingSession()
-    with pytest.raises(ExecutionDenied, match="VERIFIED_CURRENT"):
-        _run(state=None, session=session, state_provider=lambda: None)
+    with pytest.raises(TypeError):
+        execute_account_mutation(
+            team_id=TEAM_ID,
+            endpoint=ENDPOINT,
+            payload=payload,
+            picks=picks,
+            approval=record,
+            public_key_pem=public_pem,
+            mode="approval",
+            session=session,
+            ownership_state="VERIFIED_CURRENT",
+            bootstrap_reader=lambda: bootstrap_for(picks),
+            nonce_store=NonceStore(tmp_path / "nonces"),
+            clock=lambda: FIXED_NOW,
+        )
     assert session.calls == []
 
+    monkeypatch.setenv("FPL_OWNERSHIP_STATE", "VERIFIED_CURRENT")
+    denied = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="VERIFIED_CURRENT"):
+        _run(tmp_path, state="UNAVAILABLE", session=denied)
+    assert denied.calls == []
 
-def test_over_budget_squad_sends_nothing():
+
+def test_account_state_is_read_fresh_inside_the_chokepoint(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeAdapter:
+        def __init__(self, team_id):
+            calls.append(("init", str(team_id)))
+
+        def get_active_event_id(self):
+            calls.append("event")
+            return 4
+
+        def get_state(self, gameweek):
+            calls.append(("state", gameweek))
+            return {"ownership_state": "VERIFIED_CURRENT" if calls.count(("state", gameweek)) == 1 else "UNAVAILABLE"}
+
+    monkeypatch.setattr("fpl_skill.account_adapter.FPLAccountAdapter", FakeAdapter)
+    picks = legal_picks()
+    first = _run(tmp_path, picks=picks, account_state_reader=None)
+    assert len(first.calls) == 1
+    assert ("state", 4) in calls
+    second = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="VERIFIED_CURRENT"):
+        _run(tmp_path, picks=picks, session=second, account_state_reader=None)
+    assert second.calls == []
+    assert calls.count(("state", 4)) == 2
+
+
+def test_over_budget_squad_sends_nothing(tmp_path):
     picks = legal_picks()
     picks[0]["now_cost"] = 9000
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="budget"):
-        _run(picks=picks, session=session)
+        _run(tmp_path, picks=picks, session=session)
+    assert session.calls == []
+    assert session.state_calls == []
+
+
+def test_price_must_match_bootstrap(tmp_path):
+    picks = legal_picks()
+    bootstrap = bootstrap_for(picks)
+    picks[0]["now_cost"] = 1
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="now_cost"):
+        _run(tmp_path, picks=picks, bootstrap=bootstrap, session=session)
     assert session.calls == []
 
 
-def test_four_from_one_club_sends_nothing():
+def test_team_must_match_bootstrap(tmp_path):
+    picks = legal_picks()
+    bootstrap = bootstrap_for(picks)
+    picks[0]["team"] = "NOT-A-CLUB"
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="team"):
+        _run(tmp_path, picks=picks, bootstrap=bootstrap, session=session)
+    assert session.calls == []
+
+
+def test_position_must_match_bootstrap(tmp_path):
+    picks = legal_picks()
+    bootstrap = bootstrap_for(picks)
+    picks[5]["element_type"] = 1
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="element_type"):
+        _run(tmp_path, picks=picks, bootstrap=bootstrap, session=session)
+    assert session.calls == []
+
+
+def test_unknown_player_id_sends_nothing(tmp_path):
+    picks = legal_picks()
+    bootstrap = bootstrap_for(picks)
+    picks[0]["element"] = 99999
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="not in the authoritative bootstrap"):
+        _run(tmp_path, picks=picks, bootstrap=bootstrap, session=session)
+    assert session.calls == []
+
+
+def test_duplicate_player_ids_send_nothing(tmp_path):
+    picks = legal_picks()
+    picks[1]["element"] = picks[0]["element"]
+    session = RecordingSession()
+    with pytest.raises(ExecutionDenied, match="duplicate"):
+        _run(tmp_path, picks=picks, session=session)
+    assert session.calls == []
+
+
+def test_four_from_one_club_sends_nothing(tmp_path):
     picks = legal_picks()
     for pick in picks[:4]:
         pick["team"] = "ARS"
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="club"):
-        _run(picks=picks, session=session)
+        _run(tmp_path, picks=picks, session=session)
     assert session.calls == []
 
 
-def test_wrong_position_counts_send_nothing():
+def test_wrong_position_counts_send_nothing(tmp_path):
     picks = legal_picks()
     picks[1]["element_type"] = 1
     picks[2]["element_type"] = 1
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="positions"):
-        _run(picks=picks, session=session)
+        _run(tmp_path, picks=picks, session=session)
     assert session.calls == []
 
 
-def test_captain_outside_xi_sends_nothing():
+def test_captain_outside_xi_sends_nothing(tmp_path):
     picks = legal_picks()
     for pick in picks:
         pick["is_captain"] = False
     picks[12]["is_captain"] = True
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="captain"):
-        _run(picks=picks, session=session)
+        _run(tmp_path, picks=picks, session=session)
     assert session.calls == []
 
 
-def test_vice_outside_xi_sends_nothing():
+def test_vice_outside_xi_sends_nothing(tmp_path):
     picks = legal_picks()
     for pick in picks:
         pick["is_vice_captain"] = False
     picks[12]["is_vice_captain"] = True
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="vice"):
-        _run(picks=picks, session=session)
+        _run(tmp_path, picks=picks, session=session)
     assert session.calls == []
 
 
-def test_signal_only_evidence_sends_nothing():
+def test_signal_only_evidence_sends_nothing(tmp_path):
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="evidence"):
         _run(
+            tmp_path,
             session=session,
             evidence_claims=[{
                 "level": "L5",
@@ -235,10 +446,11 @@ def test_signal_only_evidence_sends_nothing():
     assert session.calls == []
 
 
-def test_future_snapshot_sends_nothing():
+def test_future_snapshot_sends_nothing(tmp_path):
     session = RecordingSession()
     with pytest.raises(ExecutionDenied, match="firewall"):
         _run(
+            tmp_path,
             session=session,
             decision_cutoff_utc="2026-09-01T10:00:00Z",
             historical_snapshots=[_snapshot("2026-09-01T10:00:01Z")],
@@ -246,34 +458,47 @@ def test_future_snapshot_sends_nothing():
     assert session.calls == []
 
 
-def test_authorized_write_uses_the_mock_session_once():
-    session = _run(mode="approval")
+def test_authorized_write_uses_the_mock_session_once(tmp_path):
+    session = _run(tmp_path, mode="approval")
     assert len(session.calls) == 1
+    assert session.state_calls == ["VERIFIED_CURRENT"]
     call = session.calls[0]
     assert call["url"].endswith(ENDPOINT)
     assert "Cookie" not in call["headers"]
     assert "cookie" not in {key.lower() for key in call["headers"]}
 
 
-def test_autonomous_with_matching_token_uses_the_mock_session_once():
-    session = _run(mode="autonomous")
+def test_autonomous_still_requires_a_signed_approval(tmp_path):
+    session = _run(tmp_path, mode="autonomous")
     assert len(session.calls) == 1
+    assert session.state_calls == ["VERIFIED_CURRENT"]
 
 
-def test_library_refuses_to_open_its_own_connection():
+def test_library_refuses_to_open_its_own_connection(tmp_path):
     picks = legal_picks()
     payload = _payload(picks)
+    private_pem, public_pem = _openssl_keys(tmp_path)
+    record = _issue(private_pem, payload)
     with pytest.raises(ExecutionDenied, match="network"):
         execute_account_mutation(
             team_id=TEAM_ID,
             endpoint=ENDPOINT,
             payload=payload,
             picks=picks,
-            approval_token=expected_approval_token(TEAM_ID, ENDPOINT, payload),
-            ownership_state="VERIFIED_CURRENT",
+            approval=record,
+            public_key_pem=public_pem,
             mode="approval",
-            state_provider=_no_lookup,
+            account_state_reader=lambda: "VERIFIED_CURRENT",
+            bootstrap_reader=lambda: bootstrap_for(picks),
+            nonce_store=NonceStore(tmp_path / "nonces"),
+            clock=lambda: FIXED_NOW,
         )
+
+
+def test_unconfirmed_prompt_does_not_sign(tmp_path):
+    private_pem, _public_pem = _openssl_keys(tmp_path)
+    with pytest.raises(ExecutionDenied, match="not confirmed"):
+        _issue(private_pem, _payload(legal_picks()), confirm="no\n")
 
 
 def test_direct_script_post_is_refused_when_the_gate_is_closed():
@@ -312,24 +537,14 @@ def test_script_transport_posts_only_after_the_gate(monkeypatch, tmp_path):
         transport(ENDPOINT, payload)
     assert calls == []
 
-    result = execute_account_mutation(
-        team_id=TEAM_ID,
-        endpoint=ENDPOINT,
-        payload=payload,
-        picks=picks,
-        approval_token=expected_approval_token(TEAM_ID, ENDPOINT, payload),
-        ownership_state="VERIFIED_CURRENT",
-        mode="approval",
-        transport=transport,
-        state_provider=_no_lookup,
-    )
-    assert result["status"] == 200
+    _run(tmp_path, picks=picks, transport=transport)
     assert len(calls) == 1
     assert calls[0].get_method() == "POST"
     assert calls[0].full_url.endswith(ENDPOINT)
 
 
 def test_all_python_apply_without_approval_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.setenv("FPL_TEAM_ID", "YOUR_ENTRY_ID")
     monkeypatch.setenv("FPL_MODE", "approval")
     module = _load_all_python()
     cookies = tmp_path / "cookies.txt"
@@ -338,6 +553,7 @@ def test_all_python_apply_without_approval_fails_closed(monkeypatch, tmp_path):
 
 
 def test_all_python_apply_in_advisory_mode_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.setenv("FPL_TEAM_ID", "YOUR_ENTRY_ID")
     monkeypatch.delenv("FPL_MODE", raising=False)
     module = _load_all_python()
     cookies = tmp_path / "cookies.txt"
@@ -345,9 +561,18 @@ def test_all_python_apply_in_advisory_mode_fails_closed(monkeypatch, tmp_path):
     assert module.main(["--apply", "--cookies", str(cookies)]) != 0
 
 
-def test_all_python_dry_run_does_not_apply():
+def test_all_python_missing_team_id_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.delenv("FPL_TEAM_ID", raising=False)
+    module = _load_all_python()
+    assert module.main([]) != 0
+    assert module.main(["--apply"]) != 0
+
+
+def test_all_python_dry_run_does_not_apply(monkeypatch):
+    monkeypatch.setenv("FPL_TEAM_ID", "YOUR_ENTRY_ID")
     module = _load_all_python()
     assert module.main([]) == 0
+    assert "1512229" not in (REPO / "all.python").read_text(encoding="utf-8")
 
 
 def test_prediction_blocks_future_snapshots():
@@ -501,6 +726,51 @@ def test_adapter_modules_do_not_post():
         text = (REPO / relative).read_text(encoding="utf-8")
         assert 'method="POST"' not in text
         assert "method='POST'" not in text
+
+
+def test_write_verbs_exist_only_on_the_chokepoint():
+    roots = list((REPO / "fpl_skill").rglob("*.py")) + [REPO / "all.python"]
+    hits = []
+    for path in roots:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        relative = str(path.relative_to(REPO))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in {"post", "put", "delete", "patch"}:
+                    hits.append((relative, node.func.attr))
+            if isinstance(node, ast.keyword) and node.arg == "method" and isinstance(node.value, ast.Constant):
+                if str(node.value.value).upper() in {"POST", "PUT", "DELETE", "PATCH"}:
+                    hits.append((relative, str(node.value.value).upper()))
+    assert set(hits) == {
+        ("fpl_skill/execution.py", "post"),
+        ("all.python", "POST"),
+    }
+    for path in roots:
+        text = path.read_text(encoding="utf-8")
+        assert "import requests" not in text
+        assert "import httpx" not in text
+
+
+def test_patched_transports_see_only_gets_outside_the_chokepoint(monkeypatch):
+    methods = []
+
+    def recording(req, timeout=10):
+        if isinstance(req, str):
+            methods.append("GET")
+        else:
+            methods.append(req.get_method())
+        raise RuntimeError("blocked")
+
+    monkeypatch.setattr(urllib.request, "urlopen", recording)
+    from fpl_skill.account_adapter import FPLAccountAdapter
+    from fpl_skill.direct_api import fetch_url
+
+    assert fetch_url("https://example.test/bootstrap-static/") is None
+    adapter = FPLAccountAdapter("YOUR_ENTRY_ID")
+    with pytest.raises(RuntimeError, match="blocked"):
+        adapter.get_bootstrap()
+    assert methods
+    assert set(methods) == {"GET"}
 
 
 def test_skill_frontmatter_has_description():
