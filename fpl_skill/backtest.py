@@ -77,7 +77,7 @@ class CaptainBacktest:
         self.adapter = FPLAccountAdapter(team_id)
         self.bootstrap = self.adapter.get_bootstrap()
         self.fixtures = self.adapter.get_fixtures()
-        self.fixture_map = build_fixture_map(self.fixtures)
+        self.fixture_map = build_fixture_map(self.fixtures, teams=self.bootstrap.get("teams"))
         self.elements = {p['id']: p for p in self.bootstrap['elements']}
         self.decisions: List[CaptainDecision] = []
 
@@ -211,7 +211,7 @@ class BenchBacktest:
         self.adapter = FPLAccountAdapter(team_id)
         self.bootstrap = self.adapter.get_bootstrap()
         self.fixtures = self.adapter.get_fixtures()
-        self.fixture_map = build_fixture_map(self.fixtures)
+        self.fixture_map = build_fixture_map(self.fixtures, teams=self.bootstrap.get("teams"))
         self.elements = {p['id']: p for p in self.bootstrap['elements']}
         self.decisions: List[BenchDecision] = []
 
@@ -323,7 +323,7 @@ class TransferBacktest:
         self.adapter = FPLAccountAdapter(team_id)
         self.bootstrap = self.adapter.get_bootstrap()
         self.fixtures = self.adapter.get_fixtures()
-        self.fixture_map = build_fixture_map(self.fixtures)
+        self.fixture_map = build_fixture_map(self.fixtures, teams=self.bootstrap.get("teams"))
         self.elements = {p['id']: p for p in self.bootstrap['elements']}
         self.all_players = self.bootstrap['elements']
         self.decisions: List[TransferDecision] = []
@@ -340,7 +340,9 @@ class TransferBacktest:
         if not squad:
             raise ValueError(f"No squad players found: {squad_ids}")
 
-        result = find_best_one_ft(squad, self.all_players, bank, self.fixture_map)
+        # Historical backtest: explicit window starting at the decision GW (no live-planning refusal).
+        result = find_best_one_ft(squad, self.all_players, bank, self.fixture_map,
+                                  gameweeks=list(range(gw, min(38, gw + 3) + 1)))
         if not result.get("player_out") or not result.get("player_in"):
             return None
 

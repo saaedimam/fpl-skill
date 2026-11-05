@@ -593,10 +593,11 @@ def test_prediction_blocks_future_snapshots():
 
 def test_prediction_admits_snapshots_at_or_before_cutoff():
     engine = PredictionEngine.__new__(PredictionEngine)
-    engine.fixture_map = {}
+    engine.fixture_map = {1: {1: [{"opp": 2, "is_home": True, "fdr": 3}]}}
+    engine.events = [{"id": g, "finished": False, "is_current": False, "is_next": g == 1} for g in range(1, 39)]
     result = engine.run(
         1,
-        squad=[{"player_id": 1, "position": "MID", "web_name": "A"}],
+        squad=[{"player_id": 1, "position": "MID", "web_name": "A", "team": 1, "minutes": 90, "form": 4.0}],
         decision_cutoff_utc="2026-09-01T10:00:00Z",
         historical_snapshots=[_snapshot("2026-09-01T09:00:00Z")],
         evidence_claims=[{
