@@ -43,15 +43,26 @@ jobs:
 
       - name: Prove network namespace has no external egress
         run: |
-          # Authoritative kernel boundary for tests: user+net namespace with only
-          # loopback. If this step fails on the runner, do not treat the
-          # Python monkeypatch alone as sufficient protection.
-          unshare --user --map-root-user --net -- sh -c \
-            'ip link set lo up && python tests/prove_netns_egress_denied.py'
+          # Authoritative kernel boundary for tests.
+          # GitHub-hosted runners reject unprivileged user namespaces
+          # (`unshare --user --map-root-user` → uid_map Operation not permitted),
+          # so CI uses passwordless sudo + a root netns instead. Locally,
+          # `unshare --user --map-root-user --net` remains fine when permitted.
+          PYTHON_BIN="$(command -v python)"
+          sudo unshare --net -- env \
+            PATH="$PATH" \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            PYTHON_BIN="$PYTHON_BIN" \
+            bash -c 'ip link set lo up && "$PYTHON_BIN" tests/prove_netns_egress_denied.py'
 
       - name: Run test suite (network namespace, loopback only)
         run: |
           # tests/run_validation.py is a manual live-data harness and is not collected here.
           # FPL_TEST_NETNS=1 enables the netns-only interface assertion in tests.
-          unshare --user --map-root-user --net -- sh -c \
-            'ip link set lo up && export FPL_TEST_NETNS=1 && python -m pytest tests/ -ra'
+          PYTHON_BIN="$(command -v python)"
+          sudo unshare --net -- env \
+            PATH="$PATH" \
+            LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+            PYTHON_BIN="$PYTHON_BIN" \
+            FPL_TEST_NETNS=1 \
+            bash -c 'ip link set lo up && "$PYTHON_BIN" -m pytest tests/ -ra'

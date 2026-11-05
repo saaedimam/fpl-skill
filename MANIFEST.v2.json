@@ -89,7 +89,7 @@
     "tests/test_network_guard.py"
   ],
   "file_hashes": {
-    "CHANGELOG.md": "e3495ac672e89a8e01c5cd99005b1fa130ce90abe91064edbb0e865f834b100a",
+    "CHANGELOG.md": "21264b4b9a620371befca4fbe61bf159c452ae0a22ad431895f1a9cb42a96d99",
     "SKILL.md": "c67834abf4435d80b9eb8e46c72dbbf9aa29904edcf6116c3f6c9e349cc0a38c",
     "all.python": "0206ff675c922db53c718124066c24c2a566b42dabff0652190c347fd61e9d30",
     "certification/NOTICE.md": "4cca2f2230114611fc7caed885e90c838469f8e606a95fabc71690e4fd9b3470",
@@ -159,13 +159,13 @@
     "tests/test_rank_aware_objective1.py": "4e9f4931f865978c0fee614ee03e3e66c97b040e9c00b1a9513bc2a0ae8e25ee",
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3",
-    "tests/README.md": "0655551880b30639023f5826f2a61e15c098e911d9424958867fafaa119b7c85",
+    "tests/README.md": "74d11593c6c6754f709b23a26cf18c5880c57009421148a7fbe7117618599f5e",
     "tests/conftest.py": "321aaad5ddc4c5156e0a7d4ae900f0af2cb91dce7ccd3ff81fb7be5c2bd1c52a",
     "tests/network_isolation.py": "b88f6daa83c854a834f04188777477f262738fa9205b785a098b76e3edc6cc42",
     "tests/prove_netns_egress_denied.py": "24c579a08536d9ca993be9cdb63b7e0b3a0dd51477c2cd1cb188788f9d02f673",
     "tests/test_network_guard.py": "4021783e871cb49c71238fa7328f9ddf17027c09f6cd86d6645db2701e39a925"
   },
-  "release_hash": "be068d26e931d509e50c04417f6d9fc109b5df82824d005051cc5cd8c4d907aa",
+  "release_hash": "9a0dc8d7de5b079ea24f73ff1728f4135bf593384cf63405b407422f9f615e02",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-09-13T01:09:00+00:00"
 }

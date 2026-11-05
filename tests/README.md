@@ -11,7 +11,12 @@ CI (and recommended local runs) execute pytest inside a fresh network
 namespace with only loopback enabled:
 
 ```bash
+# Local (when user namespaces are allowed):
 unshare --user --map-root-user --net -- sh -c \
+  'ip link set lo up; python -m pytest tests/ -ra'
+
+# GitHub Actions ubuntu runners (user namespaces blocked):
+sudo unshare --net -- env PATH="$PATH" bash -c \
   'ip link set lo up; python -m pytest tests/ -ra'
 ```
 

@@ -4,7 +4,7 @@
 ## Unreleased — fail-closed execution
 
 ### Added
-- Test-only network isolation: CI runs pytest inside `unshare --net` with only loopback, plus an autouse pytest guard (`tests/conftest.py`, `tests/network_isolation.py`) that blocks non-loopback connects and FPL-host POST/PUT/PATCH/DELETE via socket/urllib/http.client. Documented limits: monkeypatches are incomplete; the namespace is the real CI boundary (`tests/README.md`).
+- Test-only network isolation: CI runs pytest inside `sudo unshare --net` with only loopback (GH runners block unprivileged user namespaces), plus an autouse pytest guard (`tests/conftest.py`, `tests/network_isolation.py`) that blocks non-loopback connects and FPL-host POST/PUT/PATCH/DELETE via socket/urllib/http.client. Documented limits: monkeypatches are incomplete; the namespace is the real CI boundary (`tests/README.md`).
 
 ### Changed
 - `tests/test_forensic_repairs.py` no longer depends on live FPL GETs during TransferIntelligence construction or `cli verify` (mocked for the offline suite / netns CI).
