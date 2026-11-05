@@ -82,3 +82,28 @@ def test_none_chance_of_playing_safe():
                                      'expected_goals': None, 'expected_assists': None})
     d2 = eng.generate_distribution(inj)
     assert d2.p50 == 0.0
+
+
+def test_invalid_fdr_raises_explicit_error():
+    import pytest
+    engine = ProbabilisticEPEngine()
+    inputs = DistributionModelInputs(
+        player_id=1, position="FWD", status="available", team=11, opponent="SHU", gw=1,
+        minutes_played_last_3=270, chance_of_playing_next_round=100, form=8.0,
+        selected_by_percent=50.0, fixture_difficulty=0, is_home=True,
+        opponent_strength_attack=1000, opponent_strength_defence=900,
+        team_goals_per_gw=2.5, team_conceded_per_gw=1.0,
+    )
+    with pytest.raises(ValueError, match="fixture_difficulty"):
+        engine._fixture_multiplier(inputs)
+
+
+def test_missing_critical_fields_flag_provisional():
+    engine = ProbabilisticEPEngine()
+    updated = replace_scalar_ep_with_distribution(
+        {"elements": [{
+            "id": 1, "position": "FWD", "team": 11, "form": "8.0", "selected_by_percent": "75.0",
+        }]},
+        engine,
+    )
+    assert updated["elements"][0]["distribution"]["confidence"] == "provisional"

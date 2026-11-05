@@ -25,6 +25,33 @@ def make_inputs(p, gw_xg, gw_xa, expected_minutes, position=None):
     )
 
 
+def test_sub_90_minutes_normalize_by_actual_exposure():
+    player = {
+        "minutes": 45, "starts": 0, "expected_goals": 0.5, "expected_assists": 0.25,
+        "expected_goals_conceded": 1.0, "chance_of_playing_next_round": None,
+    }
+    rates = normalize_player_rates(player)
+    assert rates.xg90 == pytest.approx(1.0)
+    assert rates.xa90 == pytest.approx(0.5)
+    assert rates.xgc90 == pytest.approx(2.0)
+
+
+def test_explicit_zero_minutes_have_no_observed_exposure():
+    player = {
+        "minutes": 0, "starts": 0, "expected_goals": 2.0, "expected_assists": 1.0,
+        "expected_goals_conceded": 1.0, "chance_of_playing_next_round": None,
+    }
+    rates = normalize_player_rates(player)
+    assert rates.xg90 == 0.0
+    assert rates.xa90 == 0.0
+    assert rates.xgc90 == 0.0
+
+
+def test_non_finite_rate_input_is_rejected():
+    with pytest.raises(ValueError, match="finite"):
+        normalize_player_rates({"minutes": 90, "expected_goals": float("nan")})
+
+
 def test_cumulative_xg_is_normalized_to_per90_rate():
     r=normalize_player_rates(haaland())
     assert r.xg90==pytest.approx(0.82,abs=0.001)
