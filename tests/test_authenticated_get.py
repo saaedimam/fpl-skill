@@ -1,4 +1,5 @@
 """Authenticated account reads are GET-only and do not leak the session cookie."""
+import inspect
 import json
 from urllib.error import URLError
 
@@ -57,6 +58,19 @@ def _assert_cookie_not_exposed(document, capsys):
     assert SECRET not in text
     assert SECRET not in captured.out
     assert SECRET not in captured.err
+
+
+def test_get_profile_is_defined_once_and_empty_team_does_not_fetch(monkeypatch):
+    source = inspect.getsource(FPLAccountAdapter)
+    assert source.count("def get_profile") == 1
+
+    def urlopen(req, timeout=10):
+        raise AssertionError("empty team must not fetch")
+
+    monkeypatch.setattr(adapter_module.urllib.request, "urlopen", urlopen)
+    profile = FPLAccountAdapter("").get_profile()
+    assert profile["source"] == "DEFAULT"
+    assert profile["id"] is None
 
 
 def test_authenticated_profile_get_keeps_cookie_off_the_result(monkeypatch, capsys):

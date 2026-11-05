@@ -18,4 +18,4 @@ Legacy `optimize_wildcard_squad` (`fpl_skill/api_legacy.py`) Branch-and-Bound no
 
 Do not surface `GLOBAL_OPTIMUM_CERTIFIED = YES` for any result not produced by the exact MILP with the above objective.
 
-The squad lists and objective values above are historical notes from a previous solve. They are not a standing optimality certificate. A certificate is `OPTIMAL` only when the current CBC status is `Optimal`, the objective value is the solver value, and a constraint re-check of the returned squad passes. Any other solver status is `NOT_CERTIFIED`.
+The squad lists and objective values above are historical notes from a previous solve. They are not a standing optimality certificate. `optimality_proven` and `full_rule_optimal` stay false. A reduced-model check is not proof of full-rule optimality. Any solver status, including CBC `Optimal`, remains `NOT_CERTIFIED`.

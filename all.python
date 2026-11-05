@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
 """
-all.python — print an FPL squad plan and optionally attempt a gated write.
+all.python — print an FPL squad plan. This file never writes.
 
 The team id comes from ``FPL_TEAM_ID``. If that variable is missing the
-script stops. ``--apply`` does not write by itself. A write is sent only by
-``fpl_skill.execution.execute_account_mutation`` after a signed out-of-band
-approval, a fresh ``VERIFIED_CURRENT`` account read, and sandbox validation.
-``FPL_MODE=autonomous`` does not skip the signed approval. This script cannot
-sign an approval; it only reads a record produced by
-``python -m fpl_skill.approval_issuer``.
-
-The bundled plan stores lineup slots only. It has no club, price, or playing
-position, so the sandbox rejects it and no request is sent.
+script stops. ``--apply``, a cookie file, and a signed approval cannot
+transmit a change. ``execute_account_mutation`` refuses every account
+mutation before any outbound request.
 
 Usage:
     FPL_TEAM_ID=YOUR_ENTRY_ID python3 all.python
-    FPL_TEAM_ID=YOUR_ENTRY_ID FPL_MODE=approval \\
-        python3 all.python --apply --approval-file approval.json --cookies ~/.fpl_cookies.txt
 """
-import argparse, json, os, sys, urllib.request, urllib.error
+import argparse, json, os, sys
 
 GW = 4
 
@@ -50,7 +42,7 @@ CHIP    = None
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true", help="attempt a gated write (fails closed without a signed approval)")
+    ap.add_argument("--apply", action="store_true", help="refused; account mutations are not transmitted")
     ap.add_argument("--cookies", default=os.environ.get("FPL_COOKIES_FILE"), help="Netscape cookie dump from a logged-in browser")
     ap.add_argument("--approval-file", default=None, help="JSON approval record from python -m fpl_skill.approval_issuer")
     args = ap.parse_args(argv)
@@ -64,7 +56,7 @@ def main(argv=None):
     print(json.dumps(plan, indent=1))
 
     if not args.apply:
-        print("\n[DRY-RUN] Nothing written. A write needs a signed approval file, a fresh verified account, and a sandbox pass.")
+        print("\n[DRY-RUN] Nothing written. Account mutations are not transmitted.")
         return 0
 
     if not args.approval_file:
@@ -83,7 +75,7 @@ def main(argv=None):
     payload = {"chip": CHIP, "picks": plan["picks"]}
     endpoint = f"/my-team/{team_id}/"
     try:
-        result = execute_account_mutation(
+        execute_account_mutation(
             team_id=team_id,
             endpoint=endpoint,
             payload=payload,
@@ -96,15 +88,7 @@ def main(argv=None):
         print(f"\n[BLOCKED] {exc}")
         return 1
 
-    status = result.get("status") if isinstance(result, dict) else None
-    print(f"\n[save] POST /api/my-team/{team_id}/ status={status}")
-    if isinstance(status, int) and status < 400:
-        print(f"\n[DONE] Transfer ({TRANSFER_OUT['web_name']} OUT -> {TRANSFER_IN['web_name']} IN) "
-              f"+ lineup + captain/vice submitted for GW{GW}. Confirm the squad on the FPL site.")
-        return 0
-    body = result.get("body", "") if isinstance(result, dict) else ""
-    print(f"[BODY] {body[:500]}")
-    print("[ERROR] Save rejected.")
+    print("\n[BLOCKED] live writes are disabled. Nothing was transmitted.")
     return 1
 
 def build_plan():
@@ -119,62 +103,23 @@ def build_plan():
     return {"chip": CHIP, "picks": picks}
 
 def load_cookies(path):
-    if not path:
-        return None, None
-    try:
-        txt = open(path, "r", encoding="utf-8", errors="replace").read()
-    except OSError:
-        return None, None
-    csrf = None
-    pairs = []
-    for line in txt.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 7:
-            name, value = parts[5], parts[6]
-            pairs.append((name, value))
-            if name == "csrftoken":
-                csrf = value
-    if not pairs:
-        return None, None
-    return csrf, " ".join(f"{n}={v}" for n, v in pairs)
+    """Cookie files are not read for transmission. Kept so old flags fail closed."""
+    return None, None
 
 def _build_transport(cookie_path):
     from fpl_skill.approval_gate import ExecutionDenied
 
     def transport(endpoint, payload):
-        csrf, jar = load_cookies(cookie_path)
-        if not csrf or not jar:
-            raise ExecutionDenied(
-                "cookies must contain csrftoken and a session cookie; nothing was sent"
-            )
-        return _api_post(jar, csrf, endpoint, payload)
+        raise ExecutionDenied(
+            "live writes are disabled; a signed approval does not authorize transmission"
+        )
 
     return transport
 
 def _api_post(jar, csrf, endpoint, payload):
     from fpl_skill.approval_gate import ExecutionDenied
-    from fpl_skill.execution import TRANSPORT_ARMED
 
-    if not TRANSPORT_ARMED.get():
-        raise ExecutionDenied("direct POST refused; writes must go through execute_account_mutation")
-    req = urllib.request.Request(
-        "https://fantasy.premierleague.com/api" + endpoint,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Cookie": jar,
-            "Content-Type": "application/json",
-            "X-CSRFToken": csrf,
-            "User-Agent": "Mozilla/5.0",
-        },
-        method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return {"status": r.status, "body": r.read().decode()[:500]}
-    except urllib.error.HTTPError as e:
-        return {"status": e.code, "body": e.read().decode()[:500]}
+    raise ExecutionDenied("direct POST refused; live writes are disabled")
 
 if __name__ == "__main__":
     sys.exit(main())

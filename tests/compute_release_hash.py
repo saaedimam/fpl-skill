@@ -13,6 +13,7 @@ REQUIRED_SAFETY_PATHS = (
     "fpl_skill/approval_gate.py",
     "fpl_skill/approval_issuer.py",
     "fpl_skill/approval_verify.py",
+    "fpl_skill/certification.py",
     "fpl_skill/evidence_policy.py",
     "fpl_skill/execution.py",
     "fpl_skill/execution_sandbox.py",

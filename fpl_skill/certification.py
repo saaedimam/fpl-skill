@@ -375,20 +375,17 @@ def generate_certificate(bb_result: Dict[str, Any],
     upper = prove_upper_bound_admissible(bound_checks)
     verified_constraints = constraint_verification(bb_result.get("squad") or [])
     milp_cert = bb_result.get("optimality_certificate")
-    if isinstance(milp_cert, dict) and milp_cert.get("optimality_proven") and verified_constraints.get("valid"):
-        proven = True
+    metadata = bb_result.get("optimization_metadata") or {}
+    if isinstance(milp_cert, dict):
         solver_status = milp_cert.get("solver_status")
         objective_value = milp_cert.get("objective_value")
     else:
-        proven = False
-        metadata = bb_result.get("optimization_metadata") or {}
         solver_status = metadata.get("solver_status", "UNVERIFIED")
         objective_value = metadata.get("best_score")
     if constraint_check.get("valid") is False:
-        proven = False
         verified_constraints = constraint_check
     cert = {
-        "certification_type": "FPL_Wildcard_Global_Optimality",
+        "certification_type": "FPL_Wildcard_Reduced_Model_Report",
         "version": "2.0",
         "timestamp": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
         "data_hash": data_hash,
@@ -407,7 +404,9 @@ def generate_certificate(bb_result: Dict[str, Any],
         },
         "solver_status": solver_status,
         "objective_value": objective_value,
-        "optimality_proven": proven,
+        "optimality_proven": False,
+        "full_rule_optimal": False,
+        "certificate": "NOT_CERTIFIED",
         "upper_bound_proof": upper,
         "branch_and_bound": {
             "method": "BRANCH_AND_BOUND_INTEGER_PROGRAM",
@@ -418,7 +417,7 @@ def generate_certificate(bb_result: Dict[str, Any],
             "score": bb_result["optimization_metadata"]["best_score"],
             "exhaustive": bb_result["optimization_metadata"]["exhaustive"],
             "claimed_optimality_proven": bb_result["optimization_metadata"].get("optimality_proven"),
-            "optimality_proven": proven,
+            "optimality_proven": False,
         },
         "exhaustive_verification": {
             "total_search_space": exhaustive_result["total_combinations"],
@@ -551,20 +550,11 @@ def run_full_certification() -> Dict[str, Any]:
     print(f"Data Hash: {data_hash}")
     print(f"Certificate: {cert_path}")
 
-    overall_pass = (
-        cert.get("optimality_proven") is True
-        and cert["solver_status"] == "Optimal"
-        and cert['constraint_verification']['valid']
-        and cert['formation_verification']['formation_valid']
-        and cert['formation_verification']['captain_attacking']
-        and cert['formation_verification']['vice_captain_attacking']
-    )
-
-    print(f"\nOVERALL: {'✅ CERTIFIED OPTIMAL' if overall_pass else '❌ CERTIFICATION FAILED'}")
+    print("\nOVERALL: NOT A FULL-RULE CERTIFICATE")
 
     return cert
 
 
 if __name__ == "__main__":
-    cert = run_full_certification()
-    exit(0 if cert["equivalence_verification"]["verification"] == "PASSED" else 1)
+    run_full_certification()
+    raise SystemExit("A reduced-model report is not a full-rule certificate.")
