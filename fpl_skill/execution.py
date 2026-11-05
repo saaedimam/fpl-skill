@@ -1,10 +1,12 @@
 """Single chokepoint for FPL account mutations.
 
-Every mutation is refused before any outbound write. A signed approval is
-evidence about a proposed change. It does not authorize transmission, and
-there is no mode, transport, or session that turns the refusal off. The
-executor cannot mint an approval. Account state is read inside this function.
-Caller-supplied state strings are not accepted.
+Every mutation is refused before any outbound write. Validation of an
+approval, squad, evidence record, temporal cutoff, or account state is not
+authorization to transmit. After those checks the function discards any
+injected transport and session and raises ExecutionDenied. There is no
+mode that turns transmission back on. The executor cannot mint an approval.
+Account state is read inside this function. Caller-supplied state strings
+are not accepted.
 """
 from __future__ import annotations
 
@@ -129,9 +131,9 @@ def execute_account_mutation(
     if not store.consume(nonce):
         raise ExecutionDenied("approval nonce was already used")
 
-    # Checked last so a bad approval, squad, or account state still fails
-    # closed for its own reason. No approval, mode, or injected transport
-    # is allowed to proceed past this line into the network.
+    # Validation above is not authorization. A passing approval, squad,
+    # evidence check, temporal check, account read, or nonce consume must
+    # not be treated as permission to transmit. No mode turns this off.
     del transport, session
     raise ExecutionDenied(
         "live writes are disabled; a signed approval does not authorize transmission"

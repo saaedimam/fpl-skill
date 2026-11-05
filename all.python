@@ -42,8 +42,16 @@ CHIP    = None
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true", help="refused; account mutations are not transmitted")
-    ap.add_argument("--cookies", default=os.environ.get("FPL_COOKIES_FILE"), help="Netscape cookie dump from a logged-in browser")
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="deprecated: account mutations are permanently disabled and nothing is transmitted",
+    )
+    ap.add_argument(
+        "--cookies",
+        default=os.environ.get("FPL_COOKIES_FILE"),
+        help="deprecated: cookie files are not read and cannot authorize a write",
+    )
     ap.add_argument("--approval-file", default=None, help="JSON approval record from python -m fpl_skill.approval_issuer")
     args = ap.parse_args(argv)
 
@@ -54,6 +62,12 @@ def main(argv=None):
 
     plan = build_plan()
     print(json.dumps(plan, indent=1))
+
+    if args.apply or args.cookies:
+        print(
+            "\n[DEPRECATED] --apply and --cookies are not a write path. "
+            "Account mutations are permanently disabled."
+        )
 
     if not args.apply:
         print("\n[DRY-RUN] Nothing written. Account mutations are not transmitted.")

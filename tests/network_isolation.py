@@ -13,11 +13,17 @@ Two layers exist:
    subprocesses, ``ctypes``, and already-bound method references can bypass
    them. Prefer the namespace when proving "no outbound write".
 
-Disable the monkeypatch layer for intentional live harnesses with
-``FPL_ALLOW_TEST_NETWORK=1`` *only outside CI*. When ``CI`` or
-``GITHUB_ACTIONS`` is truthy the opt-out is ignored and the guard stays on.
-That variable does not reopen production writes and never disables the
-kernel network-namespace boundary.
+The pytest monkeypatch is not a security boundary. It is an incomplete
+laptop backstop. The authoritative control is the kernel network
+namespace used by CI (``unshare --net``). C extensions, subprocesses,
+``ctypes``, and already-bound methods can bypass the monkeypatch.
+
+The monkeypatch stays on unless a developer sets both
+``FPL_ALLOW_TEST_NETWORK=1`` and
+``FPL_CONFIRM_LIVE_NETWORK=I-understand-this-is-not-a-security-boundary``
+outside CI. Either variable alone does nothing. Under ``CI`` or
+``GITHUB_ACTIONS`` both are ignored. Neither variable disables the
+namespace or production write refusal.
 """
 from __future__ import annotations
 
@@ -43,29 +49,44 @@ def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+LIVE_NETWORK_CONFIRMATION = "I-understand-this-is-not-a-security-boundary"
+
+
 def network_guard_enabled() -> bool:
     """Return True when the pytest monkeypatch guard should be installed.
 
-    ``FPL_ALLOW_TEST_NETWORK=1`` opts out locally (with a loud warning).
-    Under CI / GitHub Actions the opt-out is ignored so the guard stays on.
+    The monkeypatch is not a security boundary. Disabling it locally
+    requires ``FPL_ALLOW_TEST_NETWORK=1`` and the exact second confirmation
+    ``FPL_CONFIRM_LIVE_NETWORK=I-understand-this-is-not-a-security-boundary``.
+    Under CI / GitHub Actions the opt-out is ignored.
     """
     import warnings
 
     allow = os.environ.get("FPL_ALLOW_TEST_NETWORK", "").strip() == "1"
-    if not allow:
+    confirmed = os.environ.get("FPL_CONFIRM_LIVE_NETWORK", "").strip() == LIVE_NETWORK_CONFIRMATION
+    if not allow and not confirmed:
         return True
     if _env_truthy("CI") or _env_truthy("GITHUB_ACTIONS"):
         warnings.warn(
-            "FPL_ALLOW_TEST_NETWORK=1 ignored because CI/GITHUB_ACTIONS is set; "
-            "pytest network guard stays enabled",
+            "FPL_ALLOW_TEST_NETWORK ignored because CI/GITHUB_ACTIONS is set; "
+            "pytest network guard stays enabled. The monkeypatch is not a security boundary.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return True
+    if not (allow and confirmed):
+        warnings.warn(
+            "pytest network guard stays enabled. Set both FPL_ALLOW_TEST_NETWORK=1 "
+            "and FPL_CONFIRM_LIVE_NETWORK="
+            f"{LIVE_NETWORK_CONFIRMATION}. The monkeypatch is not a security boundary.",
             RuntimeWarning,
             stacklevel=2,
         )
         return True
     warnings.warn(
-        "FPL_ALLOW_TEST_NETWORK=1 disables the pytest network monkeypatch "
-        "(local only). Kernel netns isolation is unaffected and production "
-        "writes stay refused.",
+        "Local pytest monkeypatch disabled after explicit confirmation. "
+        "This is not a security boundary. Production writes stay refused "
+        "and the CI network namespace is unaffected.",
         RuntimeWarning,
         stacklevel=2,
     )
