@@ -1,14 +1,14 @@
 """Single chokepoint for FPL account mutations.
 
-Nothing is sent unless every gate passes. The executor cannot mint an
-approval: it only verifies a signature with a public key. Account state is
-read by a fresh call inside this function. Caller-supplied state strings are
-not accepted.
+Every mutation is refused before any outbound write. A signed approval is
+evidence about a proposed change. It does not authorize transmission, and
+there is no mode, transport, or session that turns the refusal off. The
+executor cannot mint an approval. Account state is read inside this function.
+Caller-supplied state strings are not accepted.
 """
 from __future__ import annotations
 
 import contextvars
-import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -69,11 +69,12 @@ def execute_account_mutation(
     decision_cutoff_utc: Optional[str] = None,
     historical_snapshots: Optional[Sequence[Any]] = None,
 ) -> Any:
-    """Authorize one account write and only then call ``transport`` or ``session``.
+    """Validate one proposed account write, then refuse to send it.
 
     ``approval`` is a signed record produced by ``fpl_skill.approval_issuer``.
-    A hash of the payload is not an approval. ``FPL_MODE=autonomous`` does
-    not skip the signature, the fresh account read, or the sandbox.
+    A valid record does not permit ``transport`` or ``session`` to be called.
+    ``FPL_MODE=autonomous`` does not skip the signature, the fresh account
+    read, the sandbox, or the transmission refusal.
     """
     if mode is None:
         mode = os.environ.get("FPL_MODE", "advisory")
@@ -128,19 +129,10 @@ def execute_account_mutation(
     if not store.consume(nonce):
         raise ExecutionDenied("approval nonce was already used")
 
-    if transport is None and session is None:
-        raise ExecutionDenied("refusing to open a network connection without an explicit transport")
-
-    armed = TRANSPORT_ARMED.set(True)
-    try:
-        if transport is not None:
-            return transport(endpoint, payload)
-        url = "https://fantasy.premierleague.com/api" + endpoint
-        body = json.dumps(payload).encode("utf-8")
-        return session.post(
-            url,
-            data=body,
-            headers={"Content-Type": "application/json"},
-        )
-    finally:
-        TRANSPORT_ARMED.reset(armed)
+    # Checked last so a bad approval, squad, or account state still fails
+    # closed for its own reason. No approval, mode, or injected transport
+    # is allowed to proceed past this line into the network.
+    del transport, session
+    raise ExecutionDenied(
+        "live writes are disabled; a signed approval does not authorize transmission"
+    )

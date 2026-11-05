@@ -109,9 +109,11 @@ def test_complete_reduced_model_can_certify_without_claiming_full_rules():
         captains=captains,
         model=wildcard_model(12.0),
     )
-    assert certificate["optimality_proven"] is True
-    assert certificate["certificate"] == "OPTIMAL"
+    assert certificate["optimality_proven"] is False
+    assert certificate["certificate"] == "NOT_CERTIFIED"
     assert certificate["claim_scope"] == "reduced_wildcard_milp"
     assert certificate["full_rule_optimal"] is False
+    assert certificate["reduced_model_checked"] is True
+    assert certificate["admissible"] is False
     assert set(REQUIRED_MODEL_CONSTRAINTS) == set(wildcard_model(12.0)["constraints"])
     assert certificate["model_check"]["valid"] is True

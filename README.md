@@ -8,7 +8,7 @@
 ![Optimizer](https://img.shields.io/badge/optimizer-Exact%20MILP%20(CBC)-purple)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Mathematical optimization, probabilistic forecasting, and a contract-governed advisory agent for Fantasy Premier League (FPL).** This is not safe autonomous live execution and it does not optimize a live gameweek end to end. Account writes fail closed unless a separate interactive step has signed that exact change, `FPL_MODE` permits a write, a fresh account read is `VERIFIED_CURRENT`, and the squad matches authoritative bootstrap data. The executor cannot mint the signature.
+**Mathematical optimization, probabilistic forecasting, and a contract-governed advisory agent for Fantasy Premier League (FPL).** This is not safe autonomous live execution and it does not optimize a live gameweek end to end. Account mutations are refused before any outbound write. A signed approval does not authorize transmission. The executor cannot mint a signature.
 
 `fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
@@ -125,8 +125,8 @@ Three operating modes configured via `FPL_MODE`:
 | Mode | Behaviour | Execution Safety |
 | :--- | :--- | :--- |
 | `advisory` *(default)* | Computes decisions and prints recommendations | No write is sent |
-| `approval` | Prepares one change and stops unless a signed out-of-band approval matches that exact payload | Write only through `fpl_skill.execution.execute_account_mutation` |
-| `autonomous` | Same write chokepoint as `approval` | Not unattended live execution. It cannot mint a signature and does not skip the fresh account read or the sandbox |
+| `approval` | Checks a signed approval for that exact payload, then refuses | A valid approval does not transmit |
+| `autonomous` | Same refusal as `approval` | Not unattended live execution. It cannot mint a signature and cannot send a write |
 
 ---
 
@@ -136,7 +136,7 @@ Every tactical action in FPL is isolated into a discrete **Decision Card** gover
 
 | Card | Core Solver / Method | Horizon | Verification Standard | Current Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Wildcard** | Mixed Integer Linear Program (CBC branch-and-bound), squad built from scratch | Default horizon GW3–GW6. This is not a live-gameweek optimizer | Certificate is `OPTIMAL` only when CBC status is `Optimal`, an objective value is present, and the returned squad passes a constraint re-check. Otherwise `NOT_CERTIFIED` | `NOT CERTIFIED UNLESS CBC OPTIMAL + RE-CHECK` |
+| **Wildcard** | Mixed Integer Linear Program (CBC branch-and-bound), squad built from scratch | Default horizon GW3–GW6. This is not a live-gameweek optimizer | Reduced-model check only. CBC `Optimal` is not full-rule optimality. `optimality_proven` and `full_rule_optimal` stay false | `NOT_CERTIFIED` |
 | **Captaincy** | Rank-Aware Variance / Ceiling Optimization | Single GW target | **Empirical Calibration** — historical accuracy %, MAE, and Brier score against realized outcomes | `CALIBRATED (Sample Gate Tracked)` |
 | **Bench Order** | Positional Utilization under Expected Minutes | Single GW target | **Empirical Calibration** — sub-in conversion accuracy, minutes shortfall coverage | `CALIBRATED (Sample Gate Tracked)` |
 | **1-Free Transfer** | Multi-GW Marginal Gain vs Option-Value Threshold | Multi-GW | **Empirical Backtest** — realized post-transfer points vs rolling option value | `CALIBRATED (Sample Gate Tracked)` |
