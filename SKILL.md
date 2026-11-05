@@ -10,7 +10,7 @@ parent_release: 2.0.0
 
 # FPL Skill v2.1.0-rc1 — Canonical Agent Contract
 
-This file is the sole canonical agent entrypoint for the FPL skill. Legacy `SKILL_V2.md` and `FPL_SKILL.md` are retained for backward compatibility and historical traceability only; they are not executable authority.
+This file is the sole canonical agent entrypoint for the FPL skill. Legacy `archive/SKILL_V2.md` and `archive/FPL_SKILL.md` are retained for backward compatibility and historical traceability only; they are not executable authority.
 
 The v2.1.0-rc1 line descends from the immutable, SSH-signed v2.0.0 release at commit `ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c`. Phase 1 establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity. It does not introduce new forecasting heuristics or Phase 2 probabilistic-model changes.
 
@@ -513,9 +513,9 @@ The parent `v2.0.0` release remains immutable. This RC line may change until sep
 
 Exactly one canonical agent contract exists: `SKILL.md`.
 
-`SKILL_V2.md` is a deprecated v2 progression document kept for historical/backward-compatible references only.
+`archive/SKILL_V2.md` is a deprecated v2 progression document kept for historical/backward-compatible references only.
 
-`FPL_SKILL.md` is a deprecated legacy draft kept for historical/backward-compatible references only.
+`archive/FPL_SKILL.md` is a deprecated legacy draft kept for historical/backward-compatible references only.
 
 Neither deprecated file may be treated as executable authority when `SKILL.md` is available.
 
@@ -822,8 +822,8 @@ The manifest registry and the verification script MUST agree exactly on the cano
 Legacy references resolve as follows:
 
 ```text
-SKILL_V2.md  → SKILL.md
-FPL_SKILL.md → SKILL.md
+SKILL_V2.md  (now archive/SKILL_V2.md)  → SKILL.md
+FPL_SKILL.md (now archive/FPL_SKILL.md) → SKILL.md
 ```
 
 Legacy documents are informational/historical only. They must not supersede the active `SKILL.md` contract.

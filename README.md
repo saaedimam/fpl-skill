@@ -12,7 +12,7 @@
 
 `fpl-skill` rejects heuristic rule-of-thumb management and scalar point approximations. It models player output as full 5-point probability distributions, formulates team construction as an exact Mixed Integer Linear Program (MILP) solved via branch-and-bound, calibrates empirical decisions against historical actuals, and adjusts strategic risk dynamically across current rank tiers.
 
-**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `SKILL_V2.md` and `FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
+**Canonical agent contract:** `SKILL.md` is the sole active agent entrypoint and authoritative skill contract. `archive/SKILL_V2.md` and `archive/FPL_SKILL.md` are retained only as deprecated backward-compatible references and must not supersede `SKILL.md`.
 
 The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-signed `v2.0.0` release. Phase 1 only establishes canonical contract identity, mathematical expected-point semantics, and release-manifest integrity; it does not redesign the forecasting model.
 
@@ -44,8 +44,8 @@ The active `v2.1.0-rc1` release-candidate line descends from the immutable, SSH-
 Use [`SKILL.md`](SKILL.md) as the only active FPL agent contract.
 
 Legacy compatibility paths:
-- `SKILL_V2.md` → [`SKILL.md`](SKILL.md)
-- `FPL_SKILL.md` → [`SKILL.md`](SKILL.md)
+- `SKILL_V2.md` (archived at [`archive/SKILL_V2.md`](archive/SKILL_V2.md)) → [`SKILL.md`](SKILL.md)
+- `FPL_SKILL.md` (archived at [`archive/FPL_SKILL.md`](archive/FPL_SKILL.md)) → [`SKILL.md`](SKILL.md)
 
 The deprecated files may be retained for historical traceability, but agents must not execute, fork, or silently extend them as independent contracts.
 
@@ -341,6 +341,12 @@ Authenticated reads use an FPL session cookie that the account adapter reads fro
 
 ---
 
+## Release Registry
+
+`MANIFEST.v2.json` is the active release registry; `fpl_skill/MANIFEST.v2.json` is a byte-identical packaged copy. `tests/test_manifest_completeness.py` (run by CI through pytest) requires every non-empty module under `fpl_skill/`, the safety paths in `tests/compute_release_hash.py`, `SKILL.md`, `certification/NOTICE.md`, `prompts/master_fpl_rigorous.md`, `evidence/evidence-policy.md`, and every `contracts/*.md` to be listed in `canonical_files`. After changing any registered file, update `file_hashes` and `release_hash`, then run `python tests/compute_release_hash.py` to verify. Historical artifacts live in `archive/` and `evidence/archive/` and are not part of the active registry.
+
+---
+
 ## CLI Reference
 
 The CLI is packaged and installed as `fpl` (or executable via `python -m fpl_skill.cli`).
@@ -445,17 +451,15 @@ fpl-skill/
 │   ├── rank_aware_objective1.py
 │   ├── transfer_intelligence.py
 │   └── watch.py
+├── archive/                        # Historical, not active: MANIFEST.v1.1.0.json, SKILL_V2.md, FPL_SKILL.md
 ├── contracts/
 ├── schemas/
 ├── tests/
 ├── CHANGELOG.md
 ├── LICENSE
-├── FPL_SKILL.md                    # Deprecated redirect → SKILL.md
-├── MANIFEST.json                   # Legacy v1.1.0 manifest
 ├── MANIFEST.v2.json                # Active v2 release registry
 ├── README.md
 ├── SKILL.md                        # Sole canonical agent skill contract
-├── SKILL_V2.md                     # Deprecated redirect → SKILL.md
 ├── VERSION
 └── pyproject.toml
 ```
