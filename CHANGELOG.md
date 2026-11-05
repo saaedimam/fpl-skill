@@ -6,7 +6,8 @@
 ### Fixed
 - Account mutations (`all.python --apply` and `fpl_skill.execution`) fail closed unless a signed out-of-band approval, a write-permitting `FPL_MODE`, a fresh `VERIFIED_CURRENT` account read, and sandbox validation all pass. The executor cannot mint the signature. A hash of the payload, a replayed or expired approval, or a caller-supplied state string sends no request.
 - `all.python` reads `FPL_TEAM_ID` and stops when it is missing.
-- Optimality certificates follow CBC solver status, the objective value, and a constraint re-check. Non-optimal and infeasible results stay uncertified.
+- Optimality certificates require a finite CBC objective, an independent evaluation of the encoded wildcard objective, and the complete reduced-model constraint set. A feasible squad with an objective value is not a proof. Non-finite bounds are rejected. `full_rule_optimal` stays false.
+- The release registry lists the account-write and certificate modules and their regression tests. CI recomputes that registry instead of trusting the stored hash.
 - Evidence-policy rules (L5/L6 signal-only, `CONFLICTED`, L3+ corroboration) are enforced by `fpl_skill.evidence_policy` and consulted on the execution and prediction paths. The temporal firewall is consulted before those paths accept historical snapshots.
 
 ### Changed
