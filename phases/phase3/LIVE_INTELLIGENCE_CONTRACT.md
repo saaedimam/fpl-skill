@@ -109,7 +109,7 @@ Additive services currently present on the Phase 3 branch:
 - frozen-cohort transfer-flow parsing/aggregation, with wildcard/free-hit bulk records excluded from organic flow;
 - pure public-input multi-GW transfer scenario planning through eight future gameweeks, requiring official selling prices and known bank/free transfers;
 - official event-live GET parsing with freshness gates and provisional/final bonus state;
-- season-parameterized autosub/captain simulation, descriptive chip usage and a provenance-bound fixture ticker.
+- season-parameterized autosub/captain simulation, descriptive chip usage, exact joint cohort player-combination counts and a provenance-bound fixture ticker.
 
 This is not full LiveFPL parity and none of these services is release-certified merely because its unit tests pass. The event-live schema and optional defensive-contribution fields require active-season verification. Autosub logic requires differential matching against official post-GW `automatic_subs`. Price-risk requires matured out-of-sample labels and walk-forward calibration. Rank forecasts remain limited to the supplied cohort. Multi-GW planner currently evaluates one-transfer/roll/hit scenarios; multi-transfer combinations and chip counterfactuals remain separate gates.
 

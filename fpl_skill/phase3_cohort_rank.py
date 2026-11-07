@@ -11,6 +11,7 @@ is deliberately excluded until the season-versioned autosub engine is released.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
 import math
 import random
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -313,4 +314,70 @@ def simulate_rank(
             "player points use a non-negative normal approximation and require calibration",
             "shared player outcomes are correlated across entries; other dependencies are not modelled",
         ],
+    }
+
+
+
+def cohort_player_combinations(
+    snapshot: CohortSnapshot,
+    *,
+    size: int = 2,
+    top_n: int = 20,
+    requested: Optional[Sequence[Sequence[int]]] = None,
+) -> Dict[str, Any]:
+    """Count exact joint player combinations in a frozen cohort.
+
+    Counts are observed joint ownership from the cohort snapshot. No
+    independence multiplication or inferred co-ownership is used.
+    """
+    if size not in (2, 3) or top_n < 1:
+        raise ValueError("combination size must be 2 or 3 and top_n must be positive")
+    counts: Dict[Tuple[int, ...], int] = {}
+    if requested is not None:
+        candidates = []
+        for group in requested:
+            normalized = tuple(sorted(int(x) for x in group))
+            if len(normalized) != size or len(set(normalized)) != size or any(x < 1 for x in normalized):
+                raise ValueError("requested combination must contain unique positive player ids")
+            candidates.append(normalized)
+        if len(candidates) != len(set(candidates)):
+            raise ValueError("duplicate requested combination")
+        counts = {key: 0 for key in candidates}
+    for entry in snapshot.entries:
+        picks = entry.get("picks")
+        if not isinstance(picks, list):
+            raise ValueError(f"entry {entry.get('entry_id')} has no picks list")
+        ids = set()
+        for row in picks:
+            if not isinstance(row, Mapping) or "element" not in row:
+                raise ValueError(f"entry {entry.get('entry_id')} has malformed pick row")
+            ids.add(int(row["element"]))
+        if requested is not None:
+            for key in counts:
+                if set(key).issubset(ids):
+                    counts[key] += 1
+        else:
+            for key in combinations(sorted(ids), size):
+                counts[key] = counts.get(key, 0) + 1
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:top_n]
+    sample_size = len(snapshot.entries)
+    return {
+        "schema_version": "phase3.cohort-combinations.0.1.0",
+        "cohort_id": snapshot.cohort_id,
+        "event": snapshot.event,
+        "captured_at": snapshot.captured_at,
+        "source_url": snapshot.source_url,
+        "source_endpoints": list(snapshot.source_endpoints),
+        "content_hash": snapshot.content_hash,
+        "combination_size": size,
+        "sample_size": sample_size,
+        "combinations": [
+            {
+                "player_ids": list(key),
+                "holding_entries": count,
+                "cohort_pct": 100.0 * count / sample_size,
+            }
+            for key, count in ordered
+        ],
+        "method": "exact joint counts from frozen entry picks; no independence assumption",
     }

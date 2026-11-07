@@ -67,6 +67,6 @@ This plan and contract establish scope and acceptance criteria. They do not clai
 | P3-06 Live match | Official event-live GET parser; freshness gate; provisional/final bonus state; extra stats opt-in only | Active-season schema capture and verified official fields; live polling/finality differential |
 | P3-07 Autosub / captain | Season-parameterized simulator with formation, GK, captain/vice, Triple Captain and Bench Boost | Verified season rules and differential match against official automatic_subs for completed GWs |
 | P3-08 Chip analytics | Descriptive event chip-use rates with known-history denominator | Entry-history collection and no-chip/alternative-chip counterfactuals |
-| P3-09 Fixture ticker | Provenance-bound GW+1…GW+8 BGW/SGW/DGW and home/away ticker | Complete official fixture replay across reschedules and joint-outcome modelling |
+| P3-09 Fixture / combinations | Provenance-bound GW+1…GW+8 BGW/SGW/DGW ticker and exact joint player-combination counts | Complete official fixture replay across reschedules and joint-outcome modelling |
 
 Synthetic tests validate deterministic mechanics only. They do not establish official-rule parity, forecast calibration, LiveFPL parity, or FPL-winning performance. Phase 3 remains uncertified.

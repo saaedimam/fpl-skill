@@ -107,3 +107,33 @@ def test_rank_simulation_fails_closed_on_missing_distribution():
 def test_start_probability_map_must_be_complete():
     with pytest.raises(ValueError, match="missing start probability"):
         cohort_ownership(_snapshot(), {1: 0.9})
+
+
+def test_cohort_combinations_use_exact_joint_counts():
+    from fpl_skill.phase3_cohort_rank import cohort_player_combinations
+    result = cohort_player_combinations(
+        _snapshot(), size=2, requested=[[1, 2], [1, 3], [2, 4]],
+    )
+    rows = {tuple(x["player_ids"]): x for x in result["combinations"]}
+    assert rows[(1, 2)]["holding_entries"] == 2
+    assert rows[(1, 2)]["cohort_pct"] == 100.0
+    assert rows[(1, 3)]["holding_entries"] == 1
+    assert "no independence assumption" in result["method"]
+
+
+def test_cohort_combinations_reject_duplicate_or_invalid_groups():
+    from fpl_skill.phase3_cohort_rank import cohort_player_combinations
+    with pytest.raises(ValueError, match="unique"):
+        cohort_player_combinations(_snapshot(), requested=[[1, 1]])
+
+
+def test_cohort_combinations_fail_closed_on_malformed_pick_rows():
+    from fpl_skill.phase3_cohort_rank import cohort_player_combinations
+    snap = CohortSnapshot(
+        "bad", 1, "now",
+        ({"entry_id": 1, "picks": [{"element": 1}, None]},),
+        source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+        content_hash="sha256:bad",
+    )
+    with pytest.raises(ValueError, match="malformed pick row"):
+        cohort_player_combinations(snap)
