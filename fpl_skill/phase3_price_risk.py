@@ -336,3 +336,82 @@ def ingest_public_price_signals(
     )
     result["source_observed_at"] = response.headers.get("last-modified") or response.headers.get("date")
     return result
+
+
+
+def mature_price_labels(
+    before_snapshot: Mapping[str, Any],
+    after_snapshot: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Turn two timestamped official bootstrap snapshots into matured outcomes.
+
+    The risk score is taken only from the earlier snapshot. The later snapshot
+    supplies the resolved price outcome. Missing players are excluded and
+    reported; no price threshold is inferred.
+    """
+    before_at = _dt(before_snapshot["captured_at"], "before_snapshot.captured_at")
+    after_at = _dt(after_snapshot["captured_at"], "after_snapshot.captured_at")
+    if after_at <= before_at:
+        raise PriceCalibrationError("after snapshot must be later than before snapshot")
+    if int(before_snapshot["event"]) != int(after_snapshot["event"]):
+        raise PriceCalibrationError("price snapshots must refer to the same event")
+    for snapshot in (before_snapshot, after_snapshot):
+        if not str(snapshot.get("source_url", "")).startswith("https://") or not snapshot.get("content_hash"):
+            raise PriceCalibrationError("both price snapshots require source provenance")
+    def index_snapshot(snapshot: Mapping[str, Any]) -> Dict[int, Mapping[str, Any]]:
+        result = {}
+        for row in snapshot.get("signals", []):
+            if not isinstance(row, Mapping):
+                raise PriceCalibrationError("malformed price signal row")
+            pid = int(row["player_id"])
+            if pid in result:
+                continue
+            result[pid] = row
+        return result
+    before = index_snapshot(before_snapshot)
+    after = index_snapshot(after_snapshot)
+    common = set(before) & set(after)
+    labels = []
+    for pid in sorted(common):
+        earlier = before[pid]
+        later = after[pid]
+        if "now_cost" not in earlier or "now_cost" not in later:
+            raise PriceCalibrationError(f"player {pid} missing now_cost in snapshot")
+        old_cost, new_cost = int(earlier["now_cost"]), int(later["now_cost"])
+        for direction in ("rise", "fall"):
+            score = earlier.get(f"{direction}_risk_score")
+            if score is None:
+                # The standard signal schema stores one row per direction.
+                matches = [
+                    x for x in before_snapshot.get("signals", [])
+                    if int(x.get("player_id", -1)) == pid and x.get("direction") == direction
+                ]
+                if len(matches) != 1:
+                    raise PriceCalibrationError(f"player {pid} missing unique {direction} score")
+                score = matches[0]["risk_score"]
+            labels.append(PriceRiskLabel(
+                player_id=pid,
+                event=int(before_snapshot["event"]),
+                direction=direction,
+                risk_score=float(score),
+                changed=(new_cost > old_cost) if direction == "rise" else (new_cost < old_cost),
+                observed_at=before_snapshot["captured_at"],
+                resolved_at=after_snapshot["captured_at"],
+                source_url=after_snapshot["source_url"],
+                content_hash="sha256:" + hashlib.sha256(
+                    (str(before_snapshot["content_hash"]) + "|" + str(after_snapshot["content_hash"])).encode()
+                ).hexdigest(),
+            ))
+    return {
+        "event": int(before_snapshot["event"]),
+        "observed_at": before_snapshot["captured_at"],
+        "resolved_at": after_snapshot["captured_at"],
+        "before_content_hash": before_snapshot["content_hash"],
+        "after_content_hash": after_snapshot["content_hash"],
+        "matched_player_count": len(common),
+        "before_player_count": len(before),
+        "after_player_count": len(after),
+        "missing_after_count": len(set(before) - set(after)),
+        "missing_before_count": len(set(after) - set(before)),
+        "labels": labels,
+    }

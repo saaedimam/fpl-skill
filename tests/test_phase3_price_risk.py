@@ -152,3 +152,47 @@ def test_brier_score_keys_can_distinguish_rise_and_fall_for_same_player_event():
     )
     assert report["sample_size"] == 2
     assert report["brier_score"] == pytest.approx(0.04)
+
+
+def test_mature_price_labels_use_earlier_score_and_later_price_outcome():
+    from fpl_skill.phase3_price_risk import mature_price_labels
+    before = {
+        "event": 5, "captured_at": "2026-11-08T10:00:00Z",
+        "source_url": "https://fantasy.premierleague.com/api/bootstrap-static/",
+        "content_hash": "sha256:before",
+        "signals": [
+            {"player_id": 1, "direction": "rise", "risk_score": 0.9, "now_cost": 50},
+            {"player_id": 1, "direction": "fall", "risk_score": 0.1, "now_cost": 50},
+            {"player_id": 2, "direction": "rise", "risk_score": 0.2, "now_cost": 60},
+            {"player_id": 2, "direction": "fall", "risk_score": 0.8, "now_cost": 60},
+        ],
+    }
+    after = {
+        "event": 5, "captured_at": "2026-11-09T10:00:00Z",
+        "source_url": "https://fantasy.premierleague.com/api/bootstrap-static/",
+        "content_hash": "sha256:after",
+        "signals": [
+            {"player_id": 1, "direction": "rise", "risk_score": 0.0, "now_cost": 51},
+            {"player_id": 1, "direction": "fall", "risk_score": 0.0, "now_cost": 51},
+            {"player_id": 2, "direction": "rise", "risk_score": 0.0, "now_cost": 59},
+            {"player_id": 2, "direction": "fall", "risk_score": 0.0, "now_cost": 59},
+        ],
+    }
+    result = mature_price_labels(before, after)
+    labels = {(x.player_id, x.direction): x for x in result["labels"]}
+    assert labels[(1, "rise")].changed is True
+    assert labels[(1, "fall")].changed is False
+    assert labels[(2, "rise")].changed is False
+    assert labels[(2, "fall")].changed is True
+    assert labels[(1, "rise")].risk_score == 0.9
+    assert result["matched_player_count"] == 2
+
+
+def test_mature_price_labels_reject_reversed_time_and_event_mismatch():
+    from fpl_skill.phase3_price_risk import mature_price_labels
+    before = {"event": 5, "captured_at": "2026-11-08T10:00:00Z",
+              "source_url": "https://fantasy.premierleague.com/api/bootstrap-static/",
+              "content_hash": "sha256:a", "signals": []}
+    after = {**before, "captured_at": "2026-11-08T09:00:00Z"}
+    with pytest.raises(PriceCalibrationError, match="later"):
+        mature_price_labels(before, after)

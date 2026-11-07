@@ -61,7 +61,7 @@ This plan and contract establish scope and acceptance criteria. They do not clai
 |---|---|---|
 | P3-01 Ownership / EO | Frozen public cohort snapshot adapter; picked/starter/captain/vice EO plus separate official selected_by_percent global ownership | Completed-GW official EO differential, coverage study, calibrated availability |
 | P3-02 Rank | Seeded Monte Carlo rank distribution against supplied frozen cohort | Walk-forward calibration and representative/global-rank validation |
-| P3-03 Price risk | Official bootstrap cross-sectional transfer-flow scores; matured-label rise/fall calibrator; Brier/reliability metrics | Real matured labels, walk-forward calibration, sufficient samples |
+| P3-03 Price risk | Official bootstrap cross-sectional transfer-flow scores; paired-snapshot matured rise/fall label builder and calibrator; Brier/reliability metrics | Real matured labels, walk-forward calibration, sufficient samples |
 | P3-04 Transfer flow | Frozen-cohort public transfer endpoint parser; wildcard/free-hit bulk exclusion; manager-deduplicated recency-weighted flow | Live cohort collection, transfer-vs-picks differential, signal decay evaluation |
 | P3-05 Multi-GW planner | Pure public-input planner through eight GWs; official selling-price and bank inputs; roll-vs-transfer and explicitly permitted hit scenario | Real squad integration, full transfer combinations, chip counterfactuals, projection calibration |
 | P3-06 Live match | Official event-live GET parser; freshness gate; provisional/final bonus state; extra stats opt-in only | Active-season schema capture and verified official fields; live polling/finality differential |

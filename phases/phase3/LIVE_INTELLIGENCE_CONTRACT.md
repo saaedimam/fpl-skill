@@ -105,7 +105,7 @@ Do not modify the v2.0.0 tag, P1–P15, Phase 2 historical implementation, its t
 
 Additive services currently present on the Phase 3 branch:
 - public cohort snapshot ingestion, cohort EO, separate official aggregate selected_by_percent ownership, exact joint player combinations and frozen-cohort relative-rank simulation;
-- cross-sectional official bootstrap price-risk scores and matured-label calibration;
+- cross-sectional official bootstrap price-risk scores, paired-snapshot matured outcome labels and leakage-aware calibration;
 - frozen-cohort transfer-flow parsing/aggregation, with wildcard/free-hit bulk records excluded from organic flow;
 - pure public-input multi-GW transfer scenario planning through eight future gameweeks, requiring official selling prices and known bank/free transfers;
 - official event-live GET parsing with freshness gates and provisional/final bonus state;
