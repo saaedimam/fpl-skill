@@ -56,7 +56,7 @@ def test_snapshot_rejects_duplicate_entries_and_bad_coverage():
 
 
 def test_cohort_rejects_missing_captain_and_duplicate_position():
-    bad = CohortSnapshot("bad", 1, "now", ({"entry_id": 1, "picks": [_p(1, 1)]},))
+    bad = CohortSnapshot("bad", 1, "now", ({"entry_id": 1, "picks": [_p(1, 1, cap=True)]},))
     with pytest.raises(ValueError, match="vice-captain"):
         cohort_ownership(bad)
 
