@@ -5,19 +5,28 @@ caller-supplied player distributions; it performs no network I/O and does not
 mutate the Phase 2 historical firewall.
 
 EO is a cohort estimate, not global FPL EO. The initial implementation models
-starting-XI exposure and captain/vice-captain fallback. Bench autosub exposure
-is deliberately excluded until the season-versioned autosub engine is released.
+starting-XI exposure and captain/vice-captain fallback. Bench autosub exposure remains excluded from EO until the autosub engine passes official completed-GW differential validation.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import combinations
+from types import MappingProxyType
 import math
 import random
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 SCHEMA_VERSION = "phase3.cohort-rank.0.1.0"
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,12 @@ class CohortSnapshot:
             raise ValueError("event must be >= 1")
         if not self.captured_at.strip():
             raise ValueError("captured_at is required")
+        try:
+            captured = datetime.fromisoformat(self.captured_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("captured_at must be ISO-8601") from exc
+        if captured.tzinfo is None or captured.utcoffset() is None:
+            raise ValueError("captured_at must be timezone-aware")
         if not self.source_url.startswith("https://"):
             raise ValueError("source_url must be an HTTPS URL")
         if any(not endpoint.startswith("https://") for endpoint in self.source_endpoints):
@@ -49,8 +64,10 @@ class CohortSnapshot:
         if self.coverage is not None and not 0.0 <= self.coverage <= 1.0:
             raise ValueError("coverage must be in [0, 1]")
         ids = [int(e["entry_id"]) for e in self.entries]
-        if len(ids) != len(set(ids)):
-            raise ValueError("duplicate entry_id in frozen cohort")
+        if any(x < 1 for x in ids) or len(ids) != len(set(ids)):
+            raise ValueError("entry ids must be positive and unique in frozen cohort")
+        object.__setattr__(self, "entries", tuple(_freeze(entry) for entry in self.entries))
+        object.__setattr__(self, "source_endpoints", tuple(self.source_endpoints))
 
 
 def _p_start(probabilities: Mapping[int, float], player_id: int) -> float:
@@ -86,7 +103,7 @@ def cohort_ownership(
 
     for entry in snapshot.entries:
         rows = entry.get("picks")
-        if not isinstance(rows, list):
+        if not isinstance(rows, (list, tuple)):
             raise ValueError(f"entry {entry.get('entry_id')} has no picks list")
         captain_id = None
         vice_id = None
@@ -345,7 +362,7 @@ def cohort_player_combinations(
         counts = {key: 0 for key in candidates}
     for entry in snapshot.entries:
         picks = entry.get("picks")
-        if not isinstance(picks, list):
+        if not isinstance(picks, (list, tuple)):
             raise ValueError(f"entry {entry.get('entry_id')} has no picks list")
         ids = set()
         for row in picks:

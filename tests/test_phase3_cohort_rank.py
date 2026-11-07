@@ -51,17 +51,17 @@ def test_expected_eo_accounts_for_captain_and_vice_fallback():
 
 def test_snapshot_rejects_duplicate_entries_and_bad_coverage():
     with pytest.raises(ValueError):
-        CohortSnapshot("x", 1, "now", ({"entry_id": 1}, {"entry_id": 1}),
+        CohortSnapshot("x", 1, "2026-11-08T10:00:00Z", ({"entry_id": 1}, {"entry_id": 1}),
             source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
             content_hash="sha256:x")
     with pytest.raises(ValueError):
-        CohortSnapshot("x", 1, "now", ({"entry_id": 1},),
+        CohortSnapshot("x", 1, "2026-11-08T10:00:00Z", ({"entry_id": 1},),
             source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
             content_hash="sha256:x", coverage=1.1)
 
 
 def test_cohort_rejects_missing_captain_and_duplicate_position():
-    bad = CohortSnapshot("bad", 1, "now", ({"entry_id": 1, "picks": [_p(1, 1, cap=True)]},),
+    bad = CohortSnapshot("bad", 1, "2026-11-08T10:00:00Z", ({"entry_id": 1, "picks": [_p(1, 1, cap=True)]},),
         source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
         content_hash="sha256:bad")
     with pytest.raises(ValueError, match="vice-captain"):
@@ -93,7 +93,7 @@ def test_rank_simulation_is_reproducible_and_separates_observed_rank():
 
 
 def test_rank_simulation_fails_closed_on_missing_distribution():
-    cohort = CohortSnapshot("sample", 1, "now", (
+    cohort = CohortSnapshot("sample", 1, "2026-11-08T10:00:00Z", (
         {"entry_id": 2, "current_points": 10, "current_rank": 2,
          "picks": [_p(2, 1, True)]},
     ), source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
@@ -130,7 +130,7 @@ def test_cohort_combinations_reject_duplicate_or_invalid_groups():
 def test_cohort_combinations_fail_closed_on_malformed_pick_rows():
     from fpl_skill.phase3_cohort_rank import cohort_player_combinations
     snap = CohortSnapshot(
-        "bad", 1, "now",
+        "bad", 1, "2026-11-08T10:00:00Z",
         ({"entry_id": 1, "picks": [{"element": 1}, None]},),
         source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
         content_hash="sha256:bad",
@@ -151,3 +151,25 @@ def test_global_ownership_is_kept_separate_from_cohort_eo():
     assert result["players"][1]["global_ownership_pct"] == 75.5
     assert result["players"][1]["expected_effective_ownership_pct"] == 150.0
     assert "not rank-cohort ownership" in result["global_ownership"]["semantics"]
+
+
+def test_cohort_snapshot_deep_freezes_entry_and_pick_data():
+    entry = {"entry_id": 77, "picks": [_p(1, 1, cap=True), _p(2, 2, vice=True)]}
+    snapshot = CohortSnapshot(
+        "immutable", 1, "2026-11-08T10:00:00Z", (entry,),
+        source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+        content_hash="sha256:immutable",
+    )
+    entry["picks"][0]["element"] = 999
+    assert snapshot.entries[0]["picks"][0]["element"] == 1
+    with pytest.raises(TypeError):
+        snapshot.entries[0]["picks"][0]["element"] = 3
+
+
+def test_cohort_snapshot_rejects_timezone_naive_capture():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        CohortSnapshot(
+            "naive", 1, "2026-11-08T10:00:00", ({"entry_id": 1, "picks": []},),
+            source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+            content_hash="sha256:naive",
+        )
