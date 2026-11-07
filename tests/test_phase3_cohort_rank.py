@@ -137,3 +137,17 @@ def test_cohort_combinations_fail_closed_on_malformed_pick_rows():
     )
     with pytest.raises(ValueError, match="malformed pick row"):
         cohort_player_combinations(snap)
+
+
+def test_global_ownership_is_kept_separate_from_cohort_eo():
+    from fpl_skill.phase3_cohort_rank import attach_global_ownership, cohort_ownership
+    cohort = cohort_ownership(_snapshot())
+    result = attach_global_ownership(cohort, {
+        "source_url": "https://fantasy.premierleague.com/api/bootstrap-static/",
+        "captured_at": "2026-11-08T10:00:00Z",
+        "content_hash": "sha256:bootstrap",
+        "global_ownership_pct": {1: 75.5, 2: 40.0},
+    })
+    assert result["players"][1]["global_ownership_pct"] == 75.5
+    assert result["players"][1]["expected_effective_ownership_pct"] == 150.0
+    assert "not rank-cohort ownership" in result["global_ownership"]["semantics"]

@@ -108,3 +108,21 @@ def test_rejects_incomplete_pick_squad():
             captured_at="2026-11-08T10:00:00Z",
             deadline_utc="2026-11-08T17:30:00Z",
         )
+
+
+def test_fetches_official_global_ownership_as_distinct_aggregate():
+    import json
+    from fpl_skill.observation.ingest import HttpResponse, bootstrap_url
+    from fpl_skill.phase3_cohort_adapter import fetch_global_ownership_snapshot
+
+    class FakeTransport:
+        def get(self, url):
+            assert url == bootstrap_url()
+            body = {"elements": [{"id": 1, "selected_by_percent": "35.2"},
+                                 {"id": 2, "selected_by_percent": "10.0"}]}
+            return HttpResponse(200, {}, json.dumps(body).encode())
+    result = fetch_global_ownership_snapshot(
+        FakeTransport(), captured_at="2026-11-08T10:00:00Z",
+    )
+    assert result["global_ownership_pct"][1] == 35.2
+    assert result["semantics"].endswith("not cohort EO")

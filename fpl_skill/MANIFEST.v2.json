@@ -10,7 +10,7 @@
     "commit": "ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c",
     "sha256": "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
   },
-  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity; additive Phase 3 cohort ownership and rank simulation module; Phase 3 price-risk calibration, season-parameterized gameweek simulation, chip analytics and fixture ticker; Phase 3 empirical price-risk scoring, frozen-cohort transfer-flow and 8-GW transfer scenarios; Phase 3 transfer flow, eight-GW planner and official event-live parsing",
+  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity; additive Phase 3 cohort ownership and rank simulation module; Phase 3 price-risk calibration, season-parameterized gameweek simulation, chip analytics and fixture ticker; Phase 3 empirical price-risk scoring, frozen-cohort transfer-flow and 8-GW transfer scenarios; Phase 3 transfer flow, eight-GW planner and official event-live parsing; Phase 3 global aggregate ownership separation and exact player combinations",
   "canonical_files": [
     "CHANGELOG.md",
     "SKILL.md",
@@ -177,15 +177,15 @@
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
     "tests/data/live_fpl_sample.json": "54afad74615f7bd251b12c67ba25533305884e15274cc00ee048899a963b404e",
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
-    "fpl_skill/phase3_cohort_rank.py": "95d7e2695210bc4fcc691225086acf951cf6dd679d27728e09cdd52e48d37e44",
-    "fpl_skill/phase3_cohort_adapter.py": "689b4d1cecf01cb8fa56014cbdb43c1d8198bee804c560b28d2a6ae3b86e0225",
+    "fpl_skill/phase3_cohort_rank.py": "a4ad1a0cafcf9195a1e9f5a610571d100de7a060348e0ba5e9113d37c81d9738",
+    "fpl_skill/phase3_cohort_adapter.py": "780558c9176ac9638b4f96a30b9f0c765fe384a61e9923616d51fd97d7e5b54f",
     "fpl_skill/phase3_gameweek.py": "86db1b0e74e9d01f08eed3d0a0de514c603927ea373739075e742fd538ef3d1c",
     "fpl_skill/phase3_price_risk.py": "9d78de7e78eb90192057a12ebbabf3746dd23769ad526bd5fc6f213e97fcefdb",
     "fpl_skill/phase3_transfer_flow.py": "a07306d6350e9cfbf46c99494dc37a0b6db3edad405f3fa0d4d187d8a29c1efd",
     "fpl_skill/phase3_planner.py": "3ac21ab8bdaacf5a07538b4e8334dae63880e935be7bcb31e52bfcc747fd96d5",
     "fpl_skill/phase3_live_match.py": "1d6f1ea1d17a145a7a855f9571aa9b36c377308a9c7f29b16ebff40626f457ad"
   },
-  "release_hash": "b61e91ddbf101b94b42c364e13834f84ad4dfa9cf5b33f40ee6ab9cad42c71f5",
+  "release_hash": "9ea5a07d881951046c312931633ef937bfa2273479126c47b03fe9cef10dd300",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."

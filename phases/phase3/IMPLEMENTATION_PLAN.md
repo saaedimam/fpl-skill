@@ -59,7 +59,7 @@ This plan and contract establish scope and acceptance criteria. They do not clai
 
 | Workstream | Additive implementation now present | Evidence still required before COMPLETE |
 |---|---|---|
-| P3-01 Ownership / EO | Frozen public cohort snapshot adapter; picked/starter/captain/vice ownership and EO | Completed-GW official EO differential, coverage study, calibrated availability |
+| P3-01 Ownership / EO | Frozen public cohort snapshot adapter; picked/starter/captain/vice EO plus separate official selected_by_percent global ownership | Completed-GW official EO differential, coverage study, calibrated availability |
 | P3-02 Rank | Seeded Monte Carlo rank distribution against supplied frozen cohort | Walk-forward calibration and representative/global-rank validation |
 | P3-03 Price risk | Official bootstrap cross-sectional transfer-flow scores; matured-label rise/fall calibrator; Brier/reliability metrics | Real matured labels, walk-forward calibration, sufficient samples |
 | P3-04 Transfer flow | Frozen-cohort public transfer endpoint parser; wildcard/free-hit bulk exclusion; manager-deduplicated recency-weighted flow | Live cohort collection, transfer-vs-picks differential, signal decay evaluation |

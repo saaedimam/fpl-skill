@@ -10,7 +10,7 @@ import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .observation.ingest import Transport, fetch_json, picks_url, standings_url, SchemaError
+from .observation.ingest import Transport, fetch_json, picks_url, standings_url, bootstrap_url, SchemaError
 from .phase3_cohort_rank import CohortSnapshot
 
 
@@ -117,3 +117,48 @@ def build_public_cohort_snapshot(
         coverage=(len(rows) / top_n) if top_n else None,
         source_endpoints=tuple(source_endpoints),
     )
+
+
+
+def fetch_global_ownership_snapshot(
+    transport: Transport,
+    *,
+    captured_at: str,
+) -> Dict[str, Any]:
+    """Fetch official bootstrap selected_by_percent as aggregate ownership only."""
+    import hashlib
+    from datetime import datetime
+
+    try:
+        dt = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("captured_at must be ISO-8601") from exc
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        raise ValueError("captured_at must be timezone-aware")
+    url = bootstrap_url()
+    payload, response = fetch_json(transport, url)
+    if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
+        raise SchemaError("bootstrap payload missing elements")
+    if response is None or response.body is None:
+        raise RuntimeError("bootstrap response missing raw body")
+    values = {}
+    for row in payload["elements"]:
+        if not isinstance(row, dict):
+            raise SchemaError("malformed bootstrap element")
+        try:
+            pid = int(row["id"])
+            selected = float(row["selected_by_percent"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SchemaError("bootstrap element missing selected_by_percent") from exc
+        if pid < 1 or pid in values or not 0.0 <= selected <= 100.0:
+            raise SchemaError("invalid global ownership value")
+        values[pid] = selected
+    return {
+        "schema_version": "phase3.global-ownership.0.1.0",
+        "source_url": url,
+        "captured_at": captured_at,
+        "content_hash": "sha256:" + hashlib.sha256(response.body).hexdigest(),
+        "global_ownership_pct": values,
+        "player_count": len(values),
+        "semantics": "official aggregate selected_by_percent; not cohort EO",
+    }

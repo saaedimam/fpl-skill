@@ -381,3 +381,36 @@ def cohort_player_combinations(
         ],
         "method": "exact joint counts from frozen entry picks; no independence assumption",
     }
+
+
+
+def attach_global_ownership(
+    cohort_metrics: Mapping[str, Any],
+    ownership_snapshot: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Attach official aggregate selected_by_percent without conflating cohort EO."""
+    source_url = ownership_snapshot.get("source_url")
+    content_hash = ownership_snapshot.get("content_hash")
+    captured_at = ownership_snapshot.get("captured_at")
+    values = ownership_snapshot.get("global_ownership_pct")
+    if not isinstance(source_url, str) or not source_url.startswith("https://"):
+        raise ValueError("global ownership source_url must be HTTPS")
+    if not isinstance(content_hash, str) or not content_hash.strip():
+        raise ValueError("global ownership content_hash is required")
+    if not isinstance(values, Mapping):
+        raise ValueError("global_ownership_pct mapping is required")
+    players = {}
+    for pid, row in cohort_metrics.get("players", {}).items():
+        clone = dict(row)
+        value = values.get(int(pid))
+        clone["global_ownership_pct"] = None if value is None else float(value)
+        players[pid] = clone
+    result = dict(cohort_metrics)
+    result["players"] = players
+    result["global_ownership"] = {
+        "source_url": source_url,
+        "captured_at": captured_at,
+        "content_hash": content_hash,
+        "semantics": "official aggregate selected_by_percent; not rank-cohort ownership or effective ownership",
+    }
+    return result
