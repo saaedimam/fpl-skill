@@ -176,10 +176,10 @@
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
     "fpl_skill/phase3_cohort_rank.py": "d5cc58124fb5543ef11aedf1587f318c509b42663929c4ac3ef11a5f3ef4b298",
     "fpl_skill/phase3_cohort_adapter.py": "689b4d1cecf01cb8fa56014cbdb43c1d8198bee804c560b28d2a6ae3b86e0225",
-    "fpl_skill/phase3_gameweek.py": "05ac7062746b62b4c040f707f7ed75e8e13cc8e9f4ca1edc3f41e4ff5cc586f1",
+    "fpl_skill/phase3_gameweek.py": "c05a30e1b2a25ffdae1abf3b54e11f83bf9f2f6f78e8d57f26cc39b86bb2dca6",
     "fpl_skill/phase3_price_risk.py": "27429af7d1a0b186232235b04becab9e045b83c281778a1debaf065fde1b23ed"
   },
-  "release_hash": "6a7490061537e85030247021c990a3336fb1dea558d7ec244fd15ea9cb9371d3",
+  "release_hash": "449c678f9fefa4ac2274f73b2becd69714b61528c577c7d742dd89205fa7cf5a",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."

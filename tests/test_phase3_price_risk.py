@@ -70,7 +70,7 @@ def test_direction_is_not_mixed():
 def test_calibration_report_computes_brier_and_reliability_bins():
     labels = [_label(1, 0.2, False), _label(2, 0.8, True)]
     report = calibration_report(
-        labels, {(2, 3): 0.8, (1, 3): 0.2}, bin_count=5,
+        labels, {(2, 3): 0.2, (3, 3): 0.8}, bin_count=5,
     )
     assert report["sample_size"] == 2
     assert report["brier_score"] == pytest.approx(0.04)

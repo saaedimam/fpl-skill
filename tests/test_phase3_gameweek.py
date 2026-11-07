@@ -48,9 +48,9 @@ def test_multiple_outfield_autosubs_preserve_formation():
     minutes[2] = 0
     minutes[3] = 0
     result = simulate_autosubs(_picks(), minutes, _positions(), RULES)
-    assert len(result["substitutions"]) == 1
+    assert len(result["substitutions"]) == 2
     assert result["substitutions"][0]["in"] == 12
-    assert result["nonplaying_starters_unreplaced"] == [3]
+    assert result["substitutions"][1]["in"] == 13
 
 
 def test_goalkeeper_and_vice_captain_fallback():

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .current_data import (
+    CurrentDataError,
     assert_future_gameweeks,
     assert_gameweeks_have_fixtures,
     build_fixture_map,
