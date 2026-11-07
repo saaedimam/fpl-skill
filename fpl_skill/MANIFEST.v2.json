@@ -62,6 +62,7 @@
     "fpl_skill/optimality.py",
     "fpl_skill/optimizer.py",
     "fpl_skill/optimizer_legacy.py",
+    "fpl_skill/phase3_cohort_adapter.py",
     "fpl_skill/phase3_cohort_rank.py",
     "fpl_skill/prediction_engine.py",
     "fpl_skill/probabilistic_ep1.py",
@@ -171,9 +172,10 @@
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
     "tests/data/live_fpl_sample.json": "54afad74615f7bd251b12c67ba25533305884e15274cc00ee048899a963b404e",
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
-    "fpl_skill/phase3_cohort_rank.py": "4b457709ce839adda5b1d82c4514ffdefd0916276512303f160a377ecad51d42"
+    "fpl_skill/phase3_cohort_rank.py": "a9c2ea7e3bfe43ee1bfbb0ccfc12968431f689e6f47912b294f8d046f30252fe",
+    "fpl_skill/phase3_cohort_adapter.py": "689b4d1cecf01cb8fa56014cbdb43c1d8198bee804c560b28d2a6ae3b86e0225"
   },
-  "release_hash": "111e515b117870a2a0c1a8e4b52aa62a768a2ee8c3e97478bf1674fb803562be",
+  "release_hash": "9abeb4c4e93f9083c6d02b09c372a92d865c33c15fe5b657794ee3abae0d1377",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
