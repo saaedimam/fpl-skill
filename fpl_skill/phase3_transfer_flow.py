@@ -132,6 +132,7 @@ def build_transfer_flow_records(
                 "exclusion_reason": "BULK_CHIP" if used_bulk_chip else ("CHIP_STATE_UNKNOWN" if not chip_state_known else None),
                 "source_url": source_url,
                 "content_hash": content_hash,
+                "source_endpoints": list(entry.get("source_endpoints", [source_url])),
                 "observed_at": observed_at,
             })
     return {
@@ -207,6 +208,8 @@ def aggregate_transfer_flow(
         "eligible_transfer_records": eligible_count,
         "excluded_bulk_transfer_count": snapshot["excluded_bulk_transfer_count"],
         "excluded_unknown_chip_state_count": snapshot["excluded_unknown_chip_state_count"],
+        "source_urls": sorted({r["source_url"] for r in snapshot.get("records", [])}),
+        "content_hashes": sorted({r["content_hash"] for r in snapshot.get("records", [])}),
         "players": players,
         "interpretation": "observed public transfer flow; not a causal or points recommendation",
     }
@@ -272,6 +275,7 @@ def ingest_public_transfer_flow(
             "active_chip": active_chip,
             "source_url": transfers_url(manager_id),
             "content_hash": "sha256:" + digest.hexdigest() if raw_parts else None,
+            "source_endpoints": [transfers_url(manager_id), history_url(manager_id), picks_url(manager_id, event)],
         })
     snapshot = build_transfer_flow_records(
         entries, cohort_id=str(cohort.get("cohort_id") or cohort.get("entry_ids_hash") or "frozen-cohort"),

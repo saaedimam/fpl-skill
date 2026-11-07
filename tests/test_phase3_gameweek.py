@@ -149,3 +149,26 @@ def test_autosub_differential_rejects_unknown_official_schema():
     from fpl_skill.phase3_gameweek import compare_autosubs_to_official
     with pytest.raises(RuleInputError, match="missing element ids"):
         compare_autosubs_to_official({"substitutions": []}, [{"foo": 1}])
+
+
+def test_autosub_differential_report_blocks_small_samples_and_passes_exact_cases():
+    from fpl_skill.phase3_gameweek import autosub_differential_report
+    case = {"gameweek": 5, "simulation": {"substitutions": [{"out": 1, "in": 2}]},
+            "official_automatic_subs": [{"element_out": 1, "element_in": 2}]}
+    blocked = autosub_differential_report([case], minimum_cases=2)
+    passed = autosub_differential_report([case, {**case, "gameweek": 6}], minimum_cases=2)
+    assert blocked["gate_status"] == "BLOCKED"
+    assert passed["gate_status"] == "PASS"
+
+
+def test_chip_counterfactuals_compare_explicit_scenarios_and_issue_no_recommendation():
+    from fpl_skill.phase3_gameweek import evaluate_chip_counterfactuals
+    result = evaluate_chip_counterfactuals(
+        {5: 50, 6: 60},
+        {"bench_boost": {5: 70, 6: 60}, "triple_captain": {5: 55, 6: 60}},
+        source_url="https://fantasy.premierleague.com/api/entry/1/history/",
+        captured_at="2026-11-08T10:00:00Z", content_hash="sha256:scenario",
+    )
+    assert result["scenarios"]["bench_boost"]["incremental_points"] == 20
+    assert result["ranking"] == ["bench_boost", "triple_captain"]
+    assert result["recommendation"] == "NOT_ISSUED"

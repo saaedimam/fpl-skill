@@ -120,6 +120,7 @@ def test_public_transfer_flow_ingestion_uses_public_endpoints_and_chip_state():
     )
     assert snapshot["records"][0]["signal_eligible"] is True
     assert snapshot["records"][0]["source_url"] == transfers_url(1)
+    assert len(snapshot["records"][0]["source_endpoints"]) == 3
     assert snapshot["cohort_definition"]["league_id"] == 314
 
 

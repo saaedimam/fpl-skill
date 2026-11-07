@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import math
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .current_data import (
@@ -333,4 +334,90 @@ def compare_autosubs_to_official(
         "missing_from_simulation": [list(x) for x in missing],
         "extra_in_simulation": [list(x) for x in extra],
         "release_gate_pass": not missing and not extra,
+    }
+
+
+
+def autosub_differential_report(
+    cases: Sequence[Mapping[str, Any]],
+    *,
+    minimum_cases: int = 10,
+) -> Dict[str, Any]:
+    """Aggregate completed-GW simulator comparisons; insufficient samples block."""
+    if minimum_cases < 1:
+        raise RuleInputError("minimum_cases must be positive")
+    comparisons = []
+    seen_gws = set()
+    for case in cases:
+        gw = int(case["gameweek"])
+        if gw in seen_gws:
+            raise RuleInputError(f"duplicate differential gameweek {gw}")
+        seen_gws.add(gw)
+        comparisons.append({
+            "gameweek": gw,
+            **compare_autosubs_to_official(case["simulation"], case["official_automatic_subs"]),
+        })
+    matches = sum(bool(x["match"]) for x in comparisons)
+    enough = len(comparisons) >= minimum_cases
+    return {
+        "sample_size": len(comparisons),
+        "minimum_cases": minimum_cases,
+        "matched_cases": matches,
+        "mismatched_cases": len(comparisons) - matches,
+        "match_rate": matches / len(comparisons) if comparisons else None,
+        "gate_status": "PASS" if enough and matches == len(comparisons) else "BLOCKED",
+        "comparisons": comparisons,
+    }
+
+
+def evaluate_chip_counterfactuals(
+    baseline_points_by_gw: Mapping[int, float],
+    scenarios: Mapping[str, Mapping[int, float]],
+    *,
+    source_url: str,
+    captured_at: str,
+    content_hash: str,
+) -> Dict[str, Any]:
+    """Compare caller-supplied chip/no-chip projections without inventing effects."""
+    if not source_url.startswith("https://") or not content_hash.strip():
+        raise RuleInputError("chip counterfactual provenance is required")
+    try:
+        captured = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise RuleInputError("captured_at must be ISO-8601") from exc
+    if captured.tzinfo is None or captured.utcoffset() is None:
+        raise RuleInputError("captured_at must be timezone-aware")
+    if not baseline_points_by_gw or not scenarios:
+        raise RuleInputError("baseline and at least one chip scenario are required")
+    horizon = sorted(int(gw) for gw in baseline_points_by_gw)
+    baseline = {int(gw): float(value) for gw, value in baseline_points_by_gw.items()}
+    if any(not math.isfinite(v) or v < 0 for v in baseline.values()):
+        raise RuleInputError("baseline projections must be finite and non-negative")
+    scenario_rows = {}
+    for name, values in scenarios.items():
+        if not isinstance(name, str) or not name.strip() or set(map(int, values)) != set(horizon):
+            raise RuleInputError("each chip scenario must provide the exact baseline GW horizon")
+        normalized = {int(gw): float(value) for gw, value in values.items()}
+        if any(not math.isfinite(v) or v < 0 for v in normalized.values()):
+            raise RuleInputError(f"scenario {name} contains invalid projected points")
+        delta = {gw: normalized[gw] - baseline[gw] for gw in horizon}
+        scenario_rows[name] = {
+            "points_by_gw": normalized,
+            "delta_by_gw": delta,
+            "total_points": sum(normalized.values()),
+            "incremental_points": sum(delta.values()),
+        }
+    return {
+        "schema_version": "phase3.chip-counterfactual.0.1.0",
+        "status": "COUNTERFACTUAL_ESTIMATE_ONLY",
+        "source_url": source_url,
+        "captured_at": captured_at,
+        "content_hash": content_hash,
+        "horizon": horizon,
+        "baseline_points_by_gw": baseline,
+        "baseline_total_points": sum(baseline.values()),
+        "scenarios": scenario_rows,
+        "ranking": sorted(scenario_rows, key=lambda name: scenario_rows[name]["incremental_points"], reverse=True),
+        "recommendation": "NOT_ISSUED",
+        "interpretation": "projection comparison only; requires calibrated forecasts and chip availability validation",
     }
