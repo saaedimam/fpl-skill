@@ -10,7 +10,7 @@
     "commit": "ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c",
     "sha256": "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
   },
-  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity; additive Phase 3 cohort ownership and rank simulation module; Phase 3 price-risk calibration, season-parameterized gameweek simulation, chip analytics and fixture ticker",
+  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity; additive Phase 3 cohort ownership and rank simulation module; Phase 3 price-risk calibration, season-parameterized gameweek simulation, chip analytics and fixture ticker; Phase 3 empirical price-risk scoring, frozen-cohort transfer-flow and 8-GW transfer scenarios",
   "canonical_files": [
     "CHANGELOG.md",
     "SKILL.md",
@@ -65,7 +65,9 @@
     "fpl_skill/phase3_cohort_adapter.py",
     "fpl_skill/phase3_cohort_rank.py",
     "fpl_skill/phase3_gameweek.py",
+    "fpl_skill/phase3_planner.py",
     "fpl_skill/phase3_price_risk.py",
+    "fpl_skill/phase3_transfer_flow.py",
     "fpl_skill/prediction_engine.py",
     "fpl_skill/probabilistic_ep1.py",
     "fpl_skill/rank_aware_objective1.py",
@@ -177,9 +179,11 @@
     "fpl_skill/phase3_cohort_rank.py": "d5cc58124fb5543ef11aedf1587f318c509b42663929c4ac3ef11a5f3ef4b298",
     "fpl_skill/phase3_cohort_adapter.py": "689b4d1cecf01cb8fa56014cbdb43c1d8198bee804c560b28d2a6ae3b86e0225",
     "fpl_skill/phase3_gameweek.py": "c05a30e1b2a25ffdae1abf3b54e11f83bf9f2f6f78e8d57f26cc39b86bb2dca6",
-    "fpl_skill/phase3_price_risk.py": "27429af7d1a0b186232235b04becab9e045b83c281778a1debaf065fde1b23ed"
+    "fpl_skill/phase3_price_risk.py": "cc4075b513f2ffeb8cbba4a46bbe7dcd2a5481ab15ea42a8205e2d778882d007",
+    "fpl_skill/phase3_transfer_flow.py": "0fdbf7debf05cdadd64d89a6278eae6950a5f8ac15d0ce2f4f7ff04d97ff1f5a",
+    "fpl_skill/phase3_planner.py": "74d6ac3663aa78abea7276e7be03c774f310b0f54244da7df146fc33d8afa327"
   },
-  "release_hash": "449c678f9fefa4ac2274f73b2becd69714b61528c577c7d742dd89205fa7cf5a",
+  "release_hash": "b947cdc6fbd3b6142a1f3aa798c16985bc87ea06b0b47e552e5fb0af676282b6",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."

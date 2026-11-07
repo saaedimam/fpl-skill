@@ -105,6 +105,101 @@ class CalibratedPriceRisk:
         }
 
 
+@dataclass(frozen=True)
+class PriceSignal:
+    player_id: int
+    event: int
+    direction: str
+    risk_score: float
+    net_transfer_flow: int
+    now_cost: int
+    cost_change_start: int
+    cost_change_event: int
+    captured_at: str
+    source_url: str
+    content_hash: str
+
+
+def build_price_risk_scores(
+    elements: Sequence[Mapping[str, Any]],
+    *,
+    event: int,
+    captured_at: str,
+    source_url: str,
+    content_hash: str,
+) -> Dict[str, Any]:
+    """Convert official bootstrap transfer fields into cross-sectional risk scores.
+
+    Scores are relative ranks, not probabilities or price thresholds. The
+    separate calibrator maps these scores to matured rise/fall outcomes.
+    Missing official fields fail closed rather than being imputed as zero.
+    """
+    if event < 1 or not source_url.startswith("https://") or not content_hash.strip():
+        raise PriceCalibrationError("event, HTTPS source_url and content_hash are required")
+    _dt(captured_at, "captured_at")
+    parsed = []
+    seen = set()
+    for row in elements:
+        try:
+            pid = int(row["id"])
+            now_cost = int(row["now_cost"])
+            change_start = int(row["cost_change_start"])
+            change_event = int(row["cost_change_event"])
+            transfers_in = int(row["transfers_in_event"])
+            transfers_out = int(row["transfers_out_event"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PriceCalibrationError("bootstrap player missing a required price/transfer field") from exc
+        if pid < 1 or pid in seen or now_cost <= 0 or transfers_in < 0 or transfers_out < 0:
+            raise PriceCalibrationError("invalid or duplicate bootstrap player price/transfer values")
+        seen.add(pid)
+        parsed.append({
+            "player_id": pid, "now_cost": now_cost,
+            "cost_change_start": change_start, "cost_change_event": change_event,
+            "net_transfer_flow": transfers_in - transfers_out,
+        })
+    if not parsed:
+        raise PriceCalibrationError("bootstrap element snapshot is empty")
+
+    def percentiles(values: Sequence[int]) -> Dict[int, float]:
+        ordered = sorted(values)
+        out = {}
+        for value in set(values):
+            lower = sum(1 for x in ordered if x < value)
+            equal = sum(1 for x in ordered if x == value)
+            out[value] = 0.5 if len(ordered) == 1 else (
+                lower + (equal - 1) / 2.0
+            ) / (len(ordered) - 1)
+        return out
+
+    rise_ranks = percentiles([x["net_transfer_flow"] for x in parsed])
+    fall_ranks = percentiles([-x["net_transfer_flow"] for x in parsed])
+    signals = []
+    for row in parsed:
+        for direction, score in (
+            ("rise", rise_ranks[row["net_transfer_flow"]]),
+            ("fall", fall_ranks[-row["net_transfer_flow"]]),
+        ):
+            signals.append({
+                **row,
+                "event": event,
+                "direction": direction,
+                "risk_score": score,
+                "captured_at": captured_at,
+                "source_url": source_url,
+                "content_hash": content_hash,
+                "score_semantics": "cross-sectional percentile rank; not probability",
+            })
+    return {
+        "schema_version": "phase3.price-risk-signal.0.1.0",
+        "event": event,
+        "captured_at": captured_at,
+        "source_url": source_url,
+        "content_hash": content_hash,
+        "player_count": len(parsed),
+        "signals": signals,
+    }
+
+
 def fit_price_risk_calibrator(
     labels: Sequence[PriceRiskLabel],
     *,

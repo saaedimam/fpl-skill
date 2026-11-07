@@ -86,3 +86,40 @@ def test_invalid_timezone_and_probability_are_rejected():
     )
     with pytest.raises(PriceCalibrationError):
         model.predict(float("nan"), "2026-10-03T00:00:00Z")
+
+
+def test_price_risk_scores_are_cross_sectional_not_probabilities():
+    from fpl_skill.phase3_price_risk import build_price_risk_scores
+    result = build_price_risk_scores([
+        {"id": 1, "now_cost": 50, "cost_change_start": 0, "cost_change_event": 0,
+         "transfers_in_event": 100, "transfers_out_event": 10},
+        {"id": 2, "now_cost": 60, "cost_change_start": 1, "cost_change_event": 1,
+         "transfers_in_event": 10, "transfers_out_event": 100},
+        {"id": 3, "now_cost": 70, "cost_change_start": 0, "cost_change_event": 0,
+         "transfers_in_event": 50, "transfers_out_event": 50},
+    ], event=5, captured_at="2026-11-08T10:00:00Z",
+       source_url="https://fantasy.premierleague.com/api/bootstrap-static/",
+       content_hash="sha256:bootstrap")
+    by_player = {}
+    for row in result["signals"]:
+        by_player[(row["player_id"], row["direction"])] = row
+    assert by_player[(1, "rise")]["risk_score"] == 1.0
+    assert by_player[(2, "fall")]["risk_score"] == 1.0
+    assert by_player[(1, "rise")]["score_semantics"].startswith("cross-sectional")
+    assert len(result["signals"]) == 6
+
+
+def test_price_risk_score_builder_rejects_missing_fields_and_duplicate_ids():
+    from fpl_skill.phase3_price_risk import build_price_risk_scores
+    with pytest.raises(PriceCalibrationError, match="required"):
+        build_price_risk_scores([{"id": 1}], event=5,
+            captured_at="2026-11-08T10:00:00Z",
+            source_url="https://fantasy.premierleague.com/api/bootstrap-static/",
+            content_hash="sha256:x")
+    row = {"id": 1, "now_cost": 50, "cost_change_start": 0, "cost_change_event": 0,
+           "transfers_in_event": 1, "transfers_out_event": 0}
+    with pytest.raises(PriceCalibrationError, match="duplicate"):
+        build_price_risk_scores([row, row], event=5,
+            captured_at="2026-11-08T10:00:00Z",
+            source_url="https://fantasy.premierleague.com/api/bootstrap-static/",
+            content_hash="sha256:x")
