@@ -28,6 +28,7 @@ class CohortSnapshot:
     source_url: str
     content_hash: str
     coverage: Optional[float] = None
+    source_endpoints: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.cohort_id.strip():
@@ -38,6 +39,8 @@ class CohortSnapshot:
             raise ValueError("captured_at is required")
         if not self.source_url.startswith("https://"):
             raise ValueError("source_url must be an HTTPS URL")
+        if any(not endpoint.startswith("https://") for endpoint in self.source_endpoints):
+            raise ValueError("all source_endpoints must be HTTPS URLs")
         if not self.content_hash.strip():
             raise ValueError("content_hash is required")
         if not self.entries:
@@ -282,6 +285,7 @@ def simulate_rank(
         "event": cohort.event,
         "captured_at": cohort.captured_at,
         "source_url": cohort.source_url,
+        "source_endpoints": list(cohort.source_endpoints),
         "content_hash": cohort.content_hash,
         "simulations": simulations,
         "seed": seed,
