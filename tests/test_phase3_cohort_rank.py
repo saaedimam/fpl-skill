@@ -18,6 +18,7 @@ def _snapshot():
         cohort_id="top-2",
         event=4,
         captured_at="2026-11-08T10:00:00Z",
+        source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
         entries=(
             {"entry_id": 10, "picks": [_p(1, 1, True), _p(2, 2, vice=True), _p(3, 12, mult=0)]},
             {"entry_id": 11, "picks": [_p(1, 1, vice=True), _p(2, 2, True), _p(4, 12, mult=0)]},
@@ -56,7 +57,9 @@ def test_snapshot_rejects_duplicate_entries_and_bad_coverage():
 
 
 def test_cohort_rejects_missing_captain_and_duplicate_position():
-    bad = CohortSnapshot("bad", 1, "now", ({"entry_id": 1, "picks": [_p(1, 1, cap=True)]},))
+    bad = CohortSnapshot("bad", 1, "now", ({"entry_id": 1, "picks": [_p(1, 1, cap=True)]},),
+        source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+        content_hash="sha256:bad")
     with pytest.raises(ValueError, match="vice-captain"):
         cohort_ownership(bad)
 
@@ -71,6 +74,8 @@ def test_rank_simulation_is_reproducible_and_separates_observed_rank():
              "picks": [_p(2, 1, True), _p(1, 2, vice=True)]},
         ),
         coverage=0.5,
+        source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+        content_hash="sha256:sample",
     )
     own = {"entry_id": 1, "current_points": 95, "current_rank": 2,
            "picks": [_p(1, 1, True), _p(2, 2, vice=True)]}
@@ -87,8 +92,14 @@ def test_rank_simulation_fails_closed_on_missing_distribution():
     cohort = CohortSnapshot("sample", 1, "now", (
         {"entry_id": 2, "current_points": 10, "current_rank": 2,
          "picks": [_p(2, 1, True)]},
-    ))
+    ), source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+       content_hash="sha256:sample")
     own = {"entry_id": 1, "current_points": 10, "current_rank": 1,
            "picks": [_p(1, 1, True)]}
     with pytest.raises(ValueError, match="missing player distributions"):
         simulate_rank(own, cohort, {1: {"mean": 5, "variance": 1}}, simulations=100)
+
+
+def test_start_probability_map_must_be_complete():
+    with pytest.raises(ValueError, match="missing start probability"):
+        cohort_ownership(_snapshot(), {1: 0.9})
