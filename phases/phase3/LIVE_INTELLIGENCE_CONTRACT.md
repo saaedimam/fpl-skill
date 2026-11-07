@@ -99,3 +99,18 @@ No feature is marked COMPLETE because a module exists. It is complete only when 
 
 ## 6. Frozen boundaries
 Do not modify the v2.0.0 tag, P1–P15, Phase 2 historical implementation, its temporal firewall, or its certification evidence. Any required compatibility change must be proposed separately and rejected by default until independently authorized.
+
+
+## 7. Implementation status (not certification)
+
+Additive services currently present on the Phase 3 branch:
+- public cohort snapshot ingestion, cohort EO and frozen-cohort relative-rank simulation;
+- cross-sectional official bootstrap price-risk scores and matured-label calibration;
+- frozen-cohort transfer-flow parsing/aggregation, with wildcard/free-hit bulk records excluded from organic flow;
+- pure public-input multi-GW transfer scenario planning through eight future gameweeks, requiring official selling prices and known bank/free transfers;
+- official event-live GET parsing with freshness gates and provisional/final bonus state;
+- season-parameterized autosub/captain simulation, descriptive chip usage and a provenance-bound fixture ticker.
+
+This is not full LiveFPL parity and none of these services is release-certified merely because its unit tests pass. The event-live schema and optional defensive-contribution fields require active-season verification. Autosub logic requires differential matching against official post-GW `automatic_subs`. Price-risk requires matured out-of-sample labels and walk-forward calibration. Rank forecasts remain limited to the supplied cohort. Multi-GW planner currently evaluates one-transfer/roll/hit scenarios; multi-transfer combinations and chip counterfactuals remain separate gates.
+
+The current implementation intentionally has no optimizer integration or account mutation. All services consume supplied public snapshots or public GET transport and fail closed on missing provenance, stale data, or incomplete inputs.
