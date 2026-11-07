@@ -47,8 +47,8 @@ class CohortSnapshot:
 
 def _p_start(probabilities: Mapping[int, float], player_id: int) -> float:
     value = float(probabilities.get(player_id, 1.0))
-    if not 0.0 <= value <= 1.0:
-        raise ValueError(f"start probability for {player_id} must be in [0, 1]")
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(f"start probability for {player_id} must be finite and in [0, 1]")
     return value
 
 
@@ -101,6 +101,9 @@ def cohort_ownership(
             raise ValueError(f"entry {entry.get('entry_id')} missing captain")
         if vice_id is None:
             raise ValueError(f"entry {entry.get('entry_id')} missing vice-captain")
+        starter_ids = {int(r["element"]) for r in rows if 1 <= int(r.get("position", 99)) <= 11}
+        if captain_id not in starter_ids or vice_id not in starter_ids or captain_id == vice_id:
+            raise ValueError(f"entry {entry.get('entry_id')} captain and vice-captain must be distinct starters")
 
         # Expected multiplier exposure: starter baseline + captain extra.
         for pid in {int(r["element"]) for r in rows if 1 <= int(r.get("position", 99)) <= 11}:
@@ -196,7 +199,8 @@ def simulate_rank(
     own_id = int(own["entry_id"])
     if not own.get("picks"):
         raise ValueError("own entry requires picks")
-    if int(own["current_points"]) < 0 or int(own["current_rank"]) < 1:
+    own_points = float(own["current_points"])
+    if not math.isfinite(own_points) or own_points < 0 or int(own["current_rank"]) < 1:
         raise ValueError("own current_points/current_rank invalid")
 
     entries = []
@@ -210,6 +214,10 @@ def simulate_rank(
         seen.add(eid)
         if "current_points" not in e or "current_rank" not in e or "picks" not in e:
             raise ValueError(f"cohort entry {eid} missing rank/points/picks")
+        points = float(e["current_points"])
+        rank = int(e["current_rank"])
+        if not math.isfinite(points) or points < 0 or rank < 1:
+            raise ValueError(f"cohort entry {eid} has invalid current rank/points")
         entries.append(e)
     if not entries:
         raise ValueError("comparison cohort has no entries besides own entry")
