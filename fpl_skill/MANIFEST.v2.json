@@ -10,7 +10,7 @@
     "commit": "ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c",
     "sha256": "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
   },
-  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity",
+  "scope": "Phase 1: canonical v2 skill contract, expected-point semantics, and release-manifest integrity; additive Phase 3 cohort ownership and rank simulation module",
   "canonical_files": [
     "CHANGELOG.md",
     "SKILL.md",
@@ -34,6 +34,7 @@
     "fpl_skill/backtest.py",
     "fpl_skill/certification.py",
     "fpl_skill/cli.py",
+    "fpl_skill/current_data.py",
     "fpl_skill/direct_api.py",
     "fpl_skill/elite_adapter.py",
     "fpl_skill/evidence_policy.py",
@@ -61,6 +62,7 @@
     "fpl_skill/optimality.py",
     "fpl_skill/optimizer.py",
     "fpl_skill/optimizer_legacy.py",
+    "fpl_skill/phase3_cohort_rank.py",
     "fpl_skill/prediction_engine.py",
     "fpl_skill/probabilistic_ep1.py",
     "fpl_skill/rank_aware_objective1.py",
@@ -68,7 +70,12 @@
     "fpl_skill/transfer_intelligence.py",
     "fpl_skill/watch.py",
     "prompts/master_fpl_rigorous.md",
+    "tests/README.md",
     "tests/compute_release_hash.py",
+    "tests/conftest.py",
+    "tests/data/live_fpl_sample.json",
+    "tests/network_isolation.py",
+    "tests/prove_netns_egress_denied.py",
     "tests/test_authenticated_get.py",
     "tests/test_certificate_contract.py",
     "tests/test_compute_release_hash.py",
@@ -77,19 +84,13 @@
     "tests/test_expected_points_semantics.py",
     "tests/test_historical_data_layer.py",
     "tests/test_manifest_completeness.py",
+    "tests/test_network_guard.py",
     "tests/test_observation.py",
     "tests/test_probabilistic_ep1_p023.py",
     "tests/test_rank_aware_objective1.py",
     "tests/test_redteam_historical_firewall.py",
-    "tests/test_replay_gate.py",
-    "tests/README.md",
-    "tests/conftest.py",
-    "tests/network_isolation.py",
-    "tests/prove_netns_egress_denied.py",
-    "tests/test_network_guard.py",
-    "fpl_skill/current_data.py",
-    "tests/data/live_fpl_sample.json",
-    "tests/test_release_gates.py"
+    "tests/test_release_gates.py",
+    "tests/test_replay_gate.py"
   ],
   "file_hashes": {
     "CHANGELOG.md": "31288f9d1b992b0c520a0aec6ee8e5a4f5fd6c3be9b1bc58faf8d239fd1e9f09",
@@ -169,9 +170,10 @@
     "tests/test_network_guard.py": "6f9080b48ddbe2f32a1aebd97d1461983287edf46b0c2114179b68173165ba1f",
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
     "tests/data/live_fpl_sample.json": "54afad74615f7bd251b12c67ba25533305884e15274cc00ee048899a963b404e",
-    "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c"
+    "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
+    "fpl_skill/phase3_cohort_rank.py": "698e33237b6e5029bbb8d5ece6574fa197cafb8c420664d4d60680d0cb49811b"
   },
-  "release_hash": "8015d65ef00c76f00217386fecb4b2c469c4689d5cbe0645c1cc137152c18dd5",
+  "release_hash": "b6d3ff0d9c483a118971c9251e69d5f9b972ae2465c4533cf876506598189585",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
