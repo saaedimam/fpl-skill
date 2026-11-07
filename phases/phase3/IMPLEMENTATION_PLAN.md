@@ -70,3 +70,8 @@ This plan and contract establish scope and acceptance criteria. They do not clai
 | P3-09 Fixture / combinations | Provenance-bound GW+1…GW+8 BGW/SGW/DGW ticker and exact joint player-combination counts | Complete official fixture replay across reschedules and joint-outcome modelling |
 
 Synthetic tests validate deterministic mechanics only. They do not establish official-rule parity, forecast calibration, LiveFPL parity, or FPL-winning performance. Phase 3 remains uncertified.
+
+
+## Release / optimizer integration gate
+
+`fpl_skill.phase3_release_gate.evaluate_phase3_release_gate` now requires explicit evidence for CI, manifest integrity, Phase 2 temporal firewall, dynamic LiveFPL capture, official EO differential, rank and price walk-forward calibration, transfer-flow chip filtering, autosub differential, live-event schema verification, multi-GW backtesting and human sign-off. Missing evidence or a missing HTTPS evidence reference blocks release and optimizer integration. This gate is separate from the PR's GitHub mergeability.

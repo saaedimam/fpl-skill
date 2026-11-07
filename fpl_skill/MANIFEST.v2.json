@@ -68,6 +68,7 @@
     "fpl_skill/phase3_live_match.py",
     "fpl_skill/phase3_planner.py",
     "fpl_skill/phase3_price_risk.py",
+    "fpl_skill/phase3_release_gate.py",
     "fpl_skill/phase3_transfer_flow.py",
     "fpl_skill/prediction_engine.py",
     "fpl_skill/probabilistic_ep1.py",
@@ -183,9 +184,10 @@
     "fpl_skill/phase3_price_risk.py": "726f78e0b0a82f395b7dd9ec70e9393c7a5fb439bf4651c193ded627376e7835",
     "fpl_skill/phase3_transfer_flow.py": "a07306d6350e9cfbf46c99494dc37a0b6db3edad405f3fa0d4d187d8a29c1efd",
     "fpl_skill/phase3_planner.py": "3ac21ab8bdaacf5a07538b4e8334dae63880e935be7bcb31e52bfcc747fd96d5",
-    "fpl_skill/phase3_live_match.py": "1d6f1ea1d17a145a7a855f9571aa9b36c377308a9c7f29b16ebff40626f457ad"
+    "fpl_skill/phase3_live_match.py": "1d6f1ea1d17a145a7a855f9571aa9b36c377308a9c7f29b16ebff40626f457ad",
+    "fpl_skill/phase3_release_gate.py": "37ede8e17ce828cb5cb7bb76f0b2e470ad3414c0af7a624a2a3eeb446d8656e7"
   },
-  "release_hash": "060ca95536372d3e799690b3f307343e1b719653130b57cd7dc622465bc9fcdf",
+  "release_hash": "ba0c1d0381c9f1c867ccbc6ac914bab93f4600f2116f8199436652d9e622755d",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."

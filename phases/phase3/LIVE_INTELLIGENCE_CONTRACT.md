@@ -114,3 +114,8 @@ Additive services currently present on the Phase 3 branch:
 This is not full LiveFPL parity and none of these services is release-certified merely because its unit tests pass. The event-live schema and optional defensive-contribution fields require active-season verification. Autosub logic requires differential matching against official post-GW `automatic_subs`. Price-risk requires matured out-of-sample labels and walk-forward calibration. Rank forecasts remain limited to the supplied cohort. Multi-GW planner currently evaluates one-transfer/roll/hit scenarios; multi-transfer combinations and chip counterfactuals remain separate gates.
 
 The current implementation intentionally has no optimizer integration or account mutation. All services consume supplied public snapshots or public GET transport and fail closed on missing provenance, stale data, or incomplete inputs.
+
+
+## 8. Release gate
+
+The Phase 3 release gate is fail-closed. A passing unit-test matrix alone cannot authorize optimizer integration or release. Each required evidence item must be explicitly true and have an HTTPS evidence reference, including human sign-off. Missing, stale or unreferenced evidence blocks the gate. The gate does not modify Phase 2 or the frozen v2.0.0 baseline.
