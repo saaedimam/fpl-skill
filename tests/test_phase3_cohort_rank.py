@@ -51,9 +51,13 @@ def test_expected_eo_accounts_for_captain_and_vice_fallback():
 
 def test_snapshot_rejects_duplicate_entries_and_bad_coverage():
     with pytest.raises(ValueError):
-        CohortSnapshot("x", 1, "now", ({"entry_id": 1}, {"entry_id": 1}))
+        CohortSnapshot("x", 1, "now", ({"entry_id": 1}, {"entry_id": 1}),
+            source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+            content_hash="sha256:x")
     with pytest.raises(ValueError):
-        CohortSnapshot("x", 1, "now", ({"entry_id": 1},), coverage=1.1)
+        CohortSnapshot("x", 1, "now", ({"entry_id": 1},),
+            source_url="https://fantasy.premierleague.com/api/leagues-classic/314/standings/",
+            content_hash="sha256:x", coverage=1.1)
 
 
 def test_cohort_rejects_missing_captain_and_duplicate_position():
