@@ -49,6 +49,7 @@ def build_public_cohort_snapshot(
 
     rows: List[Dict[str, Any]] = []
     raw_pages: List[bytes] = []
+    source_endpoints: List[str] = []
     page = 1
     seen = set()
     has_next = True
@@ -64,6 +65,7 @@ def build_public_cohort_snapshot(
         if not isinstance(results, list):
             raise SchemaError("standings.results must be a list")
         raw_pages.append(response.body)
+        source_endpoints.append(url)
         has_next = bool(standings.get("has_next", False))
         for row in results:
             if not isinstance(row, dict) or row.get("entry") is None:
@@ -98,6 +100,7 @@ def build_public_cohort_snapshot(
         if len(payload["picks"]) != 15:
             raise SchemaError(f"expected 15 picks for entry {entry['entry_id']}")
         raw_pages.append(response.body)
+        source_endpoints.append(url)
         entry["picks"] = payload["picks"]
 
     digest = hashlib.sha256()
@@ -112,4 +115,5 @@ def build_public_cohort_snapshot(
         source_url=standings_url(league_id, 1),
         content_hash="sha256:" + digest.hexdigest(),
         coverage=(len(rows) / top_n) if top_n else None,
+        source_endpoints=tuple(source_endpoints),
     )
