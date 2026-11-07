@@ -171,9 +171,9 @@
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
     "tests/data/live_fpl_sample.json": "54afad74615f7bd251b12c67ba25533305884e15274cc00ee048899a963b404e",
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
-    "fpl_skill/phase3_cohort_rank.py": "698e33237b6e5029bbb8d5ece6574fa197cafb8c420664d4d60680d0cb49811b"
+    "fpl_skill/phase3_cohort_rank.py": "be9a92456a40099e7f2b43befbfe673e8d6635e098492a62c4e8ad98720aa654"
   },
-  "release_hash": "b6d3ff0d9c483a118971c9251e69d5f9b972ae2465c4533cf876506598189585",
+  "release_hash": "bcdcd63fae963dc28beefcc1ccafde8b6dcefec46ef8bcf3196d0e91a837f580",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
