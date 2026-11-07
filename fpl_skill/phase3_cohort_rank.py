@@ -151,6 +151,8 @@ def cohort_ownership(
         "event": snapshot.event,
         "captured_at": snapshot.captured_at,
         "source_url": snapshot.source_url,
+        "source_endpoints": list(snapshot.source_endpoints),
+        "content_hash": snapshot.content_hash,
         "sample_size": n,
         "coverage": snapshot.coverage,
         "eo_method": "expected starting-XI exposure + captain extra + vice fallback; bench autosubs excluded; captain/vice availability treated independently",
