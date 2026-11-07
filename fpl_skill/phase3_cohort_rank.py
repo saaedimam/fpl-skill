@@ -13,8 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import random
-from statistics import NormalDist
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 SCHEMA_VERSION = "phase3.cohort-rank.0.1.0"
@@ -149,10 +148,8 @@ def cohort_ownership(
         "event": snapshot.event,
         "captured_at": snapshot.captured_at,
         "source_url": snapshot.source_url,
-        "content_hash": snapshot.content_hash,
         "sample_size": n,
         "coverage": snapshot.coverage,
-        "content_hash": snapshot.content_hash,
         "eo_method": "expected starting-XI exposure + captain extra + vice fallback; bench autosubs excluded; captain/vice availability treated independently",
         "players": rows_out,
     }
@@ -284,6 +281,8 @@ def simulate_rank(
         "cohort_id": cohort.cohort_id,
         "event": cohort.event,
         "captured_at": cohort.captured_at,
+        "source_url": cohort.source_url,
+        "content_hash": cohort.content_hash,
         "simulations": simulations,
         "seed": seed,
         "comparison_sample_size": len(entries),
@@ -295,7 +294,7 @@ def simulate_rank(
             "p90": _quantile(rank_samples, 0.90),
             "mean": sum(rank_samples) / len(rank_samples),
         },
-        "probability_ahead_of_sample": sum(x == 0 for x in ahead_counts) / simulations,
+        "probability_top_of_comparison_sample": sum(x == 0 for x in ahead_counts) / simulations,
         "own_projected_points": {
             "p10": _quantile(own_deltas, 0.10),
             "p50": _quantile(own_deltas, 0.50),
