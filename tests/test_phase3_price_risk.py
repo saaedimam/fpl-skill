@@ -1,0 +1,88 @@
+"""Leakage and calibration tests for Phase 3 price-risk estimates."""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
+from fpl_skill.phase3_price_risk import (
+    PriceCalibrationError, PriceRiskLabel, calibration_report, fit_price_risk_calibrator,
+)
+
+
+def _label(i, score, changed, direction="rise", resolved="2026-10-01T00:00:00Z"):
+    return PriceRiskLabel(
+        player_id=i + 1, event=3, direction=direction, risk_score=score,
+        changed=changed, observed_at="2026-09-30T00:00:00Z",
+        resolved_at=resolved,
+        source_url="https://fantasy.premierleague.com/api/bootstrap-static/",
+        content_hash=f"sha256:{i:064x}",
+    )
+
+
+def test_empirical_calibration_uses_matured_labels_and_bin_frequency():
+    labels = [_label(i, 0.85, i % 4 != 0) for i in range(40)]
+    model = fit_price_risk_calibrator(
+        labels, direction="rise", as_of="2026-10-02T00:00:00Z",
+        bin_count=10, min_total_samples=30, min_bin_samples=10,
+    )
+    prediction = model.predict(0.85, "2026-10-03T00:00:00Z")
+    assert prediction["status"] == "CALIBRATED"
+    assert prediction["bin_sample_size"] == 40
+    assert 0 < prediction["probability"] < 1
+
+
+def test_insufficient_sample_never_emits_calibrated_action():
+    model = fit_price_risk_calibrator(
+        [_label(i, 0.5, True) for i in range(4)],
+        direction="rise", as_of="2026-10-02T00:00:00Z",
+        bin_count=4, min_total_samples=20, min_bin_samples=5,
+    )
+    prediction = model.predict(0.5, "2026-10-03T00:00:00Z")
+    assert prediction["status"] == "INSUFFICIENT_HISTORY"
+    assert prediction["action_label"] == "UNAVAILABLE"
+
+
+def test_rejects_future_labels_and_same_cutoff_predictions():
+    with pytest.raises(PriceCalibrationError, match="post-cutoff"):
+        fit_price_risk_calibrator(
+            [_label(1, 0.7, True, resolved="2026-10-04T00:00:00Z")],
+            direction="rise", as_of="2026-10-02T00:00:00Z",
+        )
+    model = fit_price_risk_calibrator(
+        [_label(1, 0.7, True)], direction="rise",
+        as_of="2026-10-02T00:00:00Z", min_total_samples=1, min_bin_samples=1,
+    )
+    with pytest.raises(PriceCalibrationError, match="strictly after"):
+        model.predict(0.7, "2026-10-02T00:00:00Z")
+
+
+def test_direction_is_not_mixed():
+    labels = [_label(1, 0.9, True, "rise"), _label(2, 0.9, False, "fall")]
+    model = fit_price_risk_calibrator(
+        labels, direction="rise", as_of="2026-10-02T00:00:00Z",
+        min_total_samples=1, min_bin_samples=1,
+    )
+    assert model.global_count == 1
+    assert model.global_successes == 1
+
+
+def test_calibration_report_computes_brier_and_reliability_bins():
+    labels = [_label(1, 0.2, False), _label(2, 0.8, True)]
+    report = calibration_report(
+        labels, {(2, 3): 0.8, (1, 3): 0.2}, bin_count=5,
+    )
+    assert report["sample_size"] == 2
+    assert report["brier_score"] == pytest.approx(0.04)
+    assert len(report["bins"]) == 2
+
+
+def test_invalid_timezone_and_probability_are_rejected():
+    with pytest.raises(PriceCalibrationError, match="timezone-aware"):
+        _label(1, 0.5, True, resolved="2026-10-01T00:00:00").__post_init__()
+    model = fit_price_risk_calibrator(
+        [_label(1, 0.7, True)], direction="rise",
+        as_of="2026-10-02T00:00:00Z", min_total_samples=1, min_bin_samples=1,
+    )
+    with pytest.raises(PriceCalibrationError):
+        model.predict(float("nan"), "2026-10-03T00:00:00Z")
