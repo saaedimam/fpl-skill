@@ -40,11 +40,12 @@ def test_cohort_ownership_denominator_and_captain_exposure():
 
 def test_expected_eo_accounts_for_captain_and_vice_fallback():
     result = cohort_ownership(_snapshot(), {1: 0.5, 2: 0.8})
-    # player 1: 0.5 starter exposure in each entry + 0.5 captain extra once
-    # + 0.8 vice fallback once after player 2 (captain) fails.
-    assert result["players"][1]["expected_effective_ownership_pct"] == pytest.approx(100.0)
-    # player 2: 0.8 starter exposure twice + 0.4 captain extra + 0.4 vice fallback
-    assert result["players"][2]["expected_effective_ownership_pct"] == pytest.approx(120.0)
+    # player 1: two starter exposures (0.5 each), one captain extra (0.5),
+    # and vice fallback only when player 2 fails (0.2 * 0.5).
+    assert result["players"][1]["expected_effective_ownership_pct"] == pytest.approx(80.0)
+    # player 2: two starter exposures (0.8 each), one captain extra (0.8),
+    # and vice fallback only when player 1 fails (0.5 * 0.8).
+    assert result["players"][2]["expected_effective_ownership_pct"] == pytest.approx(140.0)
 
 
 def test_snapshot_rejects_duplicate_entries_and_bad_coverage():
