@@ -26,8 +26,9 @@ class CohortSnapshot:
     event: int
     captured_at: str
     entries: Tuple[Mapping[str, Any], ...]
+    source_url: str
+    content_hash: str
     coverage: Optional[float] = None
-    content_hash: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.cohort_id.strip():
@@ -36,6 +37,10 @@ class CohortSnapshot:
             raise ValueError("event must be >= 1")
         if not self.captured_at.strip():
             raise ValueError("captured_at is required")
+        if not self.source_url.startswith("https://"):
+            raise ValueError("source_url must be an HTTPS URL")
+        if not self.content_hash.strip():
+            raise ValueError("content_hash is required")
         if not self.entries:
             raise ValueError("cohort snapshot must contain entries")
         if self.coverage is not None and not 0.0 <= self.coverage <= 1.0:
@@ -46,7 +51,9 @@ class CohortSnapshot:
 
 
 def _p_start(probabilities: Mapping[int, float], player_id: int) -> float:
-    value = float(probabilities.get(player_id, 1.0))
+    if player_id not in probabilities:
+        raise ValueError(f"missing start probability for player {player_id}")
+    value = float(probabilities[player_id])
     if not math.isfinite(value) or not 0.0 <= value <= 1.0:
         raise ValueError(f"start probability for {player_id} must be finite and in [0, 1]")
     return value
@@ -62,7 +69,10 @@ def cohort_ownership(
     multiplier, is_captain, is_vice_captain. Only positions 1..11 contribute
     starting-XI exposure. Bench/autosub exposure is not silently imputed.
     """
-    probs = start_probabilities or {}
+    # Without a probability map, compute descriptive EO assuming each listed
+    # starter appears. Once a map is supplied, every cohort starter needs an
+    # explicit probability; missing is not silently treated as 100%.
+    probs = start_probabilities
     n = len(snapshot.entries)
     picked: Dict[int, int] = {}
     starters: Dict[int, int] = {}
@@ -107,10 +117,10 @@ def cohort_ownership(
 
         # Expected multiplier exposure: starter baseline + captain extra.
         for pid in {int(r["element"]) for r in rows if 1 <= int(r.get("position", 99)) <= 11}:
-            p = _p_start(probs, pid)
+            p = 1.0 if probs is None else _p_start(probs, pid)
             eo_weight[pid] = eo_weight.get(pid, 0.0) + p
-        p_cap = _p_start(probs, captain_id)
-        p_vice = _p_start(probs, vice_id)
+        p_cap = 1.0 if probs is None else _p_start(probs, captain_id)
+        p_vice = 1.0 if probs is None else _p_start(probs, vice_id)
         eo_weight[captain_id] = eo_weight.get(captain_id, 0.0) + p_cap
         fallback = (1.0 - p_cap) * p_vice
         eo_weight[vice_id] = eo_weight.get(vice_id, 0.0) + fallback
@@ -138,10 +148,12 @@ def cohort_ownership(
         "cohort_id": snapshot.cohort_id,
         "event": snapshot.event,
         "captured_at": snapshot.captured_at,
+        "source_url": snapshot.source_url,
+        "content_hash": snapshot.content_hash,
         "sample_size": n,
         "coverage": snapshot.coverage,
         "content_hash": snapshot.content_hash,
-        "eo_method": "expected starting-XI exposure + captain extra + vice fallback; bench autosubs excluded",
+        "eo_method": "expected starting-XI exposure + captain extra + vice fallback; bench autosubs excluded; captain/vice availability treated independently",
         "players": rows_out,
     }
 
@@ -225,9 +237,15 @@ def simulate_rank(
     all_picks = [own["picks"]] + [e["picks"] for e in entries]
     required_ids = set()
     for picks in all_picks:
+        seen_player_ids = set()
         for row in picks:
-            required_ids.add(int(row["element"]))
-    missing = required_ids - set(int(k) for k in distributions)
+            pid = int(row["element"])
+            if pid in seen_player_ids:
+                raise ValueError(f"duplicate player {pid} in one entry's picks")
+            seen_player_ids.add(pid)
+            required_ids.add(pid)
+    dist_by_id = {int(k): v for k, v in distributions.items()}
+    missing = required_ids - set(dist_by_id)
     if missing:
         raise ValueError(f"missing player distributions: {sorted(missing)}")
 
@@ -249,14 +267,12 @@ def simulate_rank(
     own_deltas = []
 
     for _ in range(simulations):
-        sampled = {pid: _sample_points(rng, distributions[pid]) for pid in required_ids}
+        sampled = {pid: _sample_points(rng, dist_by_id[pid]) for pid in required_ids}
         own_gain = sum(sampled[pid] * mult for pid, mult in own_mult.items())
         own_future = float(own["current_points"]) + own_gain
-        future_scores = []
         ahead = 0
         for entry, mults in field_mult:
             score = float(entry["current_points"]) + sum(sampled[pid] * mult for pid, mult in mults.items())
-            future_scores.append(score)
             if score > own_future or (score == own_future and int(entry["current_rank"]) < int(own["current_rank"])):
                 ahead += 1
         rank_samples.append(ahead + 1)
