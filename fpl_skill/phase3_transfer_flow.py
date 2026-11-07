@@ -10,6 +10,8 @@ from datetime import datetime
 import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
+from .observation.ingest import Transport, fetch_json, history_url, picks_url, transfers_url
+
 
 class TransferFlowError(ValueError):
     """Invalid cohort, transfer timestamp, or source provenance."""
@@ -61,6 +63,7 @@ def build_transfer_flow_records(
     records = []
     entries_with_history = 0
     excluded_bulk = 0
+    excluded_unknown_chip_state = 0
     for entry in entries:
         history = entry.get("transfers")
         if not isinstance(history, list):
@@ -72,6 +75,11 @@ def build_transfer_flow_records(
             raise TransferFlowError(f"entry {entry['entry_id']} missing transfer provenance")
         chips = entry.get("chip_history")
         used_bulk_chip = False
+        chip_state_known = bool(entry.get("chip_state_known", False))
+        active_chip = entry.get("active_chip")
+        if isinstance(active_chip, str) and active_chip.strip():
+            chip_state_known = True
+            used_bulk_chip = active_chip.lower() in chip_names
         if isinstance(chips, list):
             for chip in chips:
                 if not isinstance(chip, Mapping):
@@ -80,8 +88,10 @@ def build_transfer_flow_records(
                     chip_event = int(chip.get("event", -1))
                 except (TypeError, ValueError):
                     continue
-                if chip_event == event and str(chip.get("name", "")).lower() in chip_names:
-                    used_bulk_chip = True
+                if chip_event == event:
+                    chip_state_known = True
+                    if str(chip.get("name", "")).lower() in chip_names:
+                        used_bulk_chip = True
         for transfer in history:
             if not isinstance(transfer, Mapping):
                 raise TransferFlowError("malformed transfer record")
@@ -106,6 +116,8 @@ def build_transfer_flow_records(
                 raise TransferFlowError("invalid transfer player ids")
             if used_bulk_chip:
                 excluded_bulk += 1
+            if not chip_state_known:
+                excluded_unknown_chip_state += 1
             records.append({
                 "cohort_id": cohort_id,
                 "event": event,
@@ -115,7 +127,9 @@ def build_transfer_flow_records(
                 "player_out": player_out,
                 "transfer_at": timestamp,
                 "bulk_chip": used_bulk_chip,
-                "signal_eligible": not used_bulk_chip,
+                "chip_state_known": chip_state_known,
+                "signal_eligible": chip_state_known and not used_bulk_chip,
+                "exclusion_reason": "BULK_CHIP" if used_bulk_chip else ("CHIP_STATE_UNKNOWN" if not chip_state_known else None),
                 "source_url": source_url,
                 "content_hash": content_hash,
                 "observed_at": observed_at,
@@ -131,6 +145,7 @@ def build_transfer_flow_records(
         "entries_with_transfer_history": entries_with_history,
         "coverage_pct": 100.0 * entries_with_history / len(frozen_ids),
         "excluded_bulk_transfer_count": excluded_bulk,
+        "excluded_unknown_chip_state_count": excluded_unknown_chip_state,
         "records": records,
     }
 
@@ -191,6 +206,83 @@ def aggregate_transfer_flow(
         "coverage_pct": snapshot["coverage_pct"],
         "eligible_transfer_records": eligible_count,
         "excluded_bulk_transfer_count": snapshot["excluded_bulk_transfer_count"],
+        "excluded_unknown_chip_state_count": snapshot["excluded_unknown_chip_state_count"],
         "players": players,
         "interpretation": "observed public transfer flow; not a causal or points recommendation",
     }
+
+
+def ingest_public_transfer_flow(
+    transport: Transport,
+    cohort: Mapping[str, Any],
+    *,
+    event: int,
+    observed_at: str,
+    deadline_at: str,
+) -> Dict[str, Any]:
+    """Fetch public transfer/history/picks endpoints for the frozen cohort.
+
+    Current-chip state is treated as unknown unless the event picks response
+    explicitly includes active_chip or entry history records a chip for this
+    event. Unknown chip state excludes that manager's transfers from organic
+    flow rather than silently counting wildcard/free-hit bulk activity.
+    """
+    import hashlib
+
+    entry_ids = [int(x) for x in cohort.get("entry_ids", [])]
+    if not entry_ids:
+        raise TransferFlowError("cohort definition has no frozen entry_ids")
+    entries = []
+    for index, manager_id in enumerate(entry_ids, start=1):
+        transfer_payload, transfer_response = fetch_json(transport, transfers_url(manager_id))
+        history_payload, history_response = fetch_json(transport, history_url(manager_id))
+        picks_payload, picks_response = fetch_json(transport, picks_url(manager_id, event))
+        transfer_rows = None
+        if isinstance(transfer_payload, list):
+            transfer_rows = transfer_payload
+        elif isinstance(transfer_payload, Mapping) and isinstance(transfer_payload.get("transfers"), list):
+            transfer_rows = transfer_payload["transfers"]
+
+        chips = history_payload.get("chips") if isinstance(history_payload, Mapping) else None
+        active_chip_known = isinstance(picks_payload, Mapping) and "active_chip" in picks_payload
+        active_chip = picks_payload.get("active_chip") if active_chip_known else None
+        if not active_chip_known and isinstance(chips, list):
+            event_chips = [
+                x for x in chips
+                if isinstance(x, Mapping) and str(x.get("event")) == str(event)
+            ]
+            if event_chips:
+                active_chip_known = True
+                active_chip = event_chips[-1].get("name")
+
+        raw_parts = [
+            response.body for response in (transfer_response, history_response, picks_response)
+            if response is not None and response.body is not None
+        ]
+        digest = hashlib.sha256()
+        for part in raw_parts:
+            digest.update(len(part).to_bytes(8, "big"))
+            digest.update(part)
+        entries.append({
+            "entry_id": manager_id,
+            "rank_snapshot": index,
+            "transfers": transfer_rows,
+            "chip_history": chips,
+            "chip_state_known": active_chip_known,
+            "active_chip": active_chip,
+            "source_url": transfers_url(manager_id),
+            "content_hash": "sha256:" + digest.hexdigest() if raw_parts else None,
+        })
+    snapshot = build_transfer_flow_records(
+        entries, cohort_id=str(cohort.get("cohort_id") or cohort.get("entry_ids_hash") or "frozen-cohort"),
+        cohort_entry_ids=entry_ids, event=event, observed_at=observed_at,
+        deadline_at=deadline_at,
+    )
+    snapshot["cohort_definition"] = {
+        "league_id": cohort.get("league_id"),
+        "snapshot_event": cohort.get("snapshot_event"),
+        "rank_snapshot_at": cohort.get("rank_snapshot_at"),
+        "entry_ids_hash": cohort.get("entry_ids_hash"),
+        "content_hash": cohort.get("content_hash"),
+    }
+    return snapshot

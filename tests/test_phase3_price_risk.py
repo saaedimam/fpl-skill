@@ -123,3 +123,32 @@ def test_price_risk_score_builder_rejects_missing_fields_and_duplicate_ids():
             captured_at="2026-11-08T10:00:00Z",
             source_url="https://fantasy.premierleague.com/api/bootstrap-static/",
             content_hash="sha256:x")
+
+
+def test_public_price_ingestion_uses_official_bootstrap_and_hashes_raw_body():
+    import json
+    from fpl_skill.observation.ingest import HttpResponse, bootstrap_url
+    from fpl_skill.phase3_price_risk import ingest_public_price_signals
+
+    row = {"id": 1, "now_cost": 50, "cost_change_start": 0, "cost_change_event": 0,
+           "transfers_in_event": 10, "transfers_out_event": 1}
+    class FakeTransport:
+        def get(self, url):
+            assert url == bootstrap_url()
+            return HttpResponse(200, {"date": "Sun, 08 Nov 2026 10:00:00 GMT"},
+                                json.dumps({"elements": [row], "events": [{"id": 5}]}).encode())
+    result = ingest_public_price_signals(
+        FakeTransport(), event=5, captured_at="2026-11-08T10:00:00Z",
+    )
+    assert result["source_url"] == bootstrap_url()
+    assert result["content_hash"].startswith("sha256:")
+    assert result["player_count"] == 1
+
+
+def test_brier_score_keys_can_distinguish_rise_and_fall_for_same_player_event():
+    labels = [_label(1, 0.8, True, "rise"), _label(1, 0.2, False, "fall")]
+    report = calibration_report(
+        labels, {(2, 3, "rise"): 0.8, (2, 3, "fall"): 0.2}, bin_count=5,
+    )
+    assert report["sample_size"] == 2
+    assert report["brier_score"] == pytest.approx(0.04)

@@ -12,6 +12,8 @@ from datetime import datetime
 import math
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
+from .observation.ingest import Transport, bootstrap_url, fetch_json
+
 
 class PriceCalibrationError(ValueError):
     """Invalid, stale, or temporally inconsistent price-risk evidence."""
@@ -257,7 +259,9 @@ def brier_score(labels: Sequence[PriceRiskLabel], predictions: Mapping[Tuple[int
     """Brier score for matured outcomes keyed by (player_id, event)."""
     errors = []
     for label in labels:
-        key = (label.player_id, label.event)
+        key = (label.player_id, label.event, label.direction)
+        if key not in predictions:
+            key = (label.player_id, label.event)
         if key not in predictions:
             continue
         probability = float(predictions[key])
@@ -279,7 +283,9 @@ def calibration_report(
         raise PriceCalibrationError("bin_count must be >= 2")
     groups: List[List[Tuple[float, int]]] = [[] for _ in range(bin_count)]
     for label in labels:
-        key = (label.player_id, label.event)
+        key = (label.player_id, label.event, label.direction)
+        if key not in predictions:
+            key = (label.player_id, label.event)
         if key not in predictions:
             continue
         p = float(predictions[key])
@@ -304,3 +310,29 @@ def calibration_report(
         "brier_score": brier_score(labels, predictions),
         "bins": bins,
     }
+
+
+def ingest_public_price_signals(
+    transport: Transport,
+    *,
+    event: int,
+    captured_at: str,
+) -> Dict[str, Any]:
+    """Fetch and hash the official public bootstrap before scoring price risk."""
+    import hashlib
+
+    url = bootstrap_url()
+    payload, response = fetch_json(transport, url)
+    if not isinstance(payload, Mapping) or not isinstance(payload.get("elements"), list):
+        raise PriceCalibrationError("official bootstrap payload missing elements")
+    if not isinstance(payload.get("events"), list) or not any(int(x.get("id", -1)) == event for x in payload["events"] if isinstance(x, Mapping)):
+        raise PriceCalibrationError("requested event is absent from official bootstrap")
+    if response is None or response.body is None:
+        raise PriceCalibrationError("official bootstrap response has no raw body")
+    digest = "sha256:" + hashlib.sha256(response.body).hexdigest()
+    result = build_price_risk_scores(
+        payload["elements"], event=event, captured_at=captured_at,
+        source_url=url, content_hash=digest,
+    )
+    result["source_observed_at"] = response.headers.get("last-modified") or response.headers.get("date")
+    return result

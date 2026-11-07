@@ -13,7 +13,7 @@ from fpl_skill.phase3_transfer_flow import (
 def _entry(eid, transfers, chips=None):
     return {
         "entry_id": eid, "rank_snapshot": eid,
-        "transfers": transfers, "chip_history": chips or [],
+        "transfers": transfers, "chip_history": chips or [], "chip_state_known": True,
         "source_url": f"https://fantasy.premierleague.com/api/entry/{eid}/transfers/",
         "content_hash": f"sha256:{eid:064x}",
     }
@@ -81,3 +81,68 @@ def test_flow_requires_predeadline_aggregation_time():
     )
     with pytest.raises(TransferFlowError, match="before deadline"):
         aggregate_transfer_flow(snapshot, as_of="2026-11-08T17:30:00Z")
+
+
+def test_unknown_chip_state_is_excluded_from_organic_flow():
+    entry = _entry(1, [_tr(100, 200)])
+    entry["chip_state_known"] = False
+    snapshot = build_transfer_flow_records(
+        [entry], cohort_id="x", cohort_entry_ids=[1], event=5,
+        observed_at="2026-11-08T10:00:00Z", deadline_at="2026-11-08T17:30:00Z",
+    )
+    assert snapshot["excluded_unknown_chip_state_count"] == 1
+    assert snapshot["records"][0]["signal_eligible"] is False
+    assert snapshot["records"][0]["exclusion_reason"] == "CHIP_STATE_UNKNOWN"
+
+
+def test_public_transfer_flow_ingestion_uses_public_endpoints_and_chip_state():
+    import json
+    from fpl_skill.observation.ingest import HttpResponse, history_url, picks_url, transfers_url
+    from fpl_skill.phase3_transfer_flow import ingest_public_transfer_flow
+
+    class FakeTransport:
+        def get(self, url):
+            if url == transfers_url(1):
+                body = [{"event": 5, "element_in": 100, "element_out": 200,
+                         "time": "2026-11-08T09:00:00Z"}]
+            elif url == history_url(1):
+                body = {"chips": []}
+            elif url == picks_url(1, 5):
+                body = {"active_chip": None}
+            else:
+                return HttpResponse(404, {}, None)
+            return HttpResponse(200, {}, json.dumps(body).encode())
+
+    snapshot = ingest_public_transfer_flow(
+        FakeTransport(), {"entry_ids": [1], "league_id": 314, "entry_ids_hash": "sha256:cohort"},
+        event=5, observed_at="2026-11-08T10:00:00Z",
+        deadline_at="2026-11-08T17:30:00Z",
+    )
+    assert snapshot["records"][0]["signal_eligible"] is True
+    assert snapshot["records"][0]["source_url"] == transfers_url(1)
+    assert snapshot["cohort_definition"]["league_id"] == 314
+
+
+def test_public_transfer_flow_excludes_unknown_chip_state():
+    import json
+    from fpl_skill.observation.ingest import HttpResponse, history_url, picks_url, transfers_url
+    from fpl_skill.phase3_transfer_flow import ingest_public_transfer_flow
+
+    class FakeTransport:
+        def get(self, url):
+            if url == transfers_url(1):
+                body = [{"event": 5, "element_in": 100, "element_out": 200,
+                         "time": "2026-11-08T09:00:00Z"}]
+                return HttpResponse(200, {}, json.dumps(body).encode())
+            if url == history_url(1):
+                return HttpResponse(200, {}, b'{"chips":[]}')
+            if url == picks_url(1, 5):
+                return HttpResponse(404, {}, None)
+            return HttpResponse(404, {}, None)
+
+    snapshot = ingest_public_transfer_flow(
+        FakeTransport(), {"entry_ids": [1]}, event=5,
+        observed_at="2026-11-08T10:00:00Z", deadline_at="2026-11-08T17:30:00Z",
+    )
+    assert snapshot["excluded_unknown_chip_state_count"] == 1
+    assert snapshot["records"][0]["signal_eligible"] is False

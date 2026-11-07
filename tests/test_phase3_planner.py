@@ -82,3 +82,17 @@ def test_missing_selling_price_and_stale_horizon_fail_closed():
         )
     with pytest.raises(CurrentDataError):
         planner.resolve_horizon(3, 8, _events())
+
+
+def test_no_legal_transfer_does_not_claim_roll_option_when_no_free_transfer(monkeypatch):
+    squad = _squad()
+    monkeypatch.setattr(planner, "evaluate_squad_multi_gw",
+                        lambda s, gws, fixture_map: {"total_ep": 80.0, "gw_details": {}})
+    monkeypatch.setattr(planner, "find_best_one_ft",
+                        lambda *args, **kwargs: {"player_out": None, "player_in": None})
+    result = planner.plan_multi_gw_scenarios(
+        squad=squad, official_picks=_picks(), all_players=squad,
+        bank_tenths=0, free_transfers=0, events=_events(),
+        fixture_map={}, target_gw=4,
+    )
+    assert result["scenarios"] == {"HOLD": 80.0}

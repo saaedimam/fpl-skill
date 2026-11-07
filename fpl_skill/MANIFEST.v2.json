@@ -179,13 +179,13 @@
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
     "fpl_skill/phase3_cohort_rank.py": "d5cc58124fb5543ef11aedf1587f318c509b42663929c4ac3ef11a5f3ef4b298",
     "fpl_skill/phase3_cohort_adapter.py": "689b4d1cecf01cb8fa56014cbdb43c1d8198bee804c560b28d2a6ae3b86e0225",
-    "fpl_skill/phase3_gameweek.py": "c05a30e1b2a25ffdae1abf3b54e11f83bf9f2f6f78e8d57f26cc39b86bb2dca6",
-    "fpl_skill/phase3_price_risk.py": "cc4075b513f2ffeb8cbba4a46bbe7dcd2a5481ab15ea42a8205e2d778882d007",
-    "fpl_skill/phase3_transfer_flow.py": "0fdbf7debf05cdadd64d89a6278eae6950a5f8ac15d0ce2f4f7ff04d97ff1f5a",
-    "fpl_skill/phase3_planner.py": "74d6ac3663aa78abea7276e7be03c774f310b0f54244da7df146fc33d8afa327",
+    "fpl_skill/phase3_gameweek.py": "f8eee14730407494ed8def2064f8e297cc5e02e0f669db58f78ad0af0a6a6b31",
+    "fpl_skill/phase3_price_risk.py": "9d78de7e78eb90192057a12ebbabf3746dd23769ad526bd5fc6f213e97fcefdb",
+    "fpl_skill/phase3_transfer_flow.py": "4d81b254beff8c5db87382c24826381a38ea3f1c0df1840484cf5de6e6d02a57",
+    "fpl_skill/phase3_planner.py": "3ac21ab8bdaacf5a07538b4e8334dae63880e935be7bcb31e52bfcc747fd96d5",
     "fpl_skill/phase3_live_match.py": "1d6f1ea1d17a145a7a855f9571aa9b36c377308a9c7f29b16ebff40626f457ad"
   },
-  "release_hash": "6eac7772ecfbbc880f9888444c32c9eda291e4cf71db86ec1062572493ab580d",
+  "release_hash": "946a8b8b1a3da7cb6c327c0dfaf2aefb883f3b480039266064c2a0f5cf9113f5",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-05T17:45:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."

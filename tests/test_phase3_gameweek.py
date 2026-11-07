@@ -129,3 +129,23 @@ def test_chip_usage_requires_provenance():
     from fpl_skill.phase3_gameweek import RuleInputError
     with pytest.raises(RuleInputError, match="source_url"):
         chip_usage_rates([{"chips": []}], 1, source_url="", captured_at="2026-11-08T10:00:00Z", content_hash="sha256:x")
+
+
+def test_autosub_differential_matches_official_pairs_and_blocks_mismatch():
+    from fpl_skill.phase3_gameweek import compare_autosubs_to_official
+    simulation = {"substitutions": [{"out": 1, "in": 15, "kind": "goalkeeper"},
+                                    {"out": 2, "in": 12, "kind": "outfield"}]}
+    exact = compare_autosubs_to_official(simulation, {
+        "automatic_subs": [{"element_out": 2, "element_in": 12},
+                           {"element_out": 1, "element_in": 15}]
+    })
+    mismatch = compare_autosubs_to_official(simulation, [{"out": 1, "in": 15}])
+    assert exact["release_gate_pass"] is True
+    assert mismatch["release_gate_pass"] is False
+    assert mismatch["missing_from_simulation"] == []
+
+
+def test_autosub_differential_rejects_unknown_official_schema():
+    from fpl_skill.phase3_gameweek import compare_autosubs_to_official
+    with pytest.raises(RuleInputError, match="missing element ids"):
+        compare_autosubs_to_official({"substitutions": []}, [{"foo": 1}])

@@ -291,3 +291,46 @@ def build_fixture_ticker(
         "teams": team_rows,
         "fixture_count": len(normalized),
     }
+
+
+
+def compare_autosubs_to_official(
+    simulation: Mapping[str, Any],
+    official_automatic_subs: Any,
+) -> Dict[str, Any]:
+    """Compare normalized simulator substitutions with official automatic_subs.
+
+    Accepts either the automatic_subs list itself or a picks response containing
+    that key. Each official row must expose element_out/element_in or out/in.
+    Any schema mismatch raises instead of being interpreted as a clean match.
+    """
+    if isinstance(official_automatic_subs, Mapping):
+        official_automatic_subs = official_automatic_subs.get("automatic_subs")
+    if not isinstance(official_automatic_subs, list):
+        raise RuleInputError("official automatic_subs must be a list")
+    expected = []
+    for row in official_automatic_subs:
+        if not isinstance(row, Mapping):
+            raise RuleInputError("malformed official automatic_subs row")
+        out_id = row.get("element_out", row.get("out"))
+        in_id = row.get("element_in", row.get("in"))
+        if out_id is None or in_id is None:
+            raise RuleInputError("official automatic_subs row missing element ids")
+        expected.append((int(out_id), int(in_id)))
+    actual = []
+    for row in simulation.get("substitutions", []):
+        if not isinstance(row, Mapping) or "out" not in row or "in" not in row:
+            raise RuleInputError("malformed simulated substitution row")
+        actual.append((int(row["out"]), int(row["in"])))
+    if len(actual) != len(set(actual)) or len(expected) != len(set(expected)):
+        raise RuleInputError("duplicate substitution pair")
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    return {
+        "match": not missing and not extra,
+        "official_substitutions": [list(x) for x in sorted(expected)],
+        "simulated_substitutions": [list(x) for x in sorted(actual)],
+        "missing_from_simulation": [list(x) for x in missing],
+        "extra_in_simulation": [list(x) for x in extra],
+        "release_gate_pass": not missing and not extra,
+    }

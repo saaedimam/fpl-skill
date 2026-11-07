@@ -95,10 +95,14 @@ def plan_multi_gw_scenarios(
         fixture_map=fixture_map, gameweeks=horizon, events=events,
     )
     if not best.get("player_out") or not best.get("player_in"):
+        scenarios = {"HOLD": baseline_points}
+        if free_transfers > 0:
+            scenarios["ROLL"] = baseline_points + roll_option_value_points
         return {
             "status": "READY", "recommendation": "HOLD", "reason": "NO_LEGAL_TRANSFER",
-            "horizon": horizon, "baseline_points": baseline_points,
-            "scenarios": {"HOLD": baseline_points, "ROLL": baseline_points + roll_option_value_points},
+            "horizon": horizon, "free_transfers_available": free_transfers,
+            "baseline_points": baseline_points,
+            "scenarios": scenarios,
             "suggestions": [],
             "chip_scenarios": "NOT_EVALUATED",
         }
