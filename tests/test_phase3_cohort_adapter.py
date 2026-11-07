@@ -61,6 +61,8 @@ def test_builds_complete_hashed_predeadline_cohort():
     assert snap.entries[0]["current_points"] == 100
     assert len(snap.entries[0]["picks"]) == 15
     assert snap.content_hash.startswith("sha256:")
+    assert len(snap.source_endpoints) == 3
+    assert all(url.startswith("https://fantasy.premierleague.com/api/") for url in snap.source_endpoints)
     assert snap.coverage == 1.0
 
 
