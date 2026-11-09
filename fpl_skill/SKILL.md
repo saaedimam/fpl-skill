@@ -1,6 +1,6 @@
 ---
 name: fpl
-description: "Advisory Fantasy Premier League skill. Account writes fail closed unless a signed out-of-band approval, a write-permitting FPL_MODE, a fresh verified account read, and sandbox validation all pass. Autonomous mode is not unattended live execution."
+description: "Advisory Fantasy Premier League skill. Account mutations are permanently refused. A signed approval is not authorization to transmit. The executor cannot mint a signature."
 version: 2.1.0-rc1
 status: active
 scope: global
@@ -509,6 +509,30 @@ Current release state:
 
 The parent `v2.0.0` release remains immutable. This RC line may change until separately signed and frozen.
 
+### 18.1 Release gates
+
+**Current-data gate** (`fpl_skill/current_data.py`, raises `CurrentDataError`):
+- Fixtures are parsed by one normalizer that accepts the live FPL `/api/fixtures/` schema (`event`, `team_h`, `team_a`, `team_h_difficulty`, `team_a_difficulty`, `kickoff_time`, `finished`) and the legacy `direct_api` record schema. Map keys are the team id plus, when bootstrap `teams` are supplied, the team name and short name. A missing, empty, non-list or unrecognized payload raises. Fixtures with `event: null` are skipped.
+- Planning needs a gameweek that has fixtures. A gameweek with no fixtures at all raises. A team with no fixture in a gameweek that has fixtures is a blank: `blank_teams()` reports it and `PredictionEngine.run` returns it in `blank_gameweek_players`. Blanks are never silently zero.
+- Projections that are missing, non-numeric, NaN/inf or all zero raise in `PredictionEngine.run`, `find_best_one_ft` and `optimizer.load`.
+- The planning horizon comes from the live bootstrap `events` (`is_next`, then an unfinished `is_current`). Planning or transfer windows that contain a finished or earlier gameweek raise.
+  - `TransferIntelligence`, `PredictionEngine`, `find_best_one_ft(events=...)` and `optimizer.load()` / `build_and_solve()` enforce this.
+  - Only explicit historical callers may pass past gameweeks: backtests use `gameweeks=`, certification uses `gameweeks=[3,4,5,6]`, and offline tests use `allow_past=True`.
+  - `find_best_one_ft` with neither `events` nor `gameweeks` raises. There is no hardcoded GW3-6 default.
+- User-facing commands (`fpl predict`, `fpl backtest-*`) print `CURRENT-DATA GATE FAILED: ...`, exit with code 3 and produce no recommendation.
+
+**Regression gate** (`tests/test_release_gates.py`, run by CI pytest and never skipped):
+- Live-schema parsing of the committed synthetic sample `tests/data/live_fpl_sample.json` is checked against the source fixtures.
+- Missing, empty or unrecognized fixtures raise.
+- Blank gameweeks are reported explicitly.
+- Players with fixtures get non-zero projections.
+- All-zero or NaN projections raise.
+- Transfer recommendations or predictions for played gameweeks (e.g. GW3-6, GW9) are rejected.
+- The horizon is derived from live events.
+- The CLI exits 3 on a gate failure.
+
+`current_data.py`, the gate tests and the sample are `REQUIRED_SAFETY_PATHS` in `tests/compute_release_hash.py`, so a release whose manifest drops them fails integrity verification.
+
 ## 19. Canonicality
 
 Exactly one canonical agent contract exists: `SKILL.md`.
@@ -765,16 +789,11 @@ Live execution knowledge is operational and does not redefine the mathematical m
 The modern React SPA uses `/api/my-team/` for current editable squad state; do not substitute historical `/api/entry/.../picks/` state for current editable state.
 
 ### 36.2 Authoritative write
-Account mutations are forbidden unless every condition below is true. If any one is missing or invalid, raise and send no request:
+Account mutations are permanently refused. `execute_account_mutation` may validate an approval, squad, evidence record, temporal cutoff, and account state, and it may consume a nonce, but none of that is authorization to transmit. It then discards any injected transport and session and raises `ExecutionDenied`. There is no mode, cookie, or approval that turns transmission back on.
 
-1. A signed approval record for this exact action: team id, endpoint, canonical body, nonce, and expiry. The record is created only by a separate interactive confirmation (`python -m fpl_skill.approval_issuer`) that shows the payload and signs it with a private key. The executor verifies that signature with the public key and does not hold the signing key. A hash of the payload is not an approval. Each nonce works once and expires. `FPL_MODE=autonomous` does not skip this record and cannot mint it.
-2. `FPL_MODE` is `approval` or `autonomous`. The default `advisory` never writes. `autonomous` is not unattended or safe live execution.
-3. A fresh authenticated account read inside the write chokepoint returns `VERIFIED_CURRENT`. A caller-supplied state string is not accepted.
-4. The proposed squad passes sandbox validation against authoritative bootstrap data: each element id exists once, and its team, position, and price match that bootstrap, then budget, 15 players in a 2/5/5/3 shape, at most 3 from one club, a legal formation, and both captain and vice-captain in the starting XI.
+The only account-mutation function is `fpl_skill.execution.execute_account_mutation`. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client.
 
-The only supported write path is `fpl_skill.execution.execute_account_mutation`. Do not POST, PUT, or DELETE `/api/my-team/{team_id}/` from a browser session, a cookie jar, page script, or a one-off client. A same-origin browser request is not an approval. DOM clicks are not authoritative state transitions.
-
-`all.python --apply` calls that chokepoint. It reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval. Without `--approval-file` it fails closed and does not send a request.
+`all.python --apply` and `--cookies` are deprecated. They call that chokepoint, report that account mutations are permanently disabled, and transmit nothing. The script reads `FPL_TEAM_ID` and stops if the variable is missing. It cannot sign an approval. `load_cookies()` does not read a cookie file.
 
 ### 36.3 Bench / formation backend constraints
 - Starting XI positions are 1–11.
@@ -791,7 +810,7 @@ Confirm the current Gameweek and deadline from the authoritative event API befor
 ### 36.6 Known limitations
 This skill does not do full live-gameweek squad optimization, and it does not provide safe autonomous live execution. `FPL_MODE=autonomous` still cannot write unless a separate interactive step has signed that exact change; the executor cannot create that signature.
 
-The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate is `OPTIMAL` only when CBC reports `Optimal`, the objective is finite and matches an independent evaluation of `sum_g (sum_p ep[p,g] * y[p,g] + sum_p ep[p,g] * c[p,g])`, and the certificate names every constraint in the reduced wildcard model. A feasible squad with an objective value is not enough. `full_rule_optimal` stays false. The legacy branch-and-bound wildcard search does not receive that certificate.
+The wildcard optimizer builds a 15-man squad from scratch. It does not model free transfers, point hits, selling prices, bank-aware rolls, bench order, or a vice-captain. Its default horizon is gameweeks 3–6 (`horizon=(3, 6)`), not the live deadline. `fpl_skill/api.py` and `fpl_skill/optimizer.py` monkey-patch legacy modules at import; those patches are compatibility shims, not a second certified solver. On a write, price, club, and position come from bootstrap data supplied to the sandbox. An optimality certificate stays `NOT_CERTIFIED`. `optimality_proven` and `full_rule_optimal` are false even when CBC reports `Optimal` and the reduced-model objective and constraints check out. That check is not proof of full-rule or global optimality. The legacy branch-and-bound wildcard search does not receive a certificate.
 
 `tests/run_validation.py` is a manual harness. Part of it reads a local FPL cache or the live public API. Pytest and CI do not run it.
 

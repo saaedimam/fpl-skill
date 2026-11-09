@@ -3,6 +3,16 @@ import sys
 import click
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.backtest import CaptainBacktest, BenchBacktest, TransferBacktest
+from fpl_skill.current_data import CurrentDataError
+
+CURRENT_DATA_EXIT = 3
+
+
+def _gate_failure(exc):
+    """Release gate: surface current-data failures loudly with a distinct exit code."""
+    click.echo(f"⛔  CURRENT-DATA GATE FAILED: {exc}", err=True)
+    click.echo("No recommendation produced. Refresh live FPL data or pick an upcoming gameweek.", err=True)
+    sys.exit(CURRENT_DATA_EXIT)
 
 
 @click.group()
@@ -122,6 +132,8 @@ def backtest_captain(gw):
         click.echo()
         click.echo("ℹ️  Backtest certificate generated after GW results are final.")
         click.echo("    Run `/backtest-captain --gw <N>` with actuals to calibrate.")
+    except CurrentDataError as e:
+        _gate_failure(e)
     except Exception as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
@@ -149,6 +161,8 @@ def backtest_bench(gw):
             click.echo(f"  Sub {rank + 1}: {p.get('web_name', pid)}")
         click.echo()
         click.echo("ℹ️  Backtest certificate generated after GW results are final.")
+    except CurrentDataError as e:
+        _gate_failure(e)
     except Exception as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
@@ -180,9 +194,42 @@ def backtest_transfer(gw, bank):
         click.echo(f"Projected EP gain (GW3–6): +{dec.ep_gain_projected:.2f}")
         click.echo()
         click.echo("ℹ️  Backtest certificate generated after GW results are final.")
+    except CurrentDataError as e:
+        _gate_failure(e)
     except Exception as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
+
+
+@cli.command()
+@click.option("--gw", default=None, type=int, help="Upcoming gameweek (default: live next event).")
+@click.option("--squad-ids", default=None, help="Comma-separated 15 element ids (read-only; skips account state).")
+def predict(gw, squad_ids):
+    """Read-only XI/captain projection for an upcoming gameweek (current-data gated)."""
+    import json as _json
+    from fpl_skill.prediction_engine import PredictionEngine
+    from fpl_skill.current_data import next_gameweek
+    team_id = os.environ.get("FPL_TEAM_ID")
+    if not team_id and not squad_ids:
+        click.echo("Error: set FPL_TEAM_ID or pass --squad-ids.")
+        sys.exit(1)
+    try:
+        engine = PredictionEngine(team_id or "0")
+        target = gw or next_gameweek(engine.events)
+        squad = None
+        if squad_ids:
+            ids = [int(x) for x in squad_ids.split(",") if x.strip()]
+            missing = [i for i in ids if i not in engine.elements]
+            if missing:
+                raise CurrentDataError(f"Unknown element ids in current bootstrap: {missing}")
+            squad = [engine.elements[i] for i in ids]
+        res = engine.run(target, squad=squad)
+    except CurrentDataError as e:
+        _gate_failure(e)
+    if res.get("status") == "BLOCKED":
+        click.echo(f"⛔  BLOCKED: {res.get('reason')}")
+        sys.exit(2)
+    click.echo(_json.dumps(res, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

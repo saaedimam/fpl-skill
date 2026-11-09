@@ -242,7 +242,7 @@ class TestTransferBacktest:
     def test_record_decision_returns_transfer(self, monkeypatch):
         bt = self._make_backtest(monkeypatch)
         import fpl_skill.backtest as bmod
-        monkeypatch.setattr(bmod, "find_best_one_ft", lambda squad, all_p, bank, fm: {
+        monkeypatch.setattr(bmod, "find_best_one_ft", lambda squad, all_p, bank, fm, **kw: {
             "player_out": {"player_id": 12, "web_name": "Player12"},
             "player_in": {"player_id": 20, "web_name": "Player20"},
             "move_str": "Player12 OUT -> Player20 IN",
@@ -260,7 +260,7 @@ class TestTransferBacktest:
         bt = self._make_backtest(monkeypatch)
         import fpl_skill.backtest as bmod
         call_count = {"n": 0}
-        def fake_ft(squad, all_p, bank, fm):
+        def fake_ft(squad, all_p, bank, fm, **kw):
             n = call_count["n"]
             call_count["n"] += 1
             return {

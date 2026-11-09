@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import os
 import sys
 from pathlib import Path
@@ -78,10 +80,17 @@ def test_audit_bug_d_prediction_engine_legal_xi():
         })
         pid += 1
 
-    # Mock fixture_map to return our assigned EP
-    dummy_fixture_map = {}
+    # Give the squad real inputs so projections are non-zero (previously all EP were 0.0,
+    # which made this test vacuous). FWDs are deliberately weak.
+    for p in squad:
+        weak = p["position"] == "FWD"
+        p.update(status="a", minutes=900, form=0.5 if weak else 8.0,
+                 expected_goals=0.1 if weak else 3.0, expected_assists=0.1 if weak else 2.0)
+    # Release gate: every team has a GW1 fixture (all-zero projections are refused).
+    dummy_fixture_map = {1: {t: [{"opp": 99, "is_home": True, "fdr": 3}] for t in range(1, 20)}}
     engine = PredictionEngine.__new__(PredictionEngine)
     engine.fixture_map = dummy_fixture_map
+    engine.events = [{"id": g, "finished": False, "is_current": False, "is_next": g == 1} for g in range(1, 39)]
     engine.elements = {p["id"]: p for p in squad}
 
     # Run selection
@@ -123,9 +132,39 @@ def test_audit_bug_f_cache_path():
         assert (os.path.getmtime(db_in_source) < test_data["fetched_at"])
 
 
-def test_audit_bug_e_optimizer_parameterization():
+
+_OFFLINE_SAMPLE = json.loads(
+    (Path(__file__).parent / "data" / "live_fpl_sample.json").read_text(encoding="utf-8")
+)
+
+
+def _offline_optimizer_load(horizon=(3, 6)):
+    pos = {1: "GKP", 2: "DEF", 3: "MID", 4: "FWD"}
+    teams = {t["id"]: t.get("name", str(t["id"])) for t in _OFFLINE_SAMPLE["teams"]}
+    gws = list(range(horizon[0], horizon[1] + 1)) if isinstance(horizon, tuple) else list(horizon)
+    players = []
+    for el in _OFFLINE_SAMPLE["elements"]:
+        players.append({
+            "player_id": el["id"],
+            "web_name": el.get("web_name", str(el["id"])),
+            "team": teams.get(el.get("team"), str(el.get("team"))),
+            "position": pos.get(el.get("element_type"), "MID"),
+            "now_cost": el.get("now_cost", 50),
+            "cost_int": el.get("now_cost", 50),
+            "form": float(el.get("form") or 0),
+            "selected_by_percent": float(el.get("selected_by_percent") or 0),
+            "minutes": int(el.get("minutes") or 0),
+            "status": el.get("status") or "a",
+        })
+    ep = {p["player_id"]: {gw: 1.0 for gw in gws} for p in players}
+    fm = {gw: {} for gw in gws}
+    return players, fm, ep, "offline-hash", {"source": "live_fpl_sample"}, gws
+
+def test_audit_bug_e_optimizer_parameterization(monkeypatch):
     """AUDIT-BUG-E: optimizer accepts budget, player_locks, horizon parameters without KeyError."""
-    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    import fpl_skill.optimizer_legacy as legacy
+    monkeypatch.setattr(legacy, "load", lambda horizon=None: _offline_optimizer_load((3, 6)))
+    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False, allow_past=True)
     assert res["status"] == "BUILT"
     assert res["variables_count"] > 0
     assert res["constraints_count"] > 0
@@ -186,10 +225,10 @@ def test_finding_a_datetime_timezone_aware():
     assert dt.tzinfo is not None, "Timestamp must be timezone-aware"
 
 
-def test_finding_b_pulp_variable_and_constraint_compatibility():
+def test_finding_b_pulp_variable_and_constraint_compatibility(monkeypatch):
     """FINDING B: Optimizer constructs model with zero deprecation warnings and valid dimensions.
 
-    Expected counts are DERIVED from the live player dataset + formation set rather than
+    Expected counts are DERIVED from the (offline-injected) player dataset + formation set rather than
     hardcoded snapshot values (which drift whenever the FPL API roster changes):
       variables   = P + 2*P*G + F*G        (x per player; y, c per player/GW; z per formation/GW)
       constraints = 6 + T + |locks| + 13*G + 2*P*G
@@ -198,7 +237,9 @@ def test_finding_b_pulp_variable_and_constraint_compatibility():
     This asserts the constructed PuLP model has exactly the dimensions the MILP encoding implies,
     catching regressions while remaining robust to roster changes.
     """
-    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    import fpl_skill.optimizer_legacy as legacy
+    monkeypatch.setattr(legacy, "load", lambda horizon=None: _offline_optimizer_load((3, 6)))
+    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False, allow_past=True)
     assert res["status"] == "BUILT"
     players = res["players"]
     P = len(players)

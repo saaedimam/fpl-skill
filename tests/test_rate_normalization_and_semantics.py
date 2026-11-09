@@ -25,6 +25,33 @@ def make_inputs(p, gw_xg, gw_xa, expected_minutes, position=None):
     )
 
 
+def test_sub_90_minutes_normalize_by_actual_exposure():
+    player = {
+        "minutes": 45, "starts": 0, "expected_goals": 0.5, "expected_assists": 0.25,
+        "expected_goals_conceded": 1.0, "chance_of_playing_next_round": None,
+    }
+    rates = normalize_player_rates(player)
+    assert rates.xg90 == pytest.approx(1.0)
+    assert rates.xa90 == pytest.approx(0.5)
+    assert rates.xgc90 == pytest.approx(2.0)
+
+
+def test_explicit_zero_minutes_have_no_observed_exposure():
+    player = {
+        "minutes": 0, "starts": 0, "expected_goals": 2.0, "expected_assists": 1.0,
+        "expected_goals_conceded": 1.0, "chance_of_playing_next_round": None,
+    }
+    rates = normalize_player_rates(player)
+    assert rates.xg90 == 0.0
+    assert rates.xa90 == 0.0
+    assert rates.xgc90 == 0.0
+
+
+def test_non_finite_rate_input_is_rejected():
+    with pytest.raises(ValueError, match="finite"):
+        normalize_player_rates({"minutes": 90, "expected_goals": float("nan")})
+
+
 def test_cumulative_xg_is_normalized_to_per90_rate():
     r=normalize_player_rates(haaland())
     assert r.xg90==pytest.approx(0.82,abs=0.001)
@@ -67,7 +94,7 @@ def test_optimizer_load_binds_mean_not_p50():
          "expected_goals":0,"expected_assists":0,"expected_goals_conceded":0,"form":0,"selected_by_percent":0,"chance_of_playing_next_round":None,"gameweek_history":"[]"},
         {"position":"FIXTURE","player_id":None,"gameweek_history":{"fixture_id":1,"gameweek":5,"home_team":"MCI","away_team":"SUN"},"team_h_difficulty":2,"team_a_difficulty":5}]
     with patch("fpl_skill.optimizer.get_fpl_data",return_value={"records":records}):
-        players,_,ep,_,_,_=load(horizon=(5,5))
+        players,_,ep,_,_,_=load(horizon=(5,5),allow_past=True)  # offline historical unit check
     p=next(x for x in players if x["player_id"]==411); d=p["_distribution_diagnostics"][5]
     assert ep[411][5]==pytest.approx(d["mean"]); assert d["mean"]!=d["p50"]; assert d["mean"]>0
 

@@ -206,7 +206,11 @@ class ProbabilisticEPEngine:
         return mean, variance
 
     def _fixture_multiplier(self, i: DistributionModelInputs) -> float:
-        return self.FDR_MULTIPLIERS.get(i.fixture_difficulty, 1.0) * (
+        if i.fixture_difficulty not in self.FDR_MULTIPLIERS:
+            raise ValueError(
+                f"Invalid fixture_difficulty {i.fixture_difficulty!r}: must be 1-5 on the FDR scale"
+            )
+        return self.FDR_MULTIPLIERS[i.fixture_difficulty] * (
             self.HOME_MULTIPLIER if i.is_home else self.AWAY_MULTIPLIER
         )
 
@@ -299,6 +303,9 @@ class ProbabilisticEPEngine:
     def generate_distribution(self, inputs: DistributionModelInputs) -> PlayerDistribution:
         inputs.status = normalize_player_state(inputs.status)
         inputs.position = normalize_position(inputs.position)
+        # Validate fixture input before the unavailable-player short circuit.
+        # A zero forecast must not conceal malformed fixture data.
+        self._fixture_multiplier(inputs)
         if inputs.status in (PlayerState.INJURED, PlayerState.SUSPENDED, PlayerState.UNAVAILABLE):
             return PlayerDistribution(
                 inputs.player_id,
@@ -345,6 +352,8 @@ def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: Pr
         rates = normalize_player_rates(p)
         expected_minutes = rates.expected_minutes if ("minutes" in p or "starts" in p) else 90.0
         gx, ga, _ = gw_expected_contributions(p, expected_minutes)
+        raw_fdr = p.get("fixture_difficulty")
+        fixture_difficulty = 3 if raw_fdr is None else int(raw_fdr)
         inp = DistributionModelInputs(
             int(p["id"]),
             p.get("position", p.get("element_type", "MID")),
@@ -356,8 +365,8 @@ def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: Pr
             p.get("chance_of_playing_next_round"),
             float(p.get("form", 0) or 0),
             float(p.get("selected_by_percent", 0) or 0),
-            int(p.get("fixture_difficulty", 3) or 3),
-            bool(p.get("is_home", True)),
+            fixture_difficulty,
+            bool(p["is_home"]) if "is_home" in p else True,
             float(p.get("opponent_strength_attack", 1000) or 1000),
             float(p.get("opponent_strength_defence", 1000) or 1000),
             float(p.get("team_goals_per_gw", 1.5) or 1.5),
@@ -367,7 +376,14 @@ def replace_scalar_ep_with_distribution(api_response: Dict[str, Any], engine: Pr
             ga,
             float(p.get("ict_index", 0) or 0),
         )
+        missing_critical = [
+            key
+            for key in ("status", "chance_of_playing_next_round", "is_home", "fixture_difficulty")
+            if key not in p or (key == "fixture_difficulty" and p[key] is None)
+        ]
         dist = engine.generate_distribution(inp)
+        if missing_critical:
+            dist.confidence = "provisional"
         p["distribution"] = dist.to_dict()
         p["expected_points_legacy"] = p.get("expected_points", 0.0)
         p["expected_points"] = dist.mean
