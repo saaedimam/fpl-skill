@@ -1,12 +1,12 @@
 # Public source URLs
 
-Checked on 2026-11-09 with unauthenticated GET requests. No cookies, no account writes, and none of these URLs are release-gate evidence. A page or JSON file existing does not prove a LiveFPL formula.
+Checked on 2026-11-09 with unauthenticated requests and no cookies. Reachability is not a content capture, not a LiveFPL formula, and not a Phase 3 release attestation. Account writes stay disabled. `/api/my-team/` was not used as a source.
 
-The current LiveFPL app shell is `https://www.livefpl.net/assets/main-BgOy4Kip.js` (the hash changes when the site deploys). Routes and data URLs below were read from that shell and then requested.
+## LiveFPL app shell
 
-## Pages that stayed on www.livefpl.net
+`https://www.livefpl.net/` is a client-rendered page. The shell loaded for this check was `https://www.livefpl.net/assets/main-BgOy4Kip.js`. That asset name changes on deploy. `https://livefpl.net/` redirects to `http://www.livefpl.net/`; use the `https://www` form.
 
-These returned HTTP 200 and the app shell. The data is not in the HTML.
+Pages that stayed on `www.livefpl.net` and returned the app shell:
 
 - https://www.livefpl.net/
 - https://www.livefpl.net/rank
@@ -14,28 +14,35 @@ These returned HTTP 200 and the app shell. The data is not in the HTML.
 - https://www.livefpl.net/prices
 - https://www.livefpl.net/games
 
-The same bundle also declares `/plan`, `/planner2`, `/prices2`, `/rank2`, `/rank_fs`, and `/rank-preview`.
+The bundle also names `/plan`, `/planner2`, `/prices2`, `/rank2`, `/rank_fs`, and `/rank-preview`.
 
-## Pages that redirect to plan.livefpl.net
+## Redirects to plan.livefpl.net
 
-| From | First response | Lands on |
+| Requested | Lands on | Result |
 |---|---|---|
-| https://www.livefpl.net/price_changes | 302 | https://plan.livefpl.net/price_changes |
-| https://www.livefpl.net/autosubs | 302 | https://plan.livefpl.net/autosubs |
-| https://www.livefpl.net/chips | 302 | https://plan.livefpl.net/chips |
-| https://www.livefpl.net/ticker | 302 | https://plan.livefpl.net/ticker |
-| https://www.livefpl.net/combos | 302 | https://plan.livefpl.net/combos |
-| https://www.livefpl.net/dgw | 302 | https://plan.livefpl.net/dgw |
-| https://www.livefpl.net/Overall | 302 | https://plan.livefpl.net/Overall |
-| https://www.livefpl.net/top10k | 302 | https://plan.livefpl.net/top10k |
-| https://www.livefpl.net/leagues | 302 | https://plan.livefpl.net/leagues/8449 |
-| https://www.livefpl.net/plan | 302, then again | https://plan.livefpl.net/myteam/11 |
+| https://www.livefpl.net/price_changes | https://plan.livefpl.net/price_changes | 200 HTML |
+| https://www.livefpl.net/autosubs | https://plan.livefpl.net/autosubs | 200 HTML |
+| https://www.livefpl.net/chips | https://plan.livefpl.net/chips | 200 HTML |
+| https://www.livefpl.net/ticker | https://plan.livefpl.net/ticker | 200 HTML |
+| https://www.livefpl.net/combos | https://plan.livefpl.net/combos | 200 HTML |
+| https://www.livefpl.net/dgw | https://plan.livefpl.net/dgw | 200 HTML |
+| https://www.livefpl.net/Overall | https://plan.livefpl.net/Overall | 200 HTML |
+| https://www.livefpl.net/top10k | https://plan.livefpl.net/top10k | 200 HTML |
+| https://www.livefpl.net/rank_tiers | https://plan.livefpl.net/rank_tiers | 200 HTML |
+| https://www.livefpl.net/elite | https://plan.livefpl.net/elite | 200 HTML |
+| https://www.livefpl.net/leagues | https://plan.livefpl.net/leagues/8449 | 200 HTML |
+| https://www.livefpl.net/top10k_ownership | https://plan.livefpl.net/combos | 200 HTML |
+| https://www.livefpl.net/plan | https://plan.livefpl.net/myteam/11 | 200 HTML |
+| https://www.livefpl.net/whatif | no redirect | 500 |
+| https://www.livefpl.net/Overall_ownership | https://plan.livefpl.net/Overall_ownership | 404 |
+| https://www.livefpl.net/robots.txt | https://plan.livefpl.net/robots.txt | 404 |
+| https://www.livefpl.net/sitemap.xml | https://plan.livefpl.net/sitemap.xml | 404 |
 
-`8449` and `11` are the site's own redirect targets, not this repository's team or league. https://www.livefpl.net/whatif returned HTTP 500. https://plan.livefpl.net/rank redirects back to https://www.livefpl.net/rank.
+`8449` and `11` are the site's own redirect targets, not this repository's league or team. `https://plan.livefpl.net/rank` redirects back to `https://www.livefpl.net/rank`.
 
-## Public JSON the app loads
+## Public JSON on livefpl.us
 
-All of these returned HTTP 200 and `application/json` from `https://livefpl.us` with no session cookie.
+Each returned HTTP 200 and `application/json`.
 
 - https://livefpl.us/version.json
 - https://livefpl.us/teams.json
@@ -55,9 +62,9 @@ All of these returned HTTP 200 and `application/json` from `https://livefpl.us` 
 - https://livefpl.us/planner/all_player_info.json
 - https://livefpl.us/planner/extended_api.json
 
-`version.json` on that date reported generation `259` and version `6`. It also links the store pages https://apps.apple.com/us/app/livefpl/id6753036580 and https://play.google.com/store/apps/details?id=com.pocketgamerguides.livefpl.
+`version.json` reported generation `259` and version `6`. Store links in that file: https://apps.apple.com/us/app/livefpl/id6753036580 and https://play.google.com/store/apps/details?id=com.pocketgamerguides.livefpl.
 
-Templates seen in the bundle and not requested, because they take an id or gameweek:
+Seen in the bundle and not requested, because they take an id or gameweek:
 
 - `https://livefpl.us/predictedEOs/{id}.json`
 - `https://livefpl.us/locals_{id}.json`
@@ -65,14 +72,29 @@ Templates seen in the bundle and not requested, because they take an id or gamew
 - `https://www.livefpl.net/livefplapi/{path}`
 - `https://livefpl-api-489391001748.europe-west4.run.app/LH_api2/planner/snapshot?id=`
 
-## Official FPL documents
+## Official FPL
 
-These are the public GET documents this repository already uses or can use without a session. Each returned HTTP 200 JSON when checked with an unauthenticated request. `element-summary` and `event/{id}/live` were checked only for id `1`.
+Base `https://fantasy.premierleague.com/api/`. Sample ids `1` and `314` only prove the route answers. They are not this account.
 
-- https://fantasy.premierleague.com/api/bootstrap-static/
-- https://fantasy.premierleague.com/api/fixtures/
-- https://fantasy.premierleague.com/api/event-status/
-- https://fantasy.premierleague.com/api/element-summary/{element_id}/
-- https://fantasy.premierleague.com/api/event/{event_id}/live/
+| URL | Checked |
+|---|---|
+| https://fantasy.premierleague.com/api/bootstrap-static/ | 200 JSON |
+| https://fantasy.premierleague.com/api/fixtures/ | 200 JSON |
+| https://fantasy.premierleague.com/api/fixtures/?event=1 | 200 JSON |
+| https://fantasy.premierleague.com/api/event-status/ | 200 JSON |
+| https://fantasy.premierleague.com/api/event/1/live/ | 200 JSON |
+| https://fantasy.premierleague.com/api/element-summary/1/ | 200 JSON |
+| https://fantasy.premierleague.com/api/dream-team/1/ | 200 JSON |
+| https://fantasy.premierleague.com/api/dream-team/ | 200 JSON |
+| https://fantasy.premierleague.com/api/regions/ | 200 JSON |
+| https://fantasy.premierleague.com/api/team/set-piece-notes/ | 200 JSON |
+| https://fantasy.premierleague.com/api/stats/most-valuable-teams/ | 200 JSON |
+| https://fantasy.premierleague.com/api/entry/1/ | 200 JSON |
+| https://fantasy.premierleague.com/api/entry/1/history/ | 200 JSON |
+| https://fantasy.premierleague.com/api/entry/1/transfers/ | 200 JSON |
+| https://fantasy.premierleague.com/api/entry/1/event/1/picks/ | 200 JSON |
+| https://fantasy.premierleague.com/api/leagues-classic/314/standings/ | 200 JSON |
 
-`https://fantasy.premierleague.com/api/settings/` returned HTTP 404. Authenticated paths such as `/api/my-team/{team_id}/` are not source URLs for this catalog.
+`https://fantasy.premierleague.com/api/settings/` returned 404. Official HTML pages that returned 200: https://fantasy.premierleague.com/ , https://fantasy.premierleague.com/statistics , https://fantasy.premierleague.com/fixtures , and https://fantasy.premierleague.com/transfers .
+
+`https://fantasy.premierleague.com/api/my-team/{id}/` needs a session and was not called. A URL in this list still does not satisfy `verified_attestations`.
