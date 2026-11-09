@@ -1,86 +1,78 @@
 # Public source URLs
 
-Checked with unauthenticated HTTP HEAD on 2026-11-09. Status is reachability only. It is not a content capture, not a formula, and not evidence that a Phase 3 gate passed.
+Checked on 2026-11-09 with unauthenticated GET requests. No cookies, no account writes, and none of these URLs are release-gate evidence. A page or JSON file existing does not prove a LiveFPL formula.
 
-No cookies, no `/api/my-team/`, and no `/api/me/` were requested. Account writes stay disabled. A page URL still needs a separate verified attestation before the optimizer-integration gate can accept it.
+The current LiveFPL app shell is `https://www.livefpl.net/assets/main-BgOy4Kip.js` (the hash changes when the site deploys). Routes and data URLs below were read from that shell and then requested.
 
-## LiveFPL pages
+## Pages that stayed on www.livefpl.net
 
-`https://www.livefpl.net/` is a client-rendered page. Its HTML does not list these routes. Several paths redirect to `plan.livefpl.net`.
+These returned HTTP 200 and the app shell. The data is not in the HTML.
 
-| Requested | Result | Final URL |
+- https://www.livefpl.net/
+- https://www.livefpl.net/rank
+- https://www.livefpl.net/planner
+- https://www.livefpl.net/prices
+- https://www.livefpl.net/games
+
+The same bundle also declares `/plan`, `/planner2`, `/prices2`, `/rank2`, `/rank_fs`, and `/rank-preview`.
+
+## Pages that redirect to plan.livefpl.net
+
+| From | First response | Lands on |
 |---|---|---|
-| `https://www.livefpl.net/` | 200 | same |
-| `https://www.livefpl.net/rank` | 200 | same |
-| `https://www.livefpl.net/planner` | 200 | same |
-| `https://www.livefpl.net/prices` | 200 | same |
-| `https://www.livefpl.net/games` | 200 | same |
-| `https://www.livefpl.net/price_changes` | 200 | `https://plan.livefpl.net//price_changes` |
-| `https://www.livefpl.net/autosubs` | 200 | `https://plan.livefpl.net//autosubs` |
-| `https://www.livefpl.net/chips` | 200 | `https://plan.livefpl.net//chips` |
-| `https://www.livefpl.net/ticker` | 200 | `https://plan.livefpl.net//ticker` |
-| `https://www.livefpl.net/combos` | 200 | `https://plan.livefpl.net//combos` |
-| `https://www.livefpl.net/dgw` | 200 | `https://plan.livefpl.net//dgw` |
-| `https://www.livefpl.net/Overall` | 200 | `https://plan.livefpl.net//Overall` |
-| `https://www.livefpl.net/top10k` | 200 | `https://plan.livefpl.net//top10k` |
-| `https://www.livefpl.net/rank_tiers` | 200 | `https://plan.livefpl.net//rank_tiers` |
-| `https://www.livefpl.net/elite` | 200 | `https://plan.livefpl.net//elite` |
-| `https://www.livefpl.net/top10k_ownership` | 200 | `https://plan.livefpl.net/combos` |
-| `https://www.livefpl.net/leagues` | 200 | `https://plan.livefpl.net/leagues/8449` |
-| `https://plan.livefpl.net/` | 200 | same |
-| `https://plan.livefpl.net/price_changes` | 200 | same |
-| `https://plan.livefpl.net/chips` | 200 | same |
-| `https://plan.livefpl.net/ticker` | 200 | same |
-| `https://plan.livefpl.net/combos` | 200 | same |
-| `https://plan.livefpl.net/Overall` | 200 | same |
-| `https://plan.livefpl.net/top10k` | 200 | same |
-| `https://plan.livefpl.net/games` | 200 | same |
-| `https://plan.livefpl.net/rank_tiers` | 200 | same |
-| `https://www.livefpl.net/whatif` | 500 | not usable |
-| `https://plan.livefpl.net/autosubs` | 500 | the `www` redirect above did answer |
-| `https://plan.livefpl.net/dgw` | 500 | the `www` redirect above did answer |
-| `https://www.livefpl.net/Overall_ownership` | 404 | absent |
-| `https://www.livefpl.net/robots.txt` | 404 | absent |
-| `https://www.livefpl.net/sitemap.xml` | 404 | absent |
+| https://www.livefpl.net/price_changes | 302 | https://plan.livefpl.net/price_changes |
+| https://www.livefpl.net/autosubs | 302 | https://plan.livefpl.net/autosubs |
+| https://www.livefpl.net/chips | 302 | https://plan.livefpl.net/chips |
+| https://www.livefpl.net/ticker | 302 | https://plan.livefpl.net/ticker |
+| https://www.livefpl.net/combos | 302 | https://plan.livefpl.net/combos |
+| https://www.livefpl.net/dgw | 302 | https://plan.livefpl.net/dgw |
+| https://www.livefpl.net/Overall | 302 | https://plan.livefpl.net/Overall |
+| https://www.livefpl.net/top10k | 302 | https://plan.livefpl.net/top10k |
+| https://www.livefpl.net/leagues | 302 | https://plan.livefpl.net/leagues/8449 |
+| https://www.livefpl.net/plan | 302, then again | https://plan.livefpl.net/myteam/11 |
 
-`https://livefpl.net/` redirects to `http://www.livefpl.net/`. Prefer the `https://www` form.
+`8449` and `11` are the site's own redirect targets, not this repository's team or league. https://www.livefpl.net/whatif returned HTTP 500. https://plan.livefpl.net/rank redirects back to https://www.livefpl.net/rank.
 
-Manager-specific pages such as `https://plan.livefpl.net/{entry_id}` exist in public search results. They are one entry's live view, not a cohort source, and they were not fetched here.
+## Public JSON the app loads
 
-## Official public FPL API
+All of these returned HTTP 200 and `application/json` from `https://livefpl.us` with no session cookie.
 
-Base: `https://fantasy.premierleague.com/api/`. All of these returned HTTP 200 and `application/json` with no session cookie.
+- https://livefpl.us/version.json
+- https://livefpl.us/teams.json
+- https://livefpl.us/players.json
+- https://livefpl.us/types.json
+- https://livefpl.us/elite.json
+- https://livefpl.us/top10k.json
+- https://livefpl.us/prediction.json
+- https://livefpl.us/fdr2.json
+- https://livefpl.us/fixture-kickoffs.json
+- https://livefpl.us/top_transfers.json
+- https://livefpl.us/api/prices.json
+- https://livefpl.us/api/games.json
+- https://livefpl.us/planner/fdr.json
+- https://livefpl.us/planner/fdr_ratings.json
+- https://livefpl.us/planner/fixtures_names.json
+- https://livefpl.us/planner/all_player_info.json
+- https://livefpl.us/planner/extended_api.json
 
-| URL | Use |
-|---|---|
-| `https://fantasy.premierleague.com/api/bootstrap-static/` | Players, clubs, gameweeks, settings |
-| `https://fantasy.premierleague.com/api/fixtures/` | Season fixtures |
-| `https://fantasy.premierleague.com/api/fixtures/?event=1` | One gameweek of fixtures |
-| `https://fantasy.premierleague.com/api/event-status/` | Provisional or final bonus state |
-| `https://fantasy.premierleague.com/api/event/1/live/` | Player stats for one gameweek |
-| `https://fantasy.premierleague.com/api/element-summary/1/` | One player's history and upcoming fixtures |
-| `https://fantasy.premierleague.com/api/dream-team/1/` | Dream team for one gameweek |
-| `https://fantasy.premierleague.com/api/dream-team/` | Season dream team |
-| `https://fantasy.premierleague.com/api/regions/` | Region list |
-| `https://fantasy.premierleague.com/api/team/set-piece-notes/` | Set-piece notes |
-| `https://fantasy.premierleague.com/api/stats/most-valuable-teams/` | Public value table |
-| `https://fantasy.premierleague.com/api/entry/1/` | Public manager profile |
-| `https://fantasy.premierleague.com/api/entry/1/history/` | Public manager history |
-| `https://fantasy.premierleague.com/api/entry/1/transfers/` | Public transfer list |
-| `https://fantasy.premierleague.com/api/entry/1/event/1/picks/` | Public gameweek picks |
-| `https://fantasy.premierleague.com/api/leagues-classic/314/standings/` | Public classic-league page |
+`version.json` on that date reported generation `259` and version `6`. It also links the store pages https://apps.apple.com/us/app/livefpl/id6753036580 and https://play.google.com/store/apps/details?id=com.pocketgamerguides.livefpl.
 
-`1` and `314` are public sample ids used only to prove the route answers. Replace them with the id under study. These routes are not authenticated account writes.
+Templates seen in the bundle and not requested, because they take an id or gameweek:
 
-Official site pages that returned HTML 200:
+- `https://livefpl.us/predictedEOs/{id}.json`
+- `https://livefpl.us/locals_{id}.json`
+- `https://livefpl.us/{gw}/counter_{gw}.json`
+- `https://www.livefpl.net/livefplapi/{path}`
+- `https://livefpl-api-489391001748.europe-west4.run.app/LH_api2/planner/snapshot?id=`
 
-- `https://fantasy.premierleague.com/`
-- `https://fantasy.premierleague.com/statistics`
-- `https://fantasy.premierleague.com/fixtures`
-- `https://fantasy.premierleague.com/transfers`
+## Official FPL documents
 
-## Not sources
+These are the public GET documents this repository already uses or can use without a session. Each returned HTTP 200 JSON when checked with an unauthenticated request. `element-summary` and `event/{id}/live` were checked only for id `1`.
 
-- `https://fantasy.premierleague.com/api/my-team/{id}/` requires a session and was not called.
-- A LiveFPL or FPL URL does not by itself satisfy `verified_attestations`.
-- Cached numbers on these pages are not fixtures for tests.
+- https://fantasy.premierleague.com/api/bootstrap-static/
+- https://fantasy.premierleague.com/api/fixtures/
+- https://fantasy.premierleague.com/api/event-status/
+- https://fantasy.premierleague.com/api/element-summary/{element_id}/
+- https://fantasy.premierleague.com/api/event/{event_id}/live/
+
+`https://fantasy.premierleague.com/api/settings/` returned HTTP 404. Authenticated paths such as `/api/my-team/{team_id}/` are not source URLs for this catalog.

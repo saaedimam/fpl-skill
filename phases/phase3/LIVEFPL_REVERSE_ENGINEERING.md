@@ -100,3 +100,5 @@ Every record in FPLSKILL must additionally carry source, retrieval time, schema 
 - https://www.livefpl.net/rank_tiers
 - https://www.livefpl.net/top10k_ownership
 - https://www.livefpl.net/Overall_ownership
+
+A 2026-11-09 recheck of the deployed app shell is recorded in [docs/architecture/phase0-source-urls.md](../../docs/architecture/phase0-source-urls.md). Several of the older page paths now redirect to `plan.livefpl.net`, and the public JSON files are served from `livefpl.us`. Those observations are not formula parity and are not release-gate evidence.
