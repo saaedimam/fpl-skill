@@ -9,7 +9,7 @@ def test_shape_mismatch():
     }]}
     engine = ProbabilisticEPEngine()
     updated = replace_scalar_ep_with_distribution(api_resp, engine)
-    
+
     player_data = updated["elements"][0]
     assert "distribution" in player_data, "must put distribution dict at root"
     dist = player_data["distribution"]
@@ -21,7 +21,6 @@ def test_shape_mismatch():
 
 def test_fixture_bonus_direction():
     engine = ProbabilisticEPEngine()
-    # Mock inputs, focusing on what affects fixture_mult
     easy_inputs = DistributionModelInputs(
         player_id=1, position="FWD", status="available", team=11, opponent="SHU", gw=1,
         minutes_played_last_3=270, chance_of_playing_next_round=100, form=8.0,
@@ -36,23 +35,19 @@ def test_fixture_bonus_direction():
         opponent_strength_attack=1300, opponent_strength_defence=1300,
         team_goals_per_gw=2.5, team_conceded_per_gw=1.0
     )
-    
+
     easy_mult = engine._fixture_multiplier(easy_inputs)
     hard_mult = engine._fixture_multiplier(hard_inputs)
-    assert easy_mult > hard_mult, "Easy fixture should have higher multiplier"
-    
+    assert easy_mult > hard_mult
+
     easy_scenarios = engine._scenario_probabilities(easy_inputs, {"prob_plays": 1.0, "variance_factor": 1.0}, easy_mult)
     hard_scenarios = engine._scenario_probabilities(hard_inputs, {"prob_plays": 1.0, "variance_factor": 1.0}, hard_mult)
-    
-    assert easy_scenarios["p_haul"] > hard_scenarios["p_haul"], "Easy fixture should have higher haul probability than hard fixture"
 
+    assert easy_scenarios["p_haul"] > hard_scenarios["p_haul"]
 
 
 def test_gkp_dialect_normalized():
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fpl_skill'))
-    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs
-    from probabilistic_ep1 import PlayerState
+    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs, PlayerState
     eng = ProbabilisticEPEngine()
     kw = dict(player_id=1, status=PlayerState.AVAILABLE, team='ARS', opponent='CHE', gw=1,
               minutes_played_last_3=270, chance_of_playing_next_round=100, form=5.0,
@@ -64,11 +59,9 @@ def test_gkp_dialect_normalized():
         d = eng.generate_distribution(DistributionModelInputs(position=pos, **kw))
         assert d.p10 <= d.p25 <= d.p50 <= d.p75 <= d.p90
 
+
 def test_none_chance_of_playing_safe():
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fpl_skill'))
-    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs
-    from probabilistic_ep1 import PlayerState
+    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs, PlayerState
     eng = ProbabilisticEPEngine()
     kw = dict(player_id=2, position='FWD', status=PlayerState.AVAILABLE, team='ARS', opponent='CHE',
               gw=1, minutes_played_last_3=270, chance_of_playing_next_round=None, form=5.0,
@@ -107,3 +100,43 @@ def test_missing_critical_fields_flag_provisional():
         engine,
     )
     assert updated["elements"][0]["distribution"]["confidence"] == "provisional"
+
+
+def test_unavailable_players_still_reject_invalid_fdr():
+    import pytest
+    from probabilistic_ep1 import PlayerState
+    engine = ProbabilisticEPEngine()
+    inputs = DistributionModelInputs(
+        player_id=2, position="FWD", status=PlayerState.INJURED, team=11, opponent="SHU", gw=1,
+        minutes_played_last_3=0, chance_of_playing_next_round=0, form=0, selected_by_percent=1,
+        fixture_difficulty=0, is_home=True, opponent_strength_attack=1000,
+        opponent_strength_defence=900, team_goals_per_gw=1, team_conceded_per_gw=1,
+    )
+    with pytest.raises(ValueError, match="fixture_difficulty"):
+        engine.generate_distribution(inputs)
+
+
+def test_none_fixture_difficulty_is_provisional():
+    engine = ProbabilisticEPEngine()
+    for raw_fdr in (None,):
+        updated = replace_scalar_ep_with_distribution(
+            {"elements": [{
+                "id": 3, "position": "FWD", "team": 11, "status": "available",
+                "chance_of_playing_next_round": 100, "is_home": True, "fixture_difficulty": raw_fdr,
+            }]},
+            engine,
+        )
+        assert updated["elements"][0]["distribution"]["confidence"] == "provisional"
+
+
+def test_explicit_zero_fixture_difficulty_is_not_defaulted():
+    import pytest
+    engine = ProbabilisticEPEngine()
+    with pytest.raises(ValueError, match="fixture_difficulty"):
+        replace_scalar_ep_with_distribution(
+            {"elements": [{
+                "id": 4, "position": "FWD", "team": 11, "status": "available",
+                "chance_of_playing_next_round": 100, "is_home": True, "fixture_difficulty": 0,
+            }]},
+            engine,
+        )
