@@ -18,13 +18,15 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     for idx, fix in enumerate(fixtures):
         expected_minutes = rates.expected_minutes * (0.90 if idx > 0 else 1.0)
         gx, ga, _ = gw_expected_contributions(player, expected_minutes)
+        raw_fdr = fix.get("fdr")
+        fixture_difficulty = 3 if raw_fdr is None else int(raw_fdr)
         inp = DistributionModelInputs(
             player_id=int(player["player_id"]), position=normalize_position(player.get("position", "MID")),
             status=normalize_player_state(player.get("status", "available")), team=str(player.get("team", "")),
             opponent=str(fix.get("opp", "")), gw=gw, minutes_played_last_3=float(player.get("minutes", 0) or 0),
             chance_of_playing_next_round=player.get("chance_of_playing_next_round"), expected_minutes=expected_minutes,
             form=float(player.get("form", 0) or 0), selected_by_percent=float(player.get("selected_by_percent", 0) or 0),
-            fixture_difficulty=int(fix.get("fdr", 3) or 3), is_home=bool(fix.get("is_home", True)),
+            fixture_difficulty=fixture_difficulty, is_home=bool(fix.get("is_home", True)),
             opponent_strength_attack=float(player.get("opponent_strength_attack", 1000) or 1000),
             opponent_strength_defence=float(player.get("opponent_strength_defence", 1000) or 1000),
             team_goals_per_gw=float(player.get("team_goals_per_gw", 1.5) or 1.5),
