@@ -141,9 +141,8 @@ def test_valid_trusted_signatures_allow_gate_evaluation_to_pass():
 
 
 def test_true_without_evidence_reference_still_blocks():
-    evidence = _complete_evidence()
+    evidence = _sign_all(_complete_evidence())
     evidence["evidence_refs"] = {}
-    _sign_all(evidence)
     result = evaluate_phase3_release_gate(
         evidence, trusted_attestor_keys=TRUSTED_KEYS
     )
@@ -152,7 +151,6 @@ def test_true_without_evidence_reference_still_blocks():
         item["reason"] == "MISSING_EVIDENCE_REFERENCE"
         for item in result["blockers"]
     )
-
 
 def test_missing_trust_store_fails_closed():
     evidence = _sign_all(_complete_evidence())
