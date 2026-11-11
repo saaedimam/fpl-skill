@@ -123,7 +123,7 @@
     "fpl_skill/certification.py": "7ed5e6ee9860ab8c28b3c5a5c11f794bc40df594d314c0bbeb0c011ccb286785",
     "fpl_skill/cli.py": "d9f496354db5f90e736cdf30e47a5ae70e2ec963adee6d9b24fadf780215dd63",
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
-    "fpl_skill/direct_api.py": "cbfb701051e9dc2b6a32389f76c3e6cccbf7d2b6bff00",
+    "fpl_skill/direct_api.py": "cbfb701051e9dc2b6a32389f76c3e6cc40e00a42378cf8cf8699e3996",
     "fpl_skill/elite_adapter.py": "d88942bf1a662c77d712a557ba3939459b05fa010d460cbebf78ffe80cd6827d",
     "fpl_skill/evidence_policy.py": "6b9e59bc26bf41d4bca26d52628fe1c271787ff151508f7bf2a7c0491ab0a457",
     "fpl_skill/execution.py": "cc28157d73187769203ad667021b5c691ef05d7174acea77d9c6a583edf1ffc4",
@@ -142,7 +142,7 @@
     "fpl_skill/observation/diff.py": "bb8def83416856591a36541db31ba75e4b5ed982b1e81e83a20dc28ed88a3d5e",
     "fpl_skill/observation/ingest.py": "48314ae4fd138b1d353c7a0de169d59eef3ad11dea20f202c1ad0c71b90c926f",
     "fpl_skill/observation/model.py": "d97ede083eac394d2867afa4a46d1b0f34667ca387c4fe5b7ea6fefb78f804c8",
-    "fpl_skill/observation/poller.py": "876027df02e37035b15968208a909124882088",
+    "fpl_skill/observation/poller.py": "876027df02e37035b15968208a9091241880929109e481b9d687fd81f4b0156f",
     "fpl_skill/observation/snapshot.py": "e0a3ce46ecf01c6a44192d9ec9d7307d367193a98096651d3592075c13f858d4",
     "fpl_skill/observation/store.py": "347536e30157993e98e6d853cb02a3eb4a8ff5c041011e4cb5512184eb27a161",
     "fpl_skill/observation/tape.py": "487d93156c54663ffb2e91815b90f6f14b3366d18523ff8dc87edf451d16f669",
@@ -188,7 +188,7 @@
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3"
   },
   "release_hash": "854ef9d6e5f319b549da2db69c24ff78ff8fb1074e7138e125cc6be9c902c4cf",
-  "release_hash_algorithm": "SHA256 over sorted path:sha256\n records",
+  "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-09T18:44:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
 }
