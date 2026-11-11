@@ -1,11 +1,15 @@
 """Explicit evidence gate for Phase 3 optimizer integration and certification.
 
-A green CI run is necessary but insufficient. Every gate needs an explicit
-true value, a non-placeholder evidence reference, and a separate attestation
-that names that exact reference. A URL scheme is not verification.
+Attestations are authenticated with HMAC-SHA256. Trusted keys must be supplied
+by the caller from a trusted configuration/secret store; keys embedded in the
+evidence payload are never trusted. A URL scheme or self-asserted boolean is
+not verification.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from typing import Any, Dict, Mapping
 from urllib.parse import urlsplit
 
@@ -25,6 +29,7 @@ REQUIRED_PHASE3_GATES = (
     "human_signoff",
 )
 
+ATTESTATION_SCHEMA_VERSION = "phase3.release-attestation.v1"
 _RESERVED_HOSTS = frozenset({"example.com", "example.org", "example.net", "localhost"})
 _RESERVED_SUFFIXES = (".invalid", ".example", ".test", ".localhost")
 
@@ -47,22 +52,73 @@ def _reference_status(ref: Any) -> str:
     return "OK"
 
 
-def _attested(gate: str, ref: str, attestations: Any) -> bool:
+def _attestation_message(gate: str, ref: str, attested_by: str) -> bytes:
+    """Return the canonical bytes signed by an evidence attestor."""
+    payload = {
+        "schema_version": ATTESTATION_SCHEMA_VERSION,
+        "gate": gate,
+        "ref": ref,
+        "attested_by": attested_by,
+    }
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+
+
+def _attested(
+    gate: str,
+    ref: str,
+    attestations: Any,
+    trusted_attestor_keys: Any,
+) -> bool:
     if not isinstance(attestations, Mapping):
         return False
+    if not isinstance(trusted_attestor_keys, Mapping):
+        return False
+
     record = attestations.get(gate)
-    if not isinstance(record, Mapping) or record.get("verified") is not True:
+    if not isinstance(record, Mapping) or record.get("ref") != ref:
         return False
-    if record.get("ref") != ref:
-        return False
+
     attestor = record.get("attested_by")
-    return isinstance(attestor, str) and bool(attestor.strip())
+    signature_hex = record.get("signature")
+    if not isinstance(attestor, str) or not attestor.strip():
+        return False
+    if not isinstance(signature_hex, str):
+        return False
+
+    key = trusted_attestor_keys.get(attestor)
+    if not isinstance(key, bytes) or len(key) < 32:
+        return False
+
+    try:
+        supplied_signature = bytes.fromhex(signature_hex)
+    except ValueError:
+        return False
+    if len(supplied_signature) != hashlib.sha256().digest_size:
+        return False
+
+    expected_signature = hmac.new(
+        key, _attestation_message(gate, ref, attestor), hashlib.sha256
+    ).digest()
+    return hmac.compare_digest(expected_signature, supplied_signature)
 
 
-def evaluate_phase3_release_gate(evidence: Mapping[str, Any]) -> Dict[str, Any]:
-    """Return a fail-closed release decision with named blockers."""
+def evaluate_phase3_release_gate(
+    evidence: Mapping[str, Any],
+    *,
+    trusted_attestor_keys: Mapping[str, bytes] | None = None,
+) -> Dict[str, Any]:
+    """Return a fail-closed release decision with authenticated attestations.
+
+    trusted_attestor_keys is a trust root and must come from trusted caller
+    configuration (for example, a secret manager), never from evidence.
+    Each attestation signs the exact gate, evidence reference, and attestor ID.
+    Omitting the trust store leaves all otherwise-passing gates blocked.
+    """
     if not isinstance(evidence, Mapping):
         raise TypeError("evidence must be a mapping")
+
     refs = evidence.get("evidence_refs", {})
     if not isinstance(refs, Mapping):
         refs = {}
@@ -79,13 +135,14 @@ def evaluate_phase3_release_gate(evidence: Mapping[str, Any]) -> Dict[str, Any]:
         if status != "OK":
             blockers.append({"gate": gate, "reason": status})
             continue
-        if not _attested(gate, ref, attestations):
+        if not _attested(gate, ref, attestations, trusted_attestor_keys):
             blockers.append({"gate": gate, "reason": "UNVERIFIED_EVIDENCE_ATTESTATION"})
             continue
         accepted.append(gate)
+
     ready = not blockers
     return {
-        "schema_version": "phase3.release-gate.0.1.0",
+        "schema_version": "phase3.release-gate.0.2.0",
         "release_ready": ready,
         "optimizer_integration_allowed": ready,
         "required_gate_count": len(REQUIRED_PHASE3_GATES),
@@ -95,6 +152,7 @@ def evaluate_phase3_release_gate(evidence: Mapping[str, Any]) -> Dict[str, Any]:
         "decision": "PASS" if ready else "BLOCKED",
         "policy": (
             "all gates require explicit true, a non-placeholder https evidence "
-            "reference, and a verified attestation of that exact reference"
+            "reference, and a valid HMAC-SHA256 attestation signed by a trusted "
+            "attestor key over that exact gate and reference"
         ),
     }

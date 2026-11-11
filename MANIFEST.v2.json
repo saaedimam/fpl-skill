@@ -156,7 +156,7 @@
     "fpl_skill/phase3_live_match.py": "1d6f1ea1d17a145a7a855f9571aa9b36c377308a9c7f29b16ebff40626f457ad",
     "fpl_skill/phase3_planner.py": "3ac21ab8bdaacf5a07538b4e8334dae63880e935be7bcb31e52bfcc747fd96d5",
     "fpl_skill/phase3_price_risk.py": "10cc4f96991d560a4e86b915887fba45f1da6754b9cda997c91083a1b5700053",
-    "fpl_skill/phase3_release_gate.py": "22ff49a749f55417381d1f47783f767a52e4780cf9da0309083b55d447777abb",
+    "fpl_skill/phase3_release_gate.py": "ffcb397e946487acaadaec3c7e30aa3366b0aaafb4715361a30cb22ae4fb70c6",
     "fpl_skill/phase3_transfer_flow.py": "a07306d6350e9cfbf46c99494dc37a0b6db3edad405f3fa0d4d187d8a29c1efd",
     "fpl_skill/prediction_engine.py": "8aaf544b6ff6be5b27618229c3de1c58aeeac7722b71f8b387ffcb4adb302c40",
     "fpl_skill/probabilistic_ep1.py": "f008045085037f6b10f0ec4cefe33f14c076433f12145178e8a1d6f1282a50dd",
@@ -187,7 +187,7 @@
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3"
   },
-  "release_hash": "b76f506bcb963f1ef1385d5f3301467c4a5e9a3801baaa1bd92d3d358d3d9bc9",
+  "release_hash": "854ef9d6e5f319b549da2db69c24ff78ff8fb1074e7138e125cc6be9c902c4cf",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-09T18:44:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
