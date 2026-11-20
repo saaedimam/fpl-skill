@@ -145,7 +145,7 @@ def test_transfer_intelligence_distinguishes_total_ep_and_gain():
 
 
 def test_transfer_intelligence_holds_when_gain_below_threshold():
-    ti = TransferIntelligence("12345")
+    ti = _offline_transfer_intelligence()
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -155,6 +155,7 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
     mock_best = {
         "player_out": {"web_name": "PlayerA"},
         "player_in": {"web_name": "PlayerB"},
+        "gw3_4_ep": 100.0,
         "gw3_6_ep": 200.8,
         "move_str": "PlayerA OUT -> PlayerB IN"
     }
@@ -172,7 +173,7 @@ def test_transfer_intelligence_holds_when_gain_below_threshold():
 
 
 def test_transfer_intelligence_hit_threshold():
-    ti = TransferIntelligence("12345")
+    ti = _offline_transfer_intelligence()
     mock_state = {
         "optimization_state": "OPTIMIZATION_READY",
         "squad_ids": list(range(1, 16))
@@ -180,6 +181,7 @@ def test_transfer_intelligence_hit_threshold():
     mock_best = {
         "player_out": {"web_name": "PlayerA"},
         "player_in": {"web_name": "PlayerB"},
+        "gw3_4_ep": 100.0,
         "gw3_6_ep": 204.0,
         "move_str": "PlayerA OUT -> PlayerB IN"
     }

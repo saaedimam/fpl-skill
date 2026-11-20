@@ -31,7 +31,8 @@ def test_blank_requires_complete_authoritative_zero_fixture_schedule():
     assert classify_fixture_schedule(schedule()) is FixtureStatus.BLANK
     assert classify_fixture_schedule(schedule(complete=False)) is FixtureStatus.FIXTURE_MISSING
     assert classify_fixture_schedule(schedule(published=False)) is FixtureStatus.FIXTURE_NOT_PUBLISHED
-    assert classify_fixture_schedule(schedule(source="third-party")) is FixtureStatus.UNKNOWN
+    noncanonical = record(source="third-party")
+    assert classify_fixture_schedule(schedule(retrieval=noncanonical)) is FixtureStatus.UNKNOWN
 
 def test_duplicate_or_incomplete_fixture_rows_do_not_certify_blank():
     duplicate = ({"id": 1}, {"id": 1})

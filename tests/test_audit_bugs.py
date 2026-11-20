@@ -128,6 +128,8 @@ def test_audit_bug_e_optimizer_parameterization():
     """AUDIT-BUG-E: optimizer accepts budget, player_locks, horizon parameters without KeyError."""
     from tests.test_optimizer_canonical import _synthetic_data
     with patch("fpl_skill.optimizer.get_fpl_data", return_value=_synthetic_data()):
+        from tests.test_optimizer_canonical import _synthetic_data
+    with patch("fpl_skill.optimizer.get_fpl_data", return_value=_synthetic_data()):
         res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
     assert res["status"] == "BUILT"
     assert res["variables_count"] > 0
