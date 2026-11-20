@@ -90,6 +90,16 @@ At the end of each FPLSKILL engineering session, provide a concise handoff conta
 
 Never invent missing values or imply a local test, zero-egress check, release seal, or merge occurred without direct evidence. The handoff is a record, not an authorization to perform the next action.
 
+## Read-only release-manifest verification
+
+The CI workflow invokes the read-only verifier:
+
+```bash
+python -c "from tests.compute_release_hash import verify_release_integrity; verify_release_integrity()"
+```
+
+This checks canonical path coverage, root/package manifest equality, raw-byte file hashes, and the derived release hash without writing files. Do not substitute `python3 tests/compute_release_hash.py` for this check: its successful main path writes `tests/release_hash.json`.
+
 ## Exact CI network-isolation commands
 
 The CI workflow first proves that external TCP egress is blocked by running `tests/prove_netns_egress_denied.py` inside a fresh network namespace:

@@ -35,8 +35,9 @@ Use the document type that matches the task; these files complement the active a
 | --- | --- | --- |
 | Contributor and agent governance | [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), [`CHATGPT.md`](CHATGPT.md) | Operating constraints, evidence rules, review boundaries, and handoff requirements |
 | Explanation / decision record | [`docs/adr/001-fail-closed-execution-firewall.md`](docs/adr/001-fail-closed-execution-firewall.md) | Rationale and evidence for the fail-closed account-write boundary and CI test isolation |
-| Reference | [`contracts/`](contracts/), [`schemas/`](schemas/) | Normative interfaces, invariants, and data shapes |
-| Evaluation protocol | [`docs/evaluation/`](docs/evaluation/) | Preregistration, dataset constraints, and scientific evaluation boundaries |
+| Reference contracts | [`calibration-contract.md`](contracts/calibration-contract.md), [`GLOBAL15_CONTRACT.md`](contracts/GLOBAL15_CONTRACT.md), [`runtime-contract.md`](contracts/runtime-contract.md), [`source-contract.md`](contracts/source-contract.md), [`decision-contract.md`](contracts/decision-contract.md), [`prediction-contract.md`](contracts/prediction-contract.md), [`research-contract.md`](contracts/research-contract.md) | Normative interfaces, invariants, and evidence rules |
+| Machine-readable schema | [`predeadline-snapshot.schema.json`](schemas/predeadline-snapshot.schema.json) | Draft-07 predeadline snapshot data shape |
+| Evaluation protocol | [`dataset-contract.md`](docs/evaluation/dataset-contract.md), [`preregistration.md`](docs/evaluation/preregistration.md) | Dataset constraints and preregistered scientific evaluation |
 
 ## Scientific Evidence Boundary
 
@@ -46,7 +47,7 @@ Software tests, synthetic fixtures, metric definitions, and retrospective exampl
 
 Account mutation is deliberately unavailable.
 
-`fpl_skill.execution.execute_account_mutation` validates the proposed action and relevant safety inputs, consumes a valid one-time approval nonce when applicable, then discards the supplied session and transport and raises `ExecutionDenied`. No approval or mode bypasses this refusal.
+`fpl_skill.execution.execute_account_mutation` imports the canonical `fpl_skill.approval_gate.ExecutionDenied`. With a valid approval it may perform read-only bootstrap and account-state fetches during validation; it then discards injected write transport/session objects and raises `ExecutionDenied` before any account-write egress. No approval or execution mode bypasses this refusal. This is a zero-account-write guarantee, not a guarantee of zero network activity.
 
 | Surface | Behavior |
 | --- | --- |
@@ -220,6 +221,15 @@ sudo unshare --net -- env \
 See [`tests/README.md`](tests/README.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the exact CI implementation. These namespaces are CI test-isolation controls, not a production runtime sandbox.
 
 The test monkeypatches in `tests/network_isolation.py` are defense in depth, not a kernel security boundary. C extensions, subprocesses, `ctypes`/libc calls, previously bound methods, and alternate HTTP clients can bypass Python-level patches. Use the network namespace for a hard egress boundary.
+
+### Test environment variables
+
+| Variable | CI behavior | Meaning / safe handling |
+| --- | --- | --- |
+| `FPL_LIVE_TEST` | Not set | Separate opt-in live-data test flag; keep unset for automated testing. |
+| `FPL_TEST_NETNS` | Set to `1` for namespaced pytest | Enables the namespace-aware test proof in the isolated pytest process. |
+| `FPL_ALLOW_TEST_NETWORK` | Not set | Local test-only monkeypatch opt-out; not a CI setting or account-write authorization. |
+| `FPL_CONFIRM_LIVE_NETWORK` | Not set | Must accompany `FPL_ALLOW_TEST_NETWORK=1` with the exact confirmation value below; not used by CI. |
 
 Disabling the local pytest monkeypatch requires **both** of the following exact environment values:
 

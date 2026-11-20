@@ -1,0 +1,51 @@
+# FPL Skill
+
+> Advisory Fantasy Premier League tooling. Account writes fail closed. Repository contracts are authoritative; passing software tests is not evidence of predictive competence.
+
+## Start here
+
+- [README](README.md) — project orientation, installation, architecture, and safe verification.
+- [SKILL](SKILL.md) — canonical agent entrypoint.
+- [CHANGELOG](CHANGELOG.md) — release history.
+
+## Agent governance
+
+- [AGENTS.md](AGENTS.md) — contributor and agent engineering, evidence, safety, and release contract.
+- [CLAUDE.md](CLAUDE.md) — Claude Code agent assurance entrypoint.
+- [CHATGPT.md](CHATGPT.md) — NEXUS PRIME remote governance and local execution boundary.
+
+## Architecture and safety
+
+- [ADR-001: Fail-Closed Account Execution Firewall](docs/adr/001-fail-closed-execution-firewall.md) — proposed explanation and reference for account-write refusal and CI network isolation.
+- [Runtime contract](contracts/runtime-contract.md)
+- [Source contract](contracts/source-contract.md)
+- [Decision contract](contracts/decision-contract.md)
+- [Prediction contract](contracts/prediction-contract.md)
+- [Research contract](contracts/research-contract.md)
+- [Global 15 contract](contracts/GLOBAL15_CONTRACT.md)
+
+## Machine-readable contract
+
+- [Predeadline snapshot JSON Schema](schemas/predeadline-snapshot.schema.json) — Draft-07 snapshot schema with cutoff, source identity, retrieval timestamp, missing-data status, predictions, squad, captaincy, chip, model version, and input hash.
+
+## Evaluation and scientific evidence
+
+- [Calibration contract](contracts/calibration-contract.md) — actual-outcome records, sample gates, scorecards, and evidence limits.
+- [Evaluation dataset contract](docs/evaluation/dataset-contract.md)
+- [Evaluation preregistration](docs/evaluation/preregistration.md)
+
+## CI and release integrity
+
+- [CI workflow](.github/workflows/ci.yml) — Python 3.11–3.14 matrix, package installation, read-only manifest check, network namespace proof, and pytest command.
+- [Release manifest](MANIFEST.v2.json) — canonical file registry and declared release hash.
+- [Read-only manifest verifier](tests/compute_release_hash.py) — call `verify_release_integrity()` to validate without writing files.
+- [Network isolation notes](tests/README.md)
+- [Network namespace egress proof](tests/prove_netns_egress_denied.py)
+
+## Evidence boundary
+
+Do not claim predictive competence, calibration accuracy, decision uplift, or FPL-winning capability from passing tests, synthetic fixtures, metric definitions, or retrospective examples. Such claims require reproducible, leakage-resistant, out-of-sample evidence against actual outcomes. Missing actual outcomes must remain `NO_TRACK_RECORD_YET` or `INSUFFICIENT_DATA`; never fabricate metrics or impute missing outcomes as zero.
+
+## Governance holds
+
+Phase 3, P1–P15, and live FPL account writes remain **STRICT HOLD**. `execute_account_mutation` discards injected write transport/session objects and raises the canonical `fpl_skill.approval_gate.ExecutionDenied`; read-only bootstrap or account-state fetches may occur before refusal. This index does not authorize account mutations or override repository governance.
