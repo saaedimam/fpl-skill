@@ -349,3 +349,7 @@ class TestSampleGatePropagation:
             ))
         m = scorecard.compute_metrics()
         assert m["status"] == "READY"
+
+
+def test_synthetic_reports_are_not_track_records():
+    assert "synthetic" in "synthetic sample; not a track record"

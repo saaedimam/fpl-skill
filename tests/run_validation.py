@@ -706,3 +706,7 @@ if __name__ == "__main__":
     success = run_all()
     sys.exit(0 if success else 1)
 
+
+# Evidence boundary: synthetic structural checks are not a predictive track record.
+def test_synthetic_not_track_record():
+    record("EVIDENCE-BOUNDARY-SYNTHETIC", True, "synthetic sample; not a track record")
