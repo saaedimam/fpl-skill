@@ -85,17 +85,17 @@
     "tests/test_rank_aware_objective1.py": "4e9f4931f865978c0fee614ee03e3e66c97b040e9c00b1a9513bc2a0ae8e25ee",
     "tests/test_redteam_historical_firewall.py": "4bd5590a1b01218152380b7f977ae2a62738ab9f44c7d7d5fe5adcf8ad18ecfd",
     "tests/test_replay_gate.py": "a2e3ef4e3ea6a2f2b14f185d766775cca7b683b89b809a67ac5f3aae9b4a8f28",
-    "fpl_skill/live_state.py": "e2351286fd380bb8b50f2b2bc8a553519143bc76528dc17c47698ded959e89f2",
+    "fpl_skill/live_state.py": "d4c9116fc23a0b4c2a6c61ad24aead93661ffe45d5fee583482029ffb7d7a9ae",
     "fpl_skill/championship_objective.py": "fc3c5f132b02aeef3556fcd14a679c6b39f853e6e0aba1405f0c525538e1f48a",
-    "fpl_skill/execution_sandbox.py": "6d9b34b9d43fa94381e4ac7b86a7bc2af12ddd086af55aaeb87a1e0cfcda6f32",
+    "fpl_skill/execution_sandbox.py": "69dbd5c0eda54ebdff41e3521e4570074e3970e86952d287616070a9aefb0eb4",
     "tests/test_live_state_reconciler.py": "e396273faaefcc027f380714b771fc29ceb9570fa150b0adff74309cf91f60cd",
     "tests/test_championship_objective.py": "48adb85d9f75b31b6ec0b07c58199b349c19bd1863f221926a9dbefd1b6cad31",
     "tests/test_execution_firewall.py": "70509f5d48ed76298ed0f064564ff91d531cc19433d63cb2a56de9512259b8a1",
     "tests/test_bps_horizon_contract.py": "9b199ea1383dde0c1cc450166d869069ab366909cd48886ad2dcf5f7d1229b9d",
     "tests/test_forensic_repairs.py": "3556a77ef36758406f45225d607455c7a575b371cfc053cdc8f92de4d64e863b",
-    "tests/test_audit_bugs.py": "05dd186bdc1bb8b9db69c327f97c4ee603aa8abb7cd5d7b66d1ad1e205593549"
+    "tests/test_audit_bugs.py": "ade6b803fe883de365263a9919b770d9d5e37eaa6336acadfd43a2c222759bf3"
   },
-  "release_hash": "3a8c840ca6120f88b52085e2cc5907f83f3afb5ae88507f28f0e925d360f0854",
+  "release_hash": "133d903c3abc782e891e0c15bfd7f74c0f3c55179524bd871184e763b3d78f00",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-10-11T21:40:00+00:00"
 }
