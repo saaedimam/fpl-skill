@@ -84,9 +84,26 @@ def test_blank_gameweek_is_explicit():
 
 
 def test_prediction_reports_blank_players():
-    res = _engine().run(11, squad=_squad())
+    from datetime import datetime, timezone
+    from fpl_skill.live_state import FixtureSchedule, RetrievalRecord
+
+    now = datetime(2026, 11, 20, 12, tzinfo=timezone.utc)
+    schedules = {}
+    for team_id in (4, 6):
+        payload = json.dumps({"event": 11, "team": team_id, "fixtures": []}).encode()
+        retrieval = RetrievalRecord(
+            event_id=11, team_id=team_id, endpoint="/api/fixtures/",
+            retrieved_at=now, observed_at=now, payload=payload,
+            source="official-fpl",
+        )
+        schedules[team_id] = FixtureSchedule(
+            event_id=11, team_id=team_id, fixtures=(), published=True,
+            complete=True, retrieval=retrieval,
+        )
+    res = _engine().run(11, squad=_squad(), fixture_schedules=schedules)
     blank_ids = {p["player_id"] for p in _squad() if p["team"] in (4, 6)}
     assert set(res["blank_gameweek_players"]) == blank_ids
+    assert res["fixture_schedule_status"] == {4: "BLANK", 6: "BLANK"}
 
 
 # --- projections ----------------------------------------------------------
