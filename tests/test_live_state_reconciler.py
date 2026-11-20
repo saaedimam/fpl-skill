@@ -134,7 +134,6 @@ def test_illegal_formation_and_zero_chance_are_unavailable():
     squad[0]["chance_of_playing_next_round"] = 0
     assert not validate_lineup(squad,xi,bench)
     illegal_xi = [0,2,3,4,7,8,9,10,11,12,13]  # 2 DEF
-    squad[0]["chance_of_playing_next_round"] = 100
     assert not validate_lineup(squad,illegal_xi,[1,5,6,14])
 
 
