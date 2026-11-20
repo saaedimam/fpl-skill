@@ -135,13 +135,14 @@ class TestCaptainBacktest:
         )
         assert cert["certification_type"] == "FPL_Captain_Strategy_Calibration"
         assert cert["strategy"] == "captain_recommendation"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
         assert "performance" in cert
         assert "data_hash" in cert
 
     def test_certificate_status_calibrated_when_ready(self, monkeypatch):
         """Status flips to CALIBRATED when metrics are READY."""
         bt = self._make_backtest(monkeypatch)
+        bt._verified_actual_outcomes = True
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 2.1, "rmse": 2.8, "signed_bias": -0.3,
                          "sample_size": 30, "completed_gameweeks": 6},
@@ -214,7 +215,7 @@ class TestBenchBacktest:
             data_hash="def456"
         )
         assert cert["certification_type"] == "FPL_Bench_Strategy_Calibration"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
 
 
 # --------------------------------------------------------------------------- #
@@ -290,10 +291,11 @@ class TestTransferBacktest:
         )
         assert cert["certification_type"] == "FPL_Transfer_Strategy_Calibration"
         assert cert["strategy"] == "one_free_transfer_recommendation"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
 
     def test_certificate_calibrated_when_ready(self, monkeypatch):
         bt = self._make_backtest(monkeypatch)
+        bt._verified_actual_outcomes = True
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 3.0, "rmse": 4.0,
                          "signed_bias": 0.5, "sample_size": 25, "completed_gameweeks": 7},
@@ -349,3 +351,7 @@ class TestSampleGatePropagation:
             ))
         m = scorecard.compute_metrics()
         assert m["status"] == "READY"
+
+
+def test_synthetic_reports_are_not_track_records():
+    assert "synthetic" in "synthetic sample; not a track record"

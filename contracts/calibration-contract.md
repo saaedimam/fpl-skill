@@ -43,3 +43,7 @@ Season 2026/27 has no completed-Gameweek prediction-vs-actual track record yet a
 - Never fabricate a calibration statistic, MAE/Brier/RMSE value, or bias claim without the underlying sample actually existing.
 - Never suppress or soften an unfavorable bias finding once the sample-size gate is met.
 - Never let `/calibrate` output silence stand in for "no data" — it must say so explicitly.
+
+## Evidence boundary
+
+No claim of predictive competence, decision uplift, or FPL-winning capability may be made from software tests, synthetic fixtures, metric definitions, or retrospective examples alone. Such claims require reproducible, leakage-resistant, out-of-sample evidence.

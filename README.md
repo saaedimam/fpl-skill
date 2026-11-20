@@ -261,3 +261,7 @@ That command writes `tests/release_hash.json`; update and validate both manifest
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Evidence boundary
+
+No claim of predictive competence, decision uplift, or FPL-winning capability may be made from software tests, synthetic fixtures, metric definitions, or retrospective examples alone. Such claims require reproducible, leakage-resistant, out-of-sample evidence.
