@@ -25,14 +25,21 @@ from dataclasses import dataclass, asdict
 
 
 def _valid_actual(value: Any) -> bool:
-    return isinstance(value, (int, float)) and math.isfinite(float(value))
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(float(value))
 
 
-def _certificate_status(metrics: Dict[str, Any]) -> str:
+def _certificate_status(metrics: Dict[str, Any], actual_outcomes_verified: bool = False) -> str:
     nested = metrics.get("metrics", metrics)
-    if nested.get("status") == "NO_TRACK_RECORD_YET":
+    if not actual_outcomes_verified:
         return "NO_TRACK_RECORD_YET"
-    if nested.get("status") == "READY" and nested.get("actual_outcomes_verified") and nested.get("sample_size", 0) > 0:
+    mae = nested.get("mae")
+    valid_mae = isinstance(mae, (int, float)) and not isinstance(mae, bool) and math.isfinite(float(mae))
+    if (
+        nested.get("status") == "READY"
+        and nested.get("sample_size", 0) > 0
+        and nested.get("completed_gameweeks", 0) > 0
+        and valid_mae
+    ):
         return "CALIBRATED"
     return "INSUFFICIENT_DATA"
 
@@ -171,7 +178,7 @@ class CaptainBacktest:
             scorecard.add_record(r)
 
         metrics = scorecard.compute_metrics()
-        metrics["actual_outcomes_verified"] = bool(records)
+        self._verified_actual_outcomes = bool(records)
         return {
             "decisions_recorded": len(self.decisions),
             "metrics": metrics,
@@ -215,9 +222,11 @@ class CaptainBacktest:
                 "sample_size": metrics.get("metrics", {}).get("sample_size", 0),
                 "completed_gameweeks": metrics.get("metrics", {}).get("completed_gameweeks", 0)
             },
-            "status": _certificate_status(metrics),
-            "evidence_boundary": "synthetic sample; not a track record" if not metrics.get("metrics", {}).get("actual_outcomes_verified") else "validated actual outcomes"
+            "status": _certificate_status(metrics, bool(getattr(self, "_verified_actual_outcomes", False))),
+            "evidence_boundary": "validated actual outcomes" if getattr(self, "_verified_actual_outcomes", False) else "no validated actual outcomes; not a track record"
         }
+        if not getattr(self, "_verified_actual_outcomes", False):
+            cert["performance"] = {}
         return cert
 
 
@@ -466,12 +475,15 @@ def run_full_backtest(team_id: str, through_gw: int) -> Dict[str, Dict]:
     bench = BenchBacktest(team_id)
     transfer = TransferBacktest(team_id)
 
-    # TODO: Iterate through completed GWs, record decisions, then backtest
-    # For now, return empty certificate structures
+    # No actual-outcome source is wired yet. Compute against empty maps so every
+    # strategy follows the same fail-closed path and cannot mint placeholder scores.
+    captain_metrics = captain.compute_backtest(actuals_by_gw)
+    bench_metrics = bench.compute_backtest(actuals_by_gw, minutes_by_gw)
+    transfer_metrics = transfer.compute_backtest(actuals_by_gw)
     return {
-        "captain": captain.generate_certificate({"metrics": {"status": "NO_TRACK_RECORD_YET"}}, data_hash),
-        "bench": bench.generate_certificate({"metrics": {"status": "NO_TRACK_RECORD_YET"}}, data_hash),
-        "transfer": transfer.generate_certificate({"metrics": {"status": "NO_TRACK_RECORD_YET"}}, data_hash)
+        "captain": captain.generate_certificate(captain_metrics, data_hash),
+        "bench": bench.generate_certificate(bench_metrics, data_hash),
+        "transfer": transfer.generate_certificate(transfer_metrics, data_hash)
     }
 
 
