@@ -60,11 +60,14 @@ class FixtureSchedule:
     retrieval: RetrievalRecord
     postponed: bool = False
     conflicted: bool = False
+    source: Optional[str] = None
 
 
 def classify_fixture_schedule(schedule: FixtureSchedule) -> FixtureStatus:
     """Classify a schedule; zero rows alone can never establish a blank."""
     record = schedule.retrieval
+    if schedule.source is not None and schedule.source != "official-fpl":
+        return FixtureStatus.UNKNOWN
     if schedule.conflicted:
         return FixtureStatus.CONFLICTED
     if (

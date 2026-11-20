@@ -23,8 +23,18 @@ class ExecutionSandbox:
         return {"status":"SIMULATION_COMPLETE","evidence_gap":self.calculate_evidence_gap(current_state,post,requested_actions)}
 
     def _deny(self,*args,**kwargs):
-        # Drop all transport references before failing closed; this module never sends.
-        self.adapter=None
+        # Discard any attached transport/session objects before failing closed.
+        adapter = self.adapter
+        if adapter is not None:
+            for name in ("session", "transport", "client", "connection"):
+                if hasattr(adapter, name):
+                    try:
+                        setattr(adapter, name, None)
+                    except Exception:
+                        pass
+        self.adapter = None
+        self.session = None
+        self.transport = None
         raise ExecutionDenied("Phase 3 is STRICT HOLD; account writes are disabled")
 
     execute_transfer=_deny
