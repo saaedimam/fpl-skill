@@ -127,7 +127,7 @@
     "fpl_skill/approval_gate.py": "32a03d0e4b21dc8343687c663c589744afb913eda233849c06150a48c7a80db2",
     "fpl_skill/approval_issuer.py": "ad1ec4e3de20a96a8bc461e9fa572fe2dc5d81b722e58dde89cde883b0bd9628",
     "fpl_skill/approval_verify.py": "847f447dfba9ca7cc2cc8499e72e74c474eb4e9427700bd017092875d3f79c37",
-    "fpl_skill/backtest.py": "fa3a5fdcbd40f4930e1c5b7260a72a3268b38e27c6cf2f27ca0ea903d16eca7a",
+    "fpl_skill/backtest.py": "1c1d47d4ba8c354e10fcd868b4742ae52568e80d5381a03ae5ec1dff5c76e5bb",
     "fpl_skill/certification.py": "7ed5e6ee9860ab8c28b3c5a5c11f794bc40df594d314c0bbeb0c011ccb286785",
     "fpl_skill/cli.py": "d9f496354db5f90e736cdf30e47a5ae70e2ec963adee6d9b24fadf780215dd63",
     "fpl_skill/current_data.py": "959003938e6d43b5fd6f8e5d68989f0a40283262fe63f14581c6d8521529758b",
@@ -199,7 +199,7 @@
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3"
   },
-  "release_hash": "cce3a802840c97659b46d391335d6f69dca37e7994b893754c541aad423e53c1",
+  "release_hash": "28e64fad1af62466238d80be2dd9fd4817a76a09d7c42bae23b7439a64d39012",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-09T18:44:00+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
