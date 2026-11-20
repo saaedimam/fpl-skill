@@ -88,14 +88,14 @@
     "fpl_skill/live_state.py": "e2351286fd380bb8b50f2b2bc8a553519143bc76528dc17c47698ded959e89f2",
     "fpl_skill/championship_objective.py": "fc3c5f132b02aeef3556fcd14a679c6b39f853e6e0aba1405f0c525538e1f48a",
     "fpl_skill/execution_sandbox.py": "6d9b34b9d43fa94381e4ac7b86a7bc2af12ddd086af55aaeb87a1e0cfcda6f32",
-    "tests/test_live_state_reconciler.py": "d9d33dc46c1434f2c167c26d3b93c0d241ed02ea5605635e70534ff58d827160",
+    "tests/test_live_state_reconciler.py": "e396273faaefcc027f380714b771fc29ceb9570fa150b0adff74309cf91f60cd",
     "tests/test_championship_objective.py": "48adb85d9f75b31b6ec0b07c58199b349c19bd1863f221926a9dbefd1b6cad31",
     "tests/test_execution_firewall.py": "70509f5d48ed76298ed0f064564ff91d531cc19433d63cb2a56de9512259b8a1",
     "tests/test_bps_horizon_contract.py": "9b199ea1383dde0c1cc450166d869069ab366909cd48886ad2dcf5f7d1229b9d",
-    "tests/test_forensic_repairs.py": "484d3830a307c20164606c027bb22b4bcd4fed0eb0de4ce3d671e77d4f896bb1",
-    "tests/test_audit_bugs.py": "351c0d4f17b41f96707607a180a2927eb47929e7b3c32858fdcc70a9cb165652"
+    "tests/test_forensic_repairs.py": "3556a77ef36758406f45225d607455c7a575b371cfc053cdc8f92de4d64e863b",
+    "tests/test_audit_bugs.py": "05dd186bdc1bb8b9db69c327f97c4ee603aa8abb7cd5d7b66d1ad1e205593549"
   },
-  "release_hash": "6deef010ea9af61e9b43251374e7ff53c7f723c81685883c604d1cdfed825985",
+  "release_hash": "3a8c840ca6120f88b52085e2cc5907f83f3afb5ae88507f28f0e925d360f0854",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-10-11T21:40:00+00:00"
 }
