@@ -18,9 +18,23 @@ import os
 import json
 import datetime
 import hashlib
+import math
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
+
+
+def _valid_actual(value: Any) -> bool:
+    return isinstance(value, (int, float)) and math.isfinite(float(value))
+
+
+def _certificate_status(metrics: Dict[str, Any]) -> str:
+    nested = metrics.get("metrics", metrics)
+    if nested.get("status") == "NO_TRACK_RECORD_YET":
+        return "NO_TRACK_RECORD_YET"
+    if nested.get("status") == "READY" and nested.get("actual_outcomes_verified") and nested.get("sample_size", 0) > 0:
+        return "CALIBRATED"
+    return "INSUFFICIENT_DATA"
 
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.api import (
@@ -134,7 +148,9 @@ class CaptainBacktest:
         records = []
         for dec in self.decisions:
             actuals = actuals_by_gw.get(dec.gw, {})
-            cap_actual = actuals.get(dec.recommended_captain_id, 0.0)
+            cap_actual = actuals.get(dec.recommended_captain_id)
+            if not _valid_actual(cap_actual):
+                continue
 
             # FIX-02: use decision-time EP, not post-hoc recomputation
             cap_predicted = dec.captain_ep_at_decision
@@ -155,6 +171,7 @@ class CaptainBacktest:
             scorecard.add_record(r)
 
         metrics = scorecard.compute_metrics()
+        metrics["actual_outcomes_verified"] = bool(records)
         return {
             "decisions_recorded": len(self.decisions),
             "metrics": metrics,
@@ -198,7 +215,8 @@ class CaptainBacktest:
                 "sample_size": metrics.get("metrics", {}).get("sample_size", 0),
                 "completed_gameweeks": metrics.get("metrics", {}).get("completed_gameweeks", 0)
             },
-            "status": "CALIBRATED" if metrics.get("metrics", {}).get("status") == "READY" else "INSUFFICIENT_DATA"
+            "status": _certificate_status(metrics),
+            "evidence_boundary": "synthetic sample; not a track record" if not metrics.get("metrics", {}).get("actual_outcomes_verified") else "validated actual outcomes"
         }
         return cert
 
@@ -279,6 +297,7 @@ class BenchBacktest:
             scorecard.add_record(r)
 
         metrics = scorecard.compute_metrics()
+        metrics["actual_outcomes_verified"] = bool(records)
         return {
             "decisions_recorded": len(self.decisions),
             "metrics": metrics,
@@ -310,7 +329,8 @@ class BenchBacktest:
                 "sample_size": metrics.get("metrics", {}).get("sample_size", 0),
                 "completed_gameweeks": metrics.get("metrics", {}).get("completed_gameweeks", 0)
             },
-            "status": "CALIBRATED" if metrics.get("metrics", {}).get("status") == "READY" else "INSUFFICIENT_DATA"
+            "status": _certificate_status(metrics),
+            "evidence_boundary": "synthetic sample; not a track record" if not metrics.get("metrics", {}).get("actual_outcomes_verified") else "validated actual outcomes"
         }
         return cert
 
@@ -368,8 +388,10 @@ class TransferBacktest:
         records = []
         for dec in self.decisions:
             actuals = actuals_by_gw.get(dec.gw, {})
-            out_actual = actuals.get(dec.player_out_id, 0.0)
-            in_actual = actuals.get(dec.player_in_id, 0.0)
+            out_actual = actuals.get(dec.player_out_id)
+            in_actual = actuals.get(dec.player_in_id)
+            if not _valid_actual(out_actual) or not _valid_actual(in_actual):
+                continue
             actual_gain = in_actual - out_actual
 
             records.append(CalibrationRecord(
@@ -388,6 +410,7 @@ class TransferBacktest:
             scorecard.add_record(r)
 
         metrics = scorecard.compute_metrics()
+        metrics["actual_outcomes_verified"] = bool(records)
         return {
             "decisions_recorded": len(self.decisions),
             "metrics": metrics,
@@ -419,7 +442,8 @@ class TransferBacktest:
                 "sample_size": metrics.get("metrics", {}).get("sample_size", 0),
                 "completed_gameweeks": metrics.get("metrics", {}).get("completed_gameweeks", 0)
             },
-            "status": "CALIBRATED" if metrics.get("metrics", {}).get("status") == "READY" else "INSUFFICIENT_DATA"
+            "status": _certificate_status(metrics),
+            "evidence_boundary": "synthetic sample; not a track record" if not metrics.get("metrics", {}).get("actual_outcomes_verified") else "validated actual outcomes"
         }
         return cert
 

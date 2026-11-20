@@ -135,7 +135,7 @@ class TestCaptainBacktest:
         )
         assert cert["certification_type"] == "FPL_Captain_Strategy_Calibration"
         assert cert["strategy"] == "captain_recommendation"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
         assert "performance" in cert
         assert "data_hash" in cert
 
@@ -144,7 +144,7 @@ class TestCaptainBacktest:
         bt = self._make_backtest(monkeypatch)
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 2.1, "rmse": 2.8, "signed_bias": -0.3,
-                         "sample_size": 30, "completed_gameweeks": 6},
+                         "sample_size": 30, "completed_gameweeks": 6, "actual_outcomes_verified": True},
              "captain_accuracy_pct": 55.0},
             data_hash="abc123"
         )
@@ -214,7 +214,7 @@ class TestBenchBacktest:
             data_hash="def456"
         )
         assert cert["certification_type"] == "FPL_Bench_Strategy_Calibration"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
 
 
 # --------------------------------------------------------------------------- #
@@ -290,13 +290,13 @@ class TestTransferBacktest:
         )
         assert cert["certification_type"] == "FPL_Transfer_Strategy_Calibration"
         assert cert["strategy"] == "one_free_transfer_recommendation"
-        assert cert["status"] == "INSUFFICIENT_DATA"
+        assert cert["status"] == "NO_TRACK_RECORD_YET"
 
     def test_certificate_calibrated_when_ready(self, monkeypatch):
         bt = self._make_backtest(monkeypatch)
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 3.0, "rmse": 4.0,
-                         "signed_bias": 0.5, "sample_size": 25, "completed_gameweeks": 7},
+                         "signed_bias": 0.5, "sample_size": 25, "completed_gameweeks": 7, "actual_outcomes_verified": True},
              "profitable_transfers_pct": 62.0},
             data_hash="ghi789"
         )
