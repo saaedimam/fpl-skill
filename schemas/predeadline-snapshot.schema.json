@@ -2,23 +2,125 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "PredeadlineSnapshot",
   "type": "object",
-  "required": ["target_gameweek", "cutoff_timestamp", "source_identity", "retrieval_timestamp", "source_version", "missing_data_status", "expected_points", "start_probability", "expected_minutes", "predicted_squad", "starting_xi", "bench", "captain", "vice_captain", "chip", "model_version", "input_hash"],
+  "required": [
+    "target_gameweek",
+    "cutoff_timestamp",
+    "source_identity",
+    "retrieval_timestamp",
+    "source_version",
+    "missing_data_status",
+    "player_predictions",
+    "predicted_squad",
+    "starting_xi",
+    "bench",
+    "captain",
+    "vice",
+    "chip",
+    "model_version",
+    "input_hash"
+  ],
   "properties": {
-    "target_gameweek": {"type": "integer", "minimum": 1, "maximum": 38},
-    "cutoff_timestamp": {"type": "string", "format": "date-time", "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"},
-    "source_identity": {"type": "string", "minLength": 1},
-    "retrieval_timestamp": {"anyOf": [{"type": "string", "const": "UNKNOWN"}, {"type": "string", "format": "date-time", "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"}]},
-    "source_version": {"type": "string", "minLength": 1},
-    "missing_data_status": {"type": "string"},
-    "expected_points": {"type": "number"},
-    "start_probability": {"type": "number", "minimum": 0, "maximum": 1},
-    "expected_minutes": {"type": "number", "minimum": 0},
-    "predicted_squad": {"type": "array"},
-    "starting_xi": {"type": "array"},
-    "bench": {"type": "array"},
-    "captain": {}, "vice_captain": {}, "chip": {"type": ["string", "null"]},
-    "model_version": {"type": "string", "minLength": 1},
-    "input_hash": {"type": "string", "minLength": 1}
+    "target_gameweek": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 38
+    },
+    "cutoff_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "source_identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retrieval_timestamp": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "UNKNOWN"
+        },
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      ]
+    },
+    "source_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "missing_data_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "player_predictions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "player_id",
+          "expected_points",
+          "start_probability",
+          "expected_minutes"
+        ],
+        "properties": {
+          "player_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expected_points": {
+            "type": "number"
+          },
+          "start_probability": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "expected_minutes": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "predicted_squad": {
+      "type": "array"
+    },
+    "starting_xi": {
+      "type": "array"
+    },
+    "bench": {
+      "type": "array"
+    },
+    "captain": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "vice": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "chip": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_hash": {
+      "type": "string",
+      "minLength": 1
+    }
   },
-  "additionalProperties": true
+  "additionalProperties": false
 }
