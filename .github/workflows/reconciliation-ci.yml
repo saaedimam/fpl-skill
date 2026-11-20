@@ -18,31 +18,30 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     env:
       PYTHONUNBUFFERED: "1"
+      FPL_LIVE_TEST: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install offline test dependencies
+      - name: Install locked dependencies compatible with matrix interpreter
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -e .
-          pip install pytest
+          python -m pip install "numpy<2.5; python_version<'3.12'" "numpy==2.5.3; python_version>='3.12'"
+          python -m pip install "click==8.3.3" "pulp==3.3.2" "requests==2.34.2" "highspy==1.15.1" "jsonschema==4.26.0" "pytest==9.1.1" "pytest-cov==7.1.0"
+          python -m pip install -e . --no-deps
       - name: Compile check
         run: python -m compileall -q fpl_skill tests
       - name: Release manifest verification
         run: |
           python tests/compute_release_hash.py
           python - <<'PY'
-          import json, subprocess
-          m = json.load(open("MANIFEST.v2.json"))
-          r = json.load(open("tests/release_hash.json"))
-          assert m["parent"]["commit"] == "ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c"
-          assert m["parent"]["sha256"] == "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
-          assert m["parent"]["status"] == "FROZEN"
-          assert m["release_hash"] == r["release_hash"]
-          assert r["reproducible"] is True
+          import json
+          m=json.load(open("MANIFEST.v2.json")); r=json.load(open("tests/release_hash.json"))
+          assert m["parent"]["commit"]=="ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c"
+          assert m["parent"]["sha256"]=="da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
+          assert m["parent"]["status"]=="FROZEN"
+          assert m["release_hash"]==r["release_hash"] and r["reproducible"] is True
           PY
       - name: Network namespace zero-egress refusal check
         run: |
