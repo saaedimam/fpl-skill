@@ -227,8 +227,6 @@ class CaptainBacktest:
         }
         if not getattr(self, "_verified_actual_outcomes", False):
             cert["performance"] = {}
-        if not getattr(self, "_verified_actual_outcomes", False):
-            cert["performance"] = {}
         return cert
 
 
@@ -343,6 +341,8 @@ class BenchBacktest:
             "status": _certificate_status(metrics, bool(getattr(self, "_verified_actual_outcomes", False))),
             "evidence_boundary": "validated actual outcomes" if getattr(self, "_verified_actual_outcomes", False) else "no validated actual outcomes; not a track record"
         }
+        if not getattr(self, "_verified_actual_outcomes", False):
+            cert["performance"] = {}
         return cert
 
 
@@ -421,7 +421,7 @@ class TransferBacktest:
             scorecard.add_record(r)
 
         metrics = scorecard.compute_metrics()
-        metrics["actual_outcomes_verified"] = bool(records)
+        self._verified_actual_outcomes = bool(records)
         return {
             "decisions_recorded": len(self.decisions),
             "metrics": metrics,
@@ -453,9 +453,11 @@ class TransferBacktest:
                 "sample_size": metrics.get("metrics", {}).get("sample_size", 0),
                 "completed_gameweeks": metrics.get("metrics", {}).get("completed_gameweeks", 0)
             },
-            "status": _certificate_status(metrics),
-            "evidence_boundary": "synthetic sample; not a track record" if not metrics.get("metrics", {}).get("actual_outcomes_verified") else "validated actual outcomes"
+            "status": _certificate_status(metrics, bool(getattr(self, "_verified_actual_outcomes", False))),
+            "evidence_boundary": "validated actual outcomes" if getattr(self, "_verified_actual_outcomes", False) else "no validated actual outcomes; not a track record"
         }
+        if not getattr(self, "_verified_actual_outcomes", False):
+            cert["performance"] = {}
         return cert
 
 
