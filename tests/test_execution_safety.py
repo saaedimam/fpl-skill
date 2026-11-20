@@ -11,6 +11,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import re
 import subprocess
 import urllib.request
 from datetime import datetime, timezone
@@ -573,11 +575,104 @@ def test_all_python_missing_team_id_fails_closed(monkeypatch, tmp_path):
     assert module.main(["--apply"]) != 0
 
 
+_PRIVACY_PATH_PATTERNS = (
+    ("absolute_user_path", re.compile(r"/Users/|/home/|C:\\Users\\")),
+    ("profile_endpoint", re.compile(r"pl_profile")),
+    ("session_cookie", re.compile(r"csrftoken")),
+)
+_PRIVACY_NUMERIC_ID = re.compile(
+    r"\b(?:team_id|entry_id)\b\s*[:=]\s*[\"']?(\d+)\b"
+)
+_PRIVACY_ALLOWED_TEST_IDS = {"0", "1", "12345", "999999"}
+_PRIVACY_ROOT_MARKDOWN = (
+    "AGENTS.md", "CLAUDE.md", "CHATGPT.md", "README.md", "llms.txt"
+)
+
+
+def _privacy_guard_findings(content: str) -> list[str]:
+    """Return privacy-pattern categories found in one synthetic or real text."""
+    findings = [
+        category
+        for category, pattern in _PRIVACY_PATH_PATTERNS
+        if pattern.search(content)
+    ]
+    for match in _PRIVACY_NUMERIC_ID.finditer(content):
+        if match.group(1) not in _PRIVACY_ALLOWED_TEST_IDS:
+            findings.append("numeric_account_identifier")
+            break
+    return findings
+
+
+def _privacy_structural_scan() -> list[str]:
+    """Scan runtime, contract, schema, docs, and root Markdown; tests excluded."""
+    candidates = {REPO / "all.python"}
+    candidates.update((REPO / "fpl_skill").rglob("*.py"))
+    for dirname in ("contracts", "schemas", "docs"):
+        directory = REPO / dirname
+        if directory.is_dir():
+            candidates.update(path for path in directory.rglob("*") if path.is_file())
+    candidates.update(REPO / name for name in _PRIVACY_ROOT_MARKDOWN)
+
+    findings = []
+    for path in sorted(candidates):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(REPO).as_posix()
+        content = path.read_text(encoding="utf-8", errors="replace")
+        for category in _privacy_guard_findings(content):
+            findings.append(f"{relative}:{category}")
+    return findings
+
+
+def test_privacy_structural_guard_rejects_repository_leaks():
+    findings = _privacy_structural_scan()
+    assert findings == [], "privacy structural guard findings: " + ", ".join(findings)
+
+
+@pytest.mark.parametrize(
+    "synthetic_text, expected_category",
+    [
+        ("source = '/Users/example/project'", "absolute_user_path"),
+        ("headers = {'Cookie': 'csrftoken=synthetic'}", "session_cookie"),
+        ("team_id = 7654321", "numeric_account_identifier"),
+    ],
+)
+def test_privacy_guard_rejects_synthetic_red_cases(synthetic_text, expected_category):
+    assert expected_category in _privacy_guard_findings(synthetic_text)
+
+
+@pytest.mark.parametrize(
+    "synthetic_text",
+    ["team_id = '<TEAM_ID>'", "root = '$PROJECT_ROOT'", "team_id = 12345"],
+)
+def test_privacy_guard_accepts_synthetic_green_cases(synthetic_text):
+    assert _privacy_guard_findings(synthetic_text) == []
+
+
+def test_privacy_canary_is_absent_from_all_tracked_files():
+    canary = os.environ.get("FPL_PRIVACY_CANARY_ID", "").strip()
+    if not canary:
+        pytest.skip("FPL_PRIVACY_CANARY_ID is unset; operator canary is optional")
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=REPO, check=True, capture_output=True
+    ).stdout.split(b"\0")
+    leaked = []
+    encoded_canary = canary.encode("utf-8")
+    for raw_path in tracked:
+        if not raw_path:
+            continue
+        path = REPO / raw_path.decode("utf-8", errors="surrogateescape")
+        if path.is_file() and encoded_canary in path.read_bytes():
+            leaked.append(path.relative_to(REPO).as_posix())
+    assert leaked == [], "operator privacy canary found in tracked files: " + ", ".join(leaked)
+
+
 def test_all_python_dry_run_does_not_apply(monkeypatch):
     monkeypatch.setenv("FPL_TEAM_ID", "YOUR_ENTRY_ID")
     module = _load_all_python()
     assert module.main([]) == 0
-    assert "1512229" not in (REPO / "all.python").read_text(encoding="utf-8")
+    assert "<TEAM_ID>" not in (REPO / "all.python").read_text(encoding="utf-8")
 
 
 def test_prediction_blocks_future_snapshots():
