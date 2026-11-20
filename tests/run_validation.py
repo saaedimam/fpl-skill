@@ -694,6 +694,11 @@ def run_all():
     run_30_regression_tests()
     run_optimizer_integrity_tests()
 
+    synthetic_report = "synthetic structural sample; not a track record"
+    assert "synthetic" in synthetic_report
+    assert "not a track record" in synthetic_report
+    record("EVIDENCE-BOUNDARY-SYNTHETIC", True, synthetic_report)
+
     for r in results:
         print(f"{r['test_id']:<22} {'PASS' if r['status'] == 'PASS' else 'FAIL'}  {r['detail']}")
 
@@ -706,7 +711,3 @@ if __name__ == "__main__":
     success = run_all()
     sys.exit(0 if success else 1)
 
-
-# Evidence boundary: synthetic structural checks are not a predictive track record.
-def test_synthetic_not_track_record():
-    record("EVIDENCE-BOUNDARY-SYNTHETIC", True, "synthetic sample; not a track record")
