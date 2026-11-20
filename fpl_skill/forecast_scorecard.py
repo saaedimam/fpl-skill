@@ -106,7 +106,7 @@ class ForecastScorecard:
                 "reason": f"No completed records found{' for GW ' + str(gw) if gw is not None else ' — season is fresh'}"
             }
         
-        if not self.sample_gate_passed(records) and gw is None:
+        if not self.sample_gate_passed(records):
             return {
                 "status": "INSUFFICIENT_SAMPLE",
                 "reason": f"Need 6 completed GWs or 20 pairs; have {completed_gws} GWs, {len(records)} pairs"
@@ -147,7 +147,21 @@ class ForecastScorecard:
                 cat_mae = sum(cat_abs) / len(cat_abs) if cat_abs else 0.0
                 cat_rmse = (sum(e**2 for e in cat_abs) / len(cat_abs)) ** 0.5 if cat_abs else 0.0
                 cat_bias = sum(cat_signed) / len(cat_signed) if cat_signed else 0.0
+                category_records = [r for r in records if r.forecast_type == cat]
+                if not self.sample_gate_passed(category_records):
+                    breakdown[cat] = {
+                        "status": "INSUFFICIENT_SAMPLE",
+                        "count": len(cat_abs),
+                        "completed_gameweeks": len(self.completed_gameweeks(category_records)),
+                        "reason": (
+                            "Need 6 completed GWs or 20 pairs; have "
+                            f"{len(self.completed_gameweeks(category_records))} GWs, "
+                            f"{len(category_records)} pairs"
+                        ),
+                    }
+                    continue
                 breakdown[cat] = {
+                    "status": "READY",
                     "count": len(cat_abs),
                     "mae": round(cat_mae, 3),
                     "rmse": round(cat_rmse, 3),

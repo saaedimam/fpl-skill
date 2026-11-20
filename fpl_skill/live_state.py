@@ -3,7 +3,7 @@
 This module is pure logic: it performs no I/O and never contacts FPL.
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from hashlib import sha256
 from typing import Any, Mapping, Optional, Sequence
@@ -19,6 +19,16 @@ class FixtureStatus(str, Enum):
     POSTPONED = "POSTPONED"
     UNKNOWN = "UNKNOWN"
     CONFLICTED = "CONFLICTED"
+
+
+@dataclass(frozen=True)
+class FixturePayload:
+    """Raw official fixture response and the timestamp captured at retrieval."""
+
+    payload: bytes
+    retrieved_at: Optional[datetime]
+    endpoint: str
+    source: str = "official-fpl"
 
 
 @dataclass(frozen=True)
@@ -78,9 +88,10 @@ def classify_fixture_schedule(schedule: FixtureSchedule) -> FixtureStatus:
         return FixtureStatus.CONFLICTED
     if (
         record.source != "official-fpl"
-        or not record.endpoint
+        or record.endpoint != "/api/fixtures/"
         or record.retrieved_at is None
-        or record.observed_at is None
+        or record.retrieved_at.tzinfo is None
+        or record.retrieved_at.utcoffset() != timedelta(0)
         or not record.payload
     ):
         return FixtureStatus.UNKNOWN
@@ -136,13 +147,17 @@ def providers_are_independent(
 
     With just one upstream lineage supplied, independence is not established.
     """
-    if not source_a or not source_b or source_a == source_b:
+    normalized_source_a = str(source_a or "").strip().casefold()
+    normalized_source_b = str(source_b or "").strip().casefold()
+    normalized_upstream_a = str(upstream_a or "").strip().casefold()
+    normalized_upstream_b = str(upstream_b or "").strip().casefold()
+    if not normalized_source_a or not normalized_source_b:
         return False
-    if upstream_a is None and upstream_b is None:
-        return True
-    if upstream_a is None or upstream_b is None:
+    if normalized_source_a == normalized_source_b:
         return False
-    return upstream_a != upstream_b
+    if not normalized_upstream_a or not normalized_upstream_b:
+        return False
+    return normalized_upstream_a != normalized_upstream_b
 
 
 def resolve_provider_claims(claims: Sequence[Mapping[str, Any]]) -> dict[str, Any]:

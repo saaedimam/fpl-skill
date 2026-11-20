@@ -1,10 +1,13 @@
 import json, os
-from typing import Optional, List, Dict, Any, Sequence
+from typing import Optional, List, Dict, Any, Sequence, Mapping
 from fpl_skill.account_adapter import FPLAccountAdapter
 from fpl_skill.api import calculate_player_gw_ep, build_fixture_map, select_best_legal_xi
 from fpl_skill.current_data import (
     CurrentDataError, assert_future_gameweeks, assert_gameweeks_have_fixtures,
-    assert_projections_valid, blank_teams,
+    assert_projections_valid, blank_teams, build_fixture_schedules,
+)
+from fpl_skill.live_state import (
+    FixtureSchedule, FixtureStatus, classify_fixture_schedule,
 )
 from fpl_skill.evidence_policy import evaluate_evidence
 from fpl_skill.historical.exceptions import SnapshotIntegrityError, TemporalLeakageError
@@ -15,6 +18,7 @@ class PredictionEngine:
         self.adapter = FPLAccountAdapter(team_id)
         self.bootstrap = self.adapter.get_bootstrap()
         self.fixtures = self.adapter.get_fixtures()
+        self.fixture_snapshot = getattr(self.adapter, "fixture_snapshot", None)
         self.events = self.bootstrap.get("events")
         # Current-data gate: live /api/fixtures/ schema, keyed by team id, name and short_name.
         self.fixture_map = build_fixture_map(self.fixtures, teams=self.bootstrap.get("teams"))
@@ -29,6 +33,9 @@ class PredictionEngine:
         proposed_action: Optional[str] = None,
         decision_cutoff_utc: Optional[str] = None,
         historical_snapshots: Optional[Sequence[Any]] = None,
+        fixture_schedules: Optional[Mapping[Any, FixtureSchedule]] = None,
+        published_gameweeks: Optional[Sequence[int]] = None,
+        complete_gameweeks: Optional[Sequence[int]] = None,
     ):
         guard = _guard_prediction_inputs(
             evidence_claims=evidence_claims,
@@ -67,6 +74,61 @@ class PredictionEngine:
         blank = set(blank_teams(self.fixture_map, target_gw, {p.get("team") for p in normalized_squad}))
         blank_players = [p["player_id"] for p in normalized_squad if p.get("team") in blank]
 
+        # Absence from the aggregate fixture map is not proof of a blank.
+        # Require a team/event-bound, complete official schedule for each
+        # absent team before allowing zero-fixture players into the prediction.
+        teams = (getattr(self, "bootstrap", None) or {}).get("teams", [])
+        team_ids = {}
+        for team in teams:
+            if team.get("id") is None:
+                continue
+            for key in (team.get("id"), team.get("name"), team.get("short_name")):
+                if key is not None:
+                    team_ids[key] = int(team["id"])
+
+        if (
+            fixture_schedules is None
+            and getattr(self, "fixture_snapshot", None) is not None
+            and published_gameweeks is not None
+            and complete_gameweeks is not None
+        ):
+            fixture_schedules = build_fixture_schedules(
+                self.fixture_snapshot,
+                event_ids=[target_gw],
+                teams=(getattr(self, "bootstrap", None) or {}).get("teams", []),
+                published_event_ids=set(published_gameweeks),
+                complete_event_ids=set(complete_gameweeks),
+            )
+
+        fixture_schedule_status = {}
+        for team_key in blank:
+            team_id = team_ids.get(team_key)
+            if team_id is None and isinstance(team_key, int):
+                team_id = team_key
+            if team_id is None:
+                raise CurrentDataError(
+                    f"Fixture provenance cannot resolve team {team_key!r} for GW{target_gw}; "
+                    "refusing to infer a blank."
+                )
+            schedule = (fixture_schedules or {}).get((target_gw, team_id))
+            if schedule is None:
+                schedule = (fixture_schedules or {}).get(team_id)
+            if schedule is None:
+                raise CurrentDataError(
+                    f"Fixture provenance is required to classify team {team_id} in GW{target_gw}; "
+                    "absence from the aggregate fixture map is not proof of a blank."
+                )
+            if schedule.event_id != target_gw or schedule.team_id != team_id:
+                status = FixtureStatus.CONFLICTED
+            else:
+                status = classify_fixture_schedule(schedule)
+            fixture_schedule_status[team_id] = status.value
+            if status is not FixtureStatus.BLANK:
+                raise CurrentDataError(
+                    f"Fixture provenance for team {team_id} in GW{target_gw} classified "
+                    f"{status.value}; refusing to infer a blank."
+                )
+
         assert_projections_valid(
             {p["player_id"]: calculate_player_gw_ep(p, target_gw, self.fixture_map) for p in normalized_squad},
             context=f"GW{target_gw} prediction",
@@ -94,6 +156,7 @@ class PredictionEngine:
             "total_ep": xi_res.get("total_ep", 0.0),
             "target_gw": target_gw,
             "blank_gameweek_players": blank_players,
+            "fixture_schedule_status": fixture_schedule_status,
         }
         if "evidence" in guard:
             result["evidence"] = guard["evidence"]

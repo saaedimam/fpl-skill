@@ -12,13 +12,13 @@ planning path (prediction, transfers, optimizer):
   (``is_next``/``is_current``) instead of a hardcoded GW range.
 * ``assert_future_gameweeks`` refuses planning windows containing finished GWs.
 * ``assert_projections_valid`` refuses missing, NaN or all-zero projections.
-* ``blank_teams`` reports genuine blank gameweeks explicitly.
+* ``blank_teams`` identifies candidate blanks; provenance gates must certify them.
 """
 from __future__ import annotations
 
 import json
 import math
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 LIVE_FIXTURE_KEYS = ("event", "team_h", "team_a")
 
@@ -102,7 +102,8 @@ def build_fixture_map(fixtures: Any, teams: Optional[Iterable[Mapping[str, Any]]
     name). When bootstrap ``teams`` are given, id, name and short_name are all
     registered so ``calculate_player_gw_ep``'s ``player["team"]`` lookup works
     for raw bootstrap elements (int id) and normalized players (name) alike.
-    Teams absent from a GW that has fixtures are blank (see ``blank_teams``).
+    Teams absent from a GW are candidate blanks only; ``PredictionEngine``
+    requires an authoritative complete per-team schedule before classifying them.
     """
     aliases = _team_aliases(teams)
     fm: Dict[int, Dict[Any, List[Dict[str, Any]]]] = {gw: {} for gw in range(1, 39)}
@@ -114,6 +115,97 @@ def build_fixture_map(fixtures: Any, teams: Optional[Iterable[Mapping[str, Any]]
             for key in aliases.get(team, [team]):
                 fm[gw].setdefault(key, []).append(entry)
     return fm
+
+
+
+def build_fixture_schedules(
+    snapshot: Any,
+    *,
+    event_ids: Sequence[int],
+    teams: Sequence[Mapping[str, Any]],
+    published_event_ids: Set[int],
+    complete_event_ids: Set[int],
+) -> Dict[Tuple[int, int], Any]:
+    """Build per-team schedules from an exact raw fixture response.
+
+    Publication and completeness are explicit upstream evidence. An absent
+    team row is never itself evidence that the schedule is complete or blank.
+    """
+    from fpl_skill.live_state import FixtureSchedule, RetrievalRecord
+
+    if not isinstance(snapshot.payload, bytes) or not snapshot.payload:
+        raise CurrentDataError("Raw fixture payload bytes are required for provenance.")
+    retrieved_at = snapshot.retrieved_at
+    if retrieved_at is not None and (
+        retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None
+        or retrieved_at.utcoffset().total_seconds() != 0
+    ):
+        raise ValueError("retrieved_at must be timezone-aware UTC")
+    if snapshot.endpoint != "/api/fixtures/":
+        raise CurrentDataError("Fixture provenance requires the canonical /api/fixtures/ endpoint.")
+    try:
+        fixtures = json.loads(snapshot.payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CurrentDataError("Official fixture payload is not valid UTF-8 JSON.") from exc
+    if not isinstance(fixtures, list):
+        raise CurrentDataError("Official fixture payload must be a JSON list.")
+
+    normalized_events = {int(event_id) for event_id in event_ids}
+    normalized_teams = [int(team["id"]) for team in teams if team.get("id") is not None]
+    if not normalized_events or not normalized_teams:
+        raise CurrentDataError("Event IDs and bootstrap team IDs are required for fixture schedules.")
+    if len(normalized_teams) != len(set(normalized_teams)):
+        raise CurrentDataError("Bootstrap team IDs are duplicated; fixture provenance is conflicted.")
+
+    rows_by_event_team: Dict[Tuple[int, int], List[Mapping[str, Any]]] = {}
+    events_with_fixture_rows = set()
+    unassigned_event_teams = set()
+    for fixture in fixtures:
+        if not isinstance(fixture, Mapping):
+            raise CurrentDataError("Official fixture payload contains a non-object row.")
+        event = fixture.get("event")
+        if event is None:
+            if fixture.get("team_h") is None or fixture.get("team_a") is None:
+                raise CurrentDataError("Unassigned fixture row is missing team IDs.")
+            for team_id in (int(fixture["team_h"]), int(fixture["team_a"])):
+                if team_id not in normalized_teams:
+                    raise CurrentDataError(f"Unassigned fixture references unknown bootstrap team {team_id}.")
+                unassigned_event_teams.add(team_id)
+            continue
+        event = int(event)
+        if event not in normalized_events:
+            continue
+        events_with_fixture_rows.add(event)
+        if fixture.get("id") is None or fixture.get("team_h") is None or fixture.get("team_a") is None:
+            raise CurrentDataError("Official fixture row is missing ID, home team, or away team.")
+        for team_id in (int(fixture["team_h"]), int(fixture["team_a"])):
+            if team_id not in normalized_teams:
+                raise CurrentDataError(f"Fixture references unknown bootstrap team {team_id}.")
+            rows_by_event_team.setdefault((event, team_id), []).append(dict(fixture))
+
+    schedules = {}
+    for event_id in sorted(normalized_events):
+        for team_id in sorted(normalized_teams):
+            retrieval = RetrievalRecord(
+                event_id=event_id,
+                team_id=team_id,
+                endpoint=snapshot.endpoint,
+                retrieved_at=retrieved_at,
+                observed_at=None,
+                payload=snapshot.payload,
+                source=snapshot.source,
+            )
+            schedules[(event_id, team_id)] = FixtureSchedule(
+                event_id=event_id,
+                team_id=team_id,
+                fixtures=tuple(rows_by_event_team.get((event_id, team_id), ())),
+                published=event_id in published_event_ids,
+                complete=(event_id in complete_event_ids and event_id in events_with_fixture_rows),
+                retrieval=retrieval,
+                source=snapshot.source,
+                conflicted=team_id in unassigned_event_teams,
+            )
+    return schedules
 
 
 def _events(events_or_bootstrap: Any) -> List[Mapping[str, Any]]:
@@ -163,7 +255,7 @@ def assert_gameweeks_have_fixtures(fixture_map: Mapping[int, Mapping[Any, Any]],
 
 
 def blank_teams(fixture_map: Mapping[int, Mapping[Any, Any]], gw: int, team_keys: Iterable[Any]) -> List[Any]:
-    """Teams (from ``team_keys``) with no fixture in ``gw``. Raises if ``gw`` has no fixtures at all."""
+    """Return teams absent from ``gw`` as candidate blanks, not proven blanks."""
     assert_gameweeks_have_fixtures(fixture_map, [gw])
     gwmap = fixture_map[gw]
     return sorted({t for t in team_keys if not gwmap.get(t)}, key=str)

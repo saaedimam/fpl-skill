@@ -69,6 +69,32 @@ def test_provider_independence_requires_distinct_upstream_lineage():
     assert not providers_are_independent("official-fpl", "fpl-mirror", "fpl-api", "fpl-api")
     assert providers_are_independent("official-fpl", "club-release", "fpl-api", "club-site")
 
+
+@pytest.mark.parametrize(
+    "upstream_a,upstream_b",
+    [
+        (None, None),
+        ("", "club-site"),
+        ("fpl-api", ""),
+        ("fpl-api", "fpl-api"),
+    ],
+)
+def test_provider_independence_fails_closed_without_distinct_upstream_lineage(
+    upstream_a, upstream_b
+):
+    assert not providers_are_independent(
+        "source-one.example", "source-two.example", upstream_a, upstream_b
+    )
+
+
+def test_provider_independence_requires_explicit_distinct_nonempty_lineages():
+    assert providers_are_independent(
+        "source-one.example", "source-two.example", "fpl-api", "club-site"
+    )
+    assert not providers_are_independent(
+        "source-one.example", "source-two.example", " FPL-API ", "fpl-api"
+    )
+
 def test_official_fpl_is_canonical_and_aggregator_cannot_override():
     claims = [
         {"source":"aggregator", "value":{"bank":10}},

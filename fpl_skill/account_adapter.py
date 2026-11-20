@@ -1,4 +1,5 @@
 import subprocess, json, hashlib, urllib.request, datetime, os
+from fpl_skill.live_state import FixturePayload
 from typing import Dict, Any, List, Optional
 from urllib.error import HTTPError
 
@@ -48,9 +49,23 @@ class FPLAccountAdapter:
         with urllib.request.urlopen(f"{self.base_url}/bootstrap-static/", timeout=10) as resp:
             return json.loads(resp.read().decode('utf-8'))
 
-    def get_fixtures(self) -> List[Dict[str, Any]]:
+    def get_fixture_snapshot(self) -> FixturePayload:
+        """Fetch the canonical fixture endpoint, retaining exact bytes and retrieval time."""
+        endpoint = "/api/fixtures/"
         with urllib.request.urlopen(f"{self.base_url}/fixtures/", timeout=10) as resp:
-            return json.loads(resp.read().decode('utf-8'))
+            payload = resp.read()
+            retrieved_at = datetime.datetime.now(datetime.timezone.utc)
+        return FixturePayload(
+            payload=payload,
+            retrieved_at=retrieved_at,
+            endpoint=endpoint,
+            source="official-fpl",
+        )
+
+    def get_fixtures(self) -> List[Dict[str, Any]]:
+        snapshot = self.get_fixture_snapshot()
+        self.fixture_snapshot = snapshot
+        return json.loads(snapshot.payload.decode("utf-8"))
 
     def _fetch_entry(self) -> Optional[Dict[str, Any]]:
         try:
