@@ -50,7 +50,7 @@ jobs:
           # Use passwordless sudo + root network namespace; hosted runners reject
           # unprivileged user namespaces (uid_map Operation not permitted).
           PYTHON_BIN="$(command -v python)"
-          sudo unshare --net -- env \\
+          sudo unshare --net -- env \
             PATH="$PATH" \\
             LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \\
             PYTHON_BIN="$PYTHON_BIN" \\
@@ -58,7 +58,7 @@ jobs:
       - name: Run full pytest suite in network namespace
         run: |
           PYTHON_BIN="$(command -v python)"
-          sudo unshare --net -- env \\
+          sudo unshare --net -- env \
             PATH="$PATH" \\
             LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \\
             PYTHON_BIN="$PYTHON_BIN" \\
