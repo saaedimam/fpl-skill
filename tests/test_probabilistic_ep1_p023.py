@@ -82,3 +82,17 @@ def test_none_chance_of_playing_safe():
                                      'expected_goals': None, 'expected_assists': None})
     d2 = eng.generate_distribution(inj)
     assert d2.p50 == 0.0
+
+
+def test_zero_chance_of_playing_is_not_treated_as_unknown_or_100_percent():
+    from probabilistic_ep1 import ProbabilisticEPEngine, DistributionModelInputs, PlayerState
+    kw = dict(player_id=3, position="FWD", status=PlayerState.AVAILABLE,
+              team="ARS", opponent="CHE", gw=1, minutes_played_last_3=270,
+              chance_of_playing_next_round=0, form=5.0, selected_by_percent=20.0,
+              fixture_difficulty=3, is_home=True, opponent_strength_attack=1050,
+              opponent_strength_defence=900, team_goals_per_gw=1.8,
+              team_conceded_per_gw=1.1, expected_goals=0.2, expected_assists=0.1)
+    engine = ProbabilisticEPEngine()
+    inputs = DistributionModelInputs(**kw)
+    assert engine._confidence_level(inputs) == "medium"
+    assert engine._confidence_level(DistributionModelInputs(**{**kw, "chance_of_playing_next_round": None})) == "medium"
