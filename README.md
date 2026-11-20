@@ -27,6 +27,21 @@ FPL Skill combines official-data ingestion, player-point distributions, rank-awa
 
 Archived skill files are historical compatibility material only. They must not be treated as independent or overriding instructions.
 
+## Documentation map (Diátaxis-aligned)
+
+Use the document type that matches the task; these files complement the active agent entrypoint rather than replacing it.
+
+| Type | Documents | Purpose |
+| --- | --- | --- |
+| Contributor and agent governance | [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), [`CHATGPT.md`](CHATGPT.md) | Operating constraints, evidence rules, review boundaries, and handoff requirements |
+| Explanation / decision record | [`docs/adr/001-fail-closed-execution-firewall.md`](docs/adr/001-fail-closed-execution-firewall.md) | Rationale and evidence for the fail-closed account-write boundary and CI test isolation |
+| Reference | [`contracts/`](contracts/), [`schemas/`](schemas/) | Normative interfaces, invariants, and data shapes |
+| Evaluation protocol | [`docs/evaluation/`](docs/evaluation/) | Preregistration, dataset constraints, and scientific evaluation boundaries |
+
+## Scientific Evidence Boundary
+
+Software tests, synthetic fixtures, metric definitions, and retrospective examples establish software behavior or structural validity; they do not establish predictive competence, calibration accuracy, decision uplift, or FPL-winning capability. Those claims require reproducible, leakage-resistant, out-of-sample evaluation against actual outcomes. When outcomes or required joins are missing, report `NO_TRACK_RECORD_YET` or `INSUFFICIENT_DATA`; do not claim `CALIBRATED` or `READY`, and do not impute missing outcomes as `0.0`.
+
 ## Safety and execution policy
 
 Account mutation is deliberately unavailable.
@@ -45,32 +60,23 @@ Account mutation is deliberately unavailable.
 
 The approval issuer and verifier remain as cryptographic evidence and regression-test components. Their presence does **not** mean that live writes are supported. Do not put FPL credentials, cookies, private keys, or approval material in source control, prompts, logs, or issue reports.
 
+The `release/v2.1.0-rc1` reference at `60032d51f16b2646aea1ee95f1cd35f440d1e5d0` is under a repository-governance hold. GitHub currently reports `protected: false`; do not mistake the governance hold for server-side branch protection.
+
 ## Architecture
 
-```text
-Official FPL endpoints
-        |
-        +--> Public data adapter / authenticated GET adapter
-        |
-        v
-Normalization and current-data validation
-        |
-        +--> Historical snapshots and temporal firewall
-        +--> Observation, polling, and event store
-        |
-        v
-Player probability distributions
-        |
-        +--> Rank-aware objectives
-        +--> Transfer and option-value analysis
-        +--> Lineup / captain / bench recommendations
-        +--> CBC-backed wildcard MILP
-        |
-        v
-Decision output + forecast scorecard
-        |
-        v
-No account-write path (fail closed)
+```mermaid
+flowchart TD
+    A[Official FPL endpoints] --> B[Public data adapter / authenticated GET adapter]
+    B --> C[Normalization and current-data validation]
+    C --> D[Historical snapshots and temporal firewall]
+    C --> E[Observation, polling, and event store]
+    D --> F[Player probability distributions]
+    E --> F
+    F --> G[Rank-aware objectives and transfer analysis]
+    F --> H[Lineup, captain, bench, and wildcard optimization]
+    G --> I[Decision output and forecast scorecard]
+    H --> I
+    I --> J[Account-write boundary: always refuse transmission]
 ```
 
 ### Expected points are not P50
@@ -103,10 +109,14 @@ source .venv/bin/activate
 
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install -e .
+pip install .
 ```
 
-The package exposes the `fpl` command. The project dependencies are declared in `pyproject.toml`; `requirements.txt` delegates to the repository's pinned compatibility lockfile.
+The package exposes the `fpl` command. The commands above match the CI installation sequence; `requirements.txt` delegates to the repository's pinned compatibility lockfile. For editable local development, install the declared development extra instead:
+
+```bash
+pip install -e ".[dev]"
+```
 
 ## Configuration
 
@@ -184,16 +194,41 @@ python -m pytest tests/ -v -ra
 python -m compileall fpl_skill
 ```
 
-For stronger local isolation on Linux, use a network namespace when your system permits it:
+The exact CI isolation sequence uses two separate fresh namespaces. First, CI proves external TCP egress is blocked:
 
 ```bash
-sudo unshare --net -- env PATH="$PATH" bash -c \
-  'ip link set lo up && python -m pytest tests/ -v -ra'
+PYTHON_BIN="$(command -v python)"
+sudo unshare --net -- env \
+  PATH="$PATH" \
+  LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+  PYTHON_BIN="$PYTHON_BIN" \
+  bash -c 'ip link set lo up && "$PYTHON_BIN" tests/prove_netns_egress_denied.py'
 ```
+
+Then CI runs pytest in a separate loopback-only namespace with `FPL_TEST_NETNS=1`:
+
+```bash
+PYTHON_BIN="$(command -v python)"
+sudo unshare --net -- env \
+  PATH="$PATH" \
+  LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+  PYTHON_BIN="$PYTHON_BIN" \
+  FPL_TEST_NETNS=1 \
+  bash -c 'ip link set lo up && "$PYTHON_BIN" -m pytest tests/ -ra'
+```
+
+See [`tests/README.md`](tests/README.md) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the exact CI implementation. These namespaces are CI test-isolation controls, not a production runtime sandbox.
 
 The test monkeypatches in `tests/network_isolation.py` are defense in depth, not a kernel security boundary. C extensions, subprocesses, `ctypes`/libc calls, previously bound methods, and alternate HTTP clients can bypass Python-level patches. Use the network namespace for a hard egress boundary.
 
-`FPL_ALLOW_TEST_NETWORK=1` disables the pytest monkeypatch only for local runs and emits a warning. It is ignored when `CI` or `GITHUB_ACTIONS` is set. Do not use it for routine tests. Live acceptance scripts are manual and must never run against a real account in CI.
+Disabling the local pytest monkeypatch requires **both** of the following exact environment values:
+
+```bash
+FPL_ALLOW_TEST_NETWORK=1
+FPL_CONFIRM_LIVE_NETWORK=I-understand-this-is-not-a-security-boundary
+```
+
+`FPL_ALLOW_TEST_NETWORK=1` alone is insufficient. Both values are ignored when `CI` or `GITHUB_ACTIONS` is set. This opt-out disables only the Python monkeypatch on a developer machine; it does not disable a network namespace or enable production account writes. Do not use it for routine tests. `FPL_LIVE_TEST=1` is a separate opt-in live-data test flag and must remain unset for automated CI and under the current account-write governance hold.
 
 ## Release integrity
 
@@ -205,11 +240,13 @@ The release verifier checks:
 3. Every registered file's SHA-256 matches its declared hash.
 4. The derived release hash matches the manifest.
 
-Run the verifier:
+Run the read-only verifier (the exact command used by CI):
 
 ```bash
 python -c "from tests.compute_release_hash import verify_release_integrity; verify_release_integrity()"
 ```
+
+This command checks existing manifest coverage, canonical raw-byte file hashes, and the derived release hash without writing files. The separate `python3 tests/compute_release_hash.py` command verifies reproducibility and writes `tests/release_hash.json`; it does not regenerate the root or packaged manifest metadata.
 
 When a registered file changes, regenerate the release metadata with:
 
@@ -264,4 +301,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Evidence boundary
 
-No claim of predictive competence, decision uplift, or FPL-winning capability may be made from software tests, synthetic fixtures, metric definitions, or retrospective examples alone. Such claims require reproducible, leakage-resistant, out-of-sample evidence.
+See the [Scientific Evidence Boundary](#scientific-evidence-boundary) above. Test success and synthetic structural validation are not a predictive track record.
