@@ -1,6 +1,6 @@
 {
-  "release_hash": "a1a570b3fb8b0e65fb8d2712f99d26611ed20f11eb7e5a8742782de15465a17f",
-  "files_hashed": 31,
+  "release_hash": "04a1ea78bd337667f8a9d9274673cf60a21f8b2698f92b39d7734dda4e4cd18d",
+  "files_hashed": 40,
   "reproducible": true,
   "method": "SHA256 over sorted path:sha256\\n records declared by MANIFEST.v2.json"
 }
