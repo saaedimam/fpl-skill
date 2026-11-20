@@ -142,9 +142,10 @@ class TestCaptainBacktest:
     def test_certificate_status_calibrated_when_ready(self, monkeypatch):
         """Status flips to CALIBRATED when metrics are READY."""
         bt = self._make_backtest(monkeypatch)
+        bt._verified_actual_outcomes = True
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 2.1, "rmse": 2.8, "signed_bias": -0.3,
-                         "sample_size": 30, "completed_gameweeks": 6, "actual_outcomes_verified": True},
+                         "sample_size": 30, "completed_gameweeks": 6},
              "captain_accuracy_pct": 55.0},
             data_hash="abc123"
         )
@@ -294,9 +295,10 @@ class TestTransferBacktest:
 
     def test_certificate_calibrated_when_ready(self, monkeypatch):
         bt = self._make_backtest(monkeypatch)
+        bt._verified_actual_outcomes = True
         cert = bt.generate_certificate(
             {"metrics": {"status": "READY", "mae": 3.0, "rmse": 4.0,
-                         "signed_bias": 0.5, "sample_size": 25, "completed_gameweeks": 7, "actual_outcomes_verified": True},
+                         "signed_bias": 0.5, "sample_size": 25, "completed_gameweeks": 7},
              "profitable_transfers_pct": 62.0},
             data_hash="ghi789"
         )
