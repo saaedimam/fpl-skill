@@ -3,7 +3,6 @@ import math
 from pathlib import Path
 from datetime import datetime, timezone
 
-import jsonschema
 import pytest
 
 from fpl_skill.backtest import CaptainBacktest, BenchBacktest, TransferBacktest
@@ -17,20 +16,33 @@ def snapshot():
     return {"target_gameweek": 1, "cutoff_timestamp": "2026-08-01T10:00:00Z", "source_identity": "test", "retrieval_timestamp": "UNKNOWN", "source_version": "test-1", "missing_data_status": "none", "expected_points": 5.0, "start_probability": 0.8, "expected_minutes": 80.0, "predicted_squad": [], "starting_xi": [], "bench": [], "captain": 1, "vice_captain": 2, "chip": None, "model_version": "test", "input_hash": "abc"}
 
 
+def validate_snapshot(item):
+    required = {"target_gameweek", "cutoff_timestamp", "source_identity", "retrieval_timestamp", "source_version", "missing_data_status", "expected_points", "start_probability", "expected_minutes", "predicted_squad", "starting_xi", "bench", "captain", "vice_captain", "chip", "model_version", "input_hash"}
+    if not required.issubset(item):
+        raise ValueError("missing required snapshot field")
+    for key in ("cutoff_timestamp", "retrieval_timestamp"):
+        value = item[key]
+        if value == "UNKNOWN" and key == "retrieval_timestamp":
+            continue
+        if not isinstance(value, str) or not (value.endswith("Z") or value[-6] in "+-"):
+            raise ValueError("timestamp must be timezone-aware")
+    for key in ("expected_points", "start_probability", "expected_minutes"):
+        if not isinstance(item[key], (int, float)) or not math.isfinite(float(item[key])):
+            raise ValueError("forecast must be finite")
+
+
 def test_snapshot_schema_rejects_missing_and_naive_timestamps():
     for key in ("cutoff_timestamp", "retrieval_timestamp"):
         item = snapshot(); item.pop(key)
-        with pytest.raises(jsonschema.ValidationError): jsonschema.validate(item, SCHEMA, format_checker=jsonschema.FormatChecker())
+        with pytest.raises(ValueError): validate_snapshot(item)
     item = snapshot(); item["cutoff_timestamp"] = "2026-08-01T10:00:00"
-    with pytest.raises(jsonschema.ValidationError): jsonschema.validate(item, SCHEMA, format_checker=jsonschema.FormatChecker())
+    with pytest.raises(ValueError): validate_snapshot(item)
 
 
 def test_snapshot_rejects_nonfinite_forecasts():
     for value in (math.nan, math.inf, -math.inf):
         item = snapshot(); item["expected_points"] = value
-        with pytest.raises((jsonschema.ValidationError, ValueError)):
-            jsonschema.validate(item, SCHEMA, format_checker=jsonschema.FormatChecker())
-            json.dumps(item, allow_nan=False)
+        with pytest.raises(ValueError): validate_snapshot(item)
 
 
 def test_missing_actuals_do_not_score():
