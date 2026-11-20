@@ -17,6 +17,20 @@ from fpl_skill.probabilistic_ep1 import (
 from fpl_skill.optimizer import build_and_solve
 
 
+def _offline_transfer_intelligence():
+    """Build the transfer facade without creating network-backed API clients."""
+    ti = TransferIntelligence.__new__(TransferIntelligence)
+    ti.adapter = MagicMock()
+    ti.engine = MagicMock()
+    ti.engine.fixture_map = {}
+    ti.profile = {"last_deadline_bank": 0}
+    ti.elements = {
+        i: {"player_id": i, "web_name": f"P{i}", "position": "MID", "team": f"T{i}", "cost_m": 5.0}
+        for i in range(1, 16)
+    }
+    return ti
+
+
 # ---------------------------------------------------------------------------
 # 1. P0-BUG-001 & Account Adapter / Profile / Ownership Tests
 # ---------------------------------------------------------------------------
@@ -95,7 +109,7 @@ def test_account_adapter_ownership_state_lineage():
 # ---------------------------------------------------------------------------
 
 def test_transfer_intelligence_distinguishes_total_ep_and_gain():
-    ti = TransferIntelligence("12345")
+    ti = _offline_transfer_intelligence()
 
     # Mock state, squad, and find_best_one_ft
     mock_state = {
@@ -228,8 +242,15 @@ def test_cli_verify_and_calibrate():
     assert res.exit_code == 1
     assert "FPL_TEAM_ID not set" in res.output
 
-    # Test verify with FPL_TEAM_ID
-    res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
+    # Test verify with FPL_TEAM_ID using mocked read-only state.
+    with patch.object(FPLAccountAdapter, "get_active_event_id", return_value=1), \
+         patch.object(FPLAccountAdapter, "get_state", return_value={
+             "ownership_state": "UNAVAILABLE",
+             "optimization_state": "OPTIMIZATION_BLOCKED",
+             "squad_ids": [],
+             "data_mode": "UNAVAILABLE",
+         }):
+        res_with_id = runner.invoke(cli, ["verify"], env={"FPL_TEAM_ID": "12345"})
     assert res_with_id.exit_code == 0
     assert "FPL ACCOUNT" in res_with_id.output
     assert "Team ID: 12345" in res_with_id.output
@@ -350,7 +371,9 @@ def test_probabilistic_ep_scenario_probabilities_invariants():
 # ---------------------------------------------------------------------------
 
 def test_optimizer_solve_false_does_not_claim_optimum():
-    res = build_and_solve(budget=100.0, solve=False)
+    from tests.test_optimizer_canonical import _synthetic_data
+    with patch("fpl_skill.optimizer.get_fpl_data", return_value=_synthetic_data()):
+        res = build_and_solve(budget=100.0, solve=False)
     assert res["status"] == "BUILT"
     assert res["objective"] is None
     assert res["squad_ids"] == []

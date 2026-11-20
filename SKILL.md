@@ -201,7 +201,7 @@ Downstream layers consume D3's classification and MUST NOT independently reclass
 
 Bonus allocation is deterministic from BPS rank:
 - unique 1st/2nd/3rd: 3/2/1
-- tie for 1st: tied top players receive 3; next distinct score receives 2; no further tier
+- tie for 1st: tied top players receive 3 each; the next distinct score receives 1 (competition ranking, e.g. `[3, 3, 1]`)
 - tie for 2nd: first receives 3; tied second receive 2; no third tier
 - tie for 3rd: first 3, second 2, tied third 1 each
 - all tied at top: tied players receive 3 each; no lower tier
@@ -820,3 +820,23 @@ Status:         ACTIVE / RELEASE_CANDIDATE
 ```
 
 No tag is created or moved for this RC. The existing `v2.0.0` tag remains untouched.
+
+
+## Revision 3 Reconciliation Contracts
+
+These contracts are fail-closed and are shared by every downstream consumer.
+
+### Fixture schedule provenance
+A zero-fixture list is not sufficient to establish `BLANK`. The authoritative Official FPL schedule must explicitly be published and complete for the event/team, with a non-duplicated fixture identity set. Classification is centralized as `FIXTURE_NOT_PUBLISHED`, `BLANK`, `FIXTURE_MISSING`, `POSTPONED`, `UNKNOWN`, or `CONFLICTED`. Preserve event ID, team ID, source endpoint, retrieval time, observation time, and payload SHA-256.
+
+### Chips and Free Hit restoration
+Wildcard and Free Hit inventories are independent in H1 (GW1–19) and H2 (GW20 onward). Unused H1 chips expire after the GW19 deadline; they do not carry into H2. At most one chip may be used per Gameweek, and Free Hit cannot be used in consecutive Gameweeks. Wildcard squad changes are permanent. Free Hit restores the pre-chip squad and saved free transfers after one Gameweek, with bank restoration adjusted for official selling-price changes.
+
+### Retrieval freshness and provider lineage
+The hard retrieval TTL is 5 minutes during a live Gameweek and 60 minutes between Gameweeks. A missing `retrieved_at` is invalid; never synthesize it from the current clock. Expired data may be retained only as `HISTORICAL_CONTEXT`, never `VERIFIED_CURRENT`. Official FPL is canonical for FPL state. Multiple endpoints or mirrors sharing the same upstream are one provider, not independent corroboration. Non-official sources cannot silently override Official FPL state.
+
+### Deterministic ranking and explicit horizons
+BPS bonus allocation uses competition ranking; a first-place tie awards `[3, 3, 1]`, not `[3, 3, 2]`. Optimizer tie-breaks compare unrounded decision value, downside protection, evidence coverage/confidence, lower cost, KEEP/NO ACTION, and finally canonical FPL element ID. Every new transfer comparison must receive an explicit requested horizon. Missing or incomplete required horizons return `INSUFFICIENT_DATA` and withhold comparisons; do not impute zero expected points. The legacy `gw3_4_ep` and `gw3_6_ep` fields remain strictly bound to GW3–4 and GW3–6.
+
+### Lineup and execution boundary
+A legal XI has exactly 1 GK, 3–5 DEF, 2–5 MID, and 1–3 FWD, and the XI/bench must form an exact disjoint partition of the 15-player squad. `chance_of_playing_next_round == 0` means unavailable. All account-write/live-mutation attempts raise `ExecutionDenied` after discarding transport/session references; no request is transmitted. Phase 3 remains STRICT HOLD.

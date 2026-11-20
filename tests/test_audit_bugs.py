@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import pytest
 from datetime import datetime
+from unittest.mock import patch
 
 # Ensure repo root and fpl_skill are in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -125,7 +126,9 @@ def test_audit_bug_f_cache_path():
 
 def test_audit_bug_e_optimizer_parameterization():
     """AUDIT-BUG-E: optimizer accepts budget, player_locks, horizon parameters without KeyError."""
-    res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
+    from tests.test_optimizer_canonical import _synthetic_data
+    with patch("fpl_skill.optimizer.get_fpl_data", return_value=_synthetic_data()):
+        res = build_and_solve(budget=100.0, player_locks=[], horizon=(3, 6), solve=False)
     assert res["status"] == "BUILT"
     assert res["variables_count"] > 0
     assert res["constraints_count"] > 0

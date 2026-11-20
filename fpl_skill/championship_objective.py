@@ -1,6 +1,7 @@
-"""Deterministic championship objective and horizon evaluation."""
+"""Deterministic championship objective, FPL bonus, and horizon contracts."""
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional, Sequence
+
 
 @dataclass(frozen=True)
 class HorizonEvaluation:
@@ -9,50 +10,95 @@ class HorizonEvaluation:
     total_ep: Optional[float]
     missing: tuple[int, ...]
 
+
 def bps_bonus_points(scores: Sequence[int]) -> list[int]:
-    """FPL bonus allocation by sorted BPS ranks, including tie positions."""
-    if not scores:
-        return []
-    ordered=sorted(set(scores), reverse=True)
-    award={}
-    if not ordered: return [0 for _ in scores]
-    if len(ordered)>=1: award[ordered[0]]=3
-    if len(ordered)>=2: award[ordered[1]]=2
-    if len(ordered)>=3: award[ordered[2]]=1
-    # Tied ranks consume places: 1st tie -> [3,3,1] by competition ranking.
-    # Determine each score's competition rank index.
-    return [3 if s==ordered[0] else 2 if len([x for x in scores if x>s])==1 else
-            1 if len([x for x in scores if x>s])==2 else 0 for s in scores]
+    """Competition-rank bonus allocation, including ties: first tie -> [3, 3, 1]."""
+    points: list[int] = []
+    for score in scores:
+        place = 1 + sum(1 for other in scores if other > score)
+        points.append(3 if place == 1 else 2 if place == 2 else 1 if place == 3 else 0)
+    return points
+
+
+def _confidence_value(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return {"high": 1.0, "medium": 0.5, "low": 0.0}.get(str(value).lower(), -1.0)
+
 
 def rank_candidates(candidates: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Stable lexicographic tie-break; canonical element_id is final key."""
-    def key(c):
-        action = str(c.get("action",""))
-        keep = 0 if action in ("KEEP","NO_ACTION") else 1
-        return (-float(c["value"]), -float(c["downside"]), -float(c["coverage"]),
-                float(c["cost"]), keep, int(c["element_id"]))
-    return [dict(x) for x in sorted(candidates,key=key)]
+    """Lexicographic ordering on raw values; FPL element ID is the final key."""
+    def key(candidate: Mapping[str, Any]) -> tuple[Any, ...]:
+        action = str(candidate.get("action", "")).upper()
+        prefer_keep = 0 if action in {"KEEP", "NO_ACTION"} else 1
+        return (
+            -float(candidate["value"]),              # unrounded decision value
+            -float(candidate["downside"]),           # higher downside protection
+            -float(candidate["coverage"]),            # stronger evidence coverage
+            -_confidence_value(candidate.get("confidence", "low")),
+            float(candidate["cost"]),                 # lower cost
+            prefer_keep,                              # no action when truly tied
+            int(candidate["element_id"]),             # canonical final tie-break
+        )
+    return [dict(candidate) for candidate in sorted(candidates, key=key)]
+
 
 def classic_league_transfer_count(history: Iterable[Mapping[str, Any]]) -> int:
-    return sum(int(x.get("transfers",0) or 0) for x in history
-               if str(x.get("chip") or "").lower() not in {"wildcard","free_hit"})
+    """Count transfers excluding the Wildcard and Free Hit transfer bursts."""
+    return sum(
+        int(item.get("transfers", 0) or 0)
+        for item in history
+        if str(item.get("chip") or "").lower() not in {"wildcard", "free_hit"}
+    )
 
-def evaluate_horizon(expected_points: Mapping[int,float], horizon: Optional[Sequence[int]]) -> HorizonEvaluation:
+
+def evaluate_horizon(
+    expected_points: Mapping[int, Any],
+    horizon: Optional[Sequence[int]],
+    *,
+    incomplete: Iterable[int] = (),
+) -> HorizonEvaluation:
+    """Aggregate only a caller-specified complete horizon; never impute missing EP."""
     if horizon is None:
         raise ValueError("requested horizon must be explicit")
-    required=tuple(int(x) for x in horizon)
-    if not required:
-        raise ValueError("requested horizon cannot be empty")
-    missing=tuple(g for g in required if g not in expected_points or expected_points[g] is None)
+    required = tuple(int(gameweek) for gameweek in horizon)
+    if not required or len(set(required)) != len(required):
+        raise ValueError("requested horizon must contain unique Gameweeks")
+    incomplete_set = set(int(gameweek) for gameweek in incomplete)
+    missing = []
+    values = []
+    for gameweek in required:
+        item = expected_points.get(gameweek)
+        if gameweek in incomplete_set or item is None or (
+            isinstance(item, Mapping)
+            and (item.get("status") not in {"READY", "VERIFIED_CURRENT", "BLANK"}
+                 or item.get("expected_points") is None)
+        ):
+            missing.append(gameweek)
+            continue
+        value = item.get("expected_points") if isinstance(item, Mapping) else item
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            missing.append(gameweek)
     if missing:
-        return HorizonEvaluation("INSUFFICIENT_DATA",required,None,missing)
-    return HorizonEvaluation("READY",required,sum(float(expected_points[g]) for g in required),())
+        return HorizonEvaluation("INSUFFICIENT_DATA", required, None, tuple(sorted(set(missing))))
+    return HorizonEvaluation("READY", required, sum(values), ())
 
-def compare_horizons(left: HorizonEvaluation,right: HorizonEvaluation) -> HorizonEvaluation:
-    if left.status!="READY" or right.status!="READY":
-        return HorizonEvaluation("INSUFFICIENT_DATA",left.horizon,None,
-             tuple(sorted(set(left.missing+right.missing))))
-    return HorizonEvaluation("READY",left.horizon,(left.total_ep or 0)-(right.total_ep or 0),())
 
-def evaluate_transfer_horizon(expected_points: Mapping[int,float], horizon: Sequence[int]) -> HorizonEvaluation:
-    return evaluate_horizon(expected_points,horizon)
+def compare_horizons(left: HorizonEvaluation, right: HorizonEvaluation) -> HorizonEvaluation:
+    if left.status != "READY" or right.status != "READY" or left.horizon != right.horizon:
+        missing = tuple(sorted(set(left.missing + right.missing)))
+        return HorizonEvaluation("INSUFFICIENT_DATA", left.horizon, None, missing)
+    assert left.total_ep is not None and right.total_ep is not None
+    return HorizonEvaluation("READY", left.horizon, left.total_ep - right.total_ep, ())
+
+
+def evaluate_transfer_horizon(
+    expected_points: Mapping[int, Any],
+    horizon: Sequence[int],
+    *,
+    incomplete: Iterable[int] = (),
+) -> HorizonEvaluation:
+    """Transfer decision entrypoint; required horizon must be explicitly supplied."""
+    return evaluate_horizon(expected_points, horizon, incomplete=incomplete)
