@@ -64,3 +64,11 @@ def test_verified_blank_zero_is_valid_but_unknown_zero_is_not():
 
 def test_legacy_transfer_entrypoint_and_horizon_names_remain_available():
     assert callable(find_best_one_ft)
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_explicit_horizon_ep_is_insufficient_data(bad_value):
+    result = evaluate_horizon({3: 2.0, 4: bad_value}, [3, 4])
+    assert result.status == "INSUFFICIENT_DATA"
+    assert result.total_ep is None
+    assert result.missing == (4,)
