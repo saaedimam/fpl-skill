@@ -4,7 +4,7 @@ $ python3 -m pytest tests/test_probabilistic_ep1_p023.py -v
 ============================= test session starts ==============================
 platform darwin -- Python 3.14.6, pytest-8.3.4, pluggy-1.5.0
 cachedir: .pytest_cache
-rootdir: /Users/ioriimasu/dev/fpl-skill
+rootdir: <REPO_ROOT>
 plugins: cov-7.1.0, asyncio-1.4.0, anyio-4.13.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 2 items                                                              
