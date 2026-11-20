@@ -1,0 +1,51 @@
+name: Reconciliation Branch CI
+
+on:
+  push:
+    branches: [fix/gw11-live-state-reconciliation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Revision 3 checks (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install offline test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install pytest
+      - name: Compile check
+        run: python -m compileall -q fpl_skill tests
+      - name: Release manifest verification
+        run: |
+          python tests/compute_release_hash.py
+          python - <<'PY'
+          import json, subprocess
+          m = json.load(open("MANIFEST.v2.json"))
+          r = json.load(open("tests/release_hash.json"))
+          assert m["parent"]["commit"] == "ac2e1b995f3cc6bf1eff7d017ffeddc8d6d2933c"
+          assert m["parent"]["sha256"] == "da2d9b04cb30c5bc12b03d5883b7a798106b3ec20c19959218dab52e4e010d80"
+          assert m["parent"]["status"] == "FROZEN"
+          assert m["release_hash"] == r["release_hash"]
+          assert r["reproducible"] is True
+          PY
+      - name: Network namespace zero-egress refusal check
+        run: |
+          unshare -rn python -m pytest -q tests/test_execution_firewall.py
+      - name: Full offline test suite
+        run: python -m pytest -q
