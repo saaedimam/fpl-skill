@@ -294,7 +294,8 @@ class ProbabilisticEPEngine:
             return "high"
         if i.status == PlayerState.DOUBTFUL:
             return "low"
-        if float(i.chance_of_playing_next_round or 100.0) < 50.0:
+        chance = 100.0 if i.chance_of_playing_next_round is None else float(i.chance_of_playing_next_round)
+        if chance < 50.0:
             return "medium"
         if i.selected_by_percent > 50.0 and i.form > 5.0:
             return "high"

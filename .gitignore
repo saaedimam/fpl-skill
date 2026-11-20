@@ -63,3 +63,6 @@ htmlcov/
 
 # Approval signing keys must never be committed
 *.pem
+
+*.tmp
+*.bak
