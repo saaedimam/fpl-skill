@@ -136,3 +136,16 @@ def test_illegal_formation_and_zero_chance_are_unavailable():
     illegal_xi = [0,2,3,4,7,8,9,10,11,12,13]  # 2 DEF
     squad[0]["chance_of_playing_next_round"] = 100
     assert not validate_lineup(squad,illegal_xi,[1,5,6,14])
+
+
+@pytest.mark.parametrize(
+    "xi,bench",
+    [
+        ([2,3,4,5,7,8,9,10,11,12,13], [0,1,6,14]),  # 0 GK
+        ([0,2,3,7,8,9,10,11,12,13,14], [1,4,5,6]),  # 2 DEF
+        ([0,2,3,4,5,6,7,8,9,10,12], [1,11,13,14]), # 6 MID
+        ([0,2,3,4,5,6,7,8,9,10,11], [1,12,13,14]), # 0 FWD
+    ],
+)
+def test_rejects_each_illegal_xi_position_bound(xi, bench):
+    assert not validate_lineup(_squad(), xi, bench)
