@@ -202,7 +202,7 @@
     "tests/test_evidence_boundary.py": "d2ab0cafcbe9903ffbd95416eeba4b98f5626dd651f50a18b344b6d8ec43d59b",
     "tests/test_evidence_policy.py": "bf608e97ba5881f9d4fe3867494141cb2a83d2611bfa5d517bed272eb67a3f1e",
     "tests/test_execution_firewall.py": "82e6ef9a4ef5e2e17ce8f0462dd021d511d8fe8a4e7cb3deb70cc430c06ae39a",
-    "tests/test_execution_safety.py": "5c9a9e6169005042ff7873c781e88c5b2ea956e1707437fb68a923fcb4f146c2",
+    "tests/test_execution_safety.py": "bf2724dc6a5a8b90fb594efd70a990a2b4b778afa65dab790b262e5e917330de",
     "tests/test_expected_points_semantics.py": "79c92ec9fc235b43e924697d5a868819c6886746972f9444c5c2652b0ede1ca5",
     "tests/test_historical_data_layer.py": "75cbe3d20e4afe334a975fdbbe5d0ec54201c8295d378f9fd501a162e0a354e4",
     "tests/test_live_state_reconciler.py": "c166e4a76a6fdb47c13c551ae88ace2ec9f7a47205785604b24762567b7ff6be",
@@ -217,7 +217,7 @@
     "tests/test_release_gates.py": "69e1cbb2fd18d0134f472c66b8c1d73fd9a61efa5207ee484568941f6730111c",
     "tests/test_replay_gate.py": "5fc7ca0c2c44a9baaf5104c958c89d6df53025287ea345f882389948d2c9f1b3"
   },
-  "release_hash": "db1ce5bc1dc2ae2344fbe402734e4179df2f3a3ce780ee3b5fbe3e7bb6ac408d",
+  "release_hash": "4ae2260c7dcc0cf2dc58afa0d8fa22bfe2ca300bc2289cd1d71da1617bef8d42",
   "release_hash_algorithm": "SHA256 over sorted path:sha256\\n records",
   "freeze_updated": "2026-11-20T18:21:29+00:00",
   "freeze_updated_meaning": "UTC time the release-registry hashes were last regenerated. Not a source-snapshot date and not permission to transmit."
