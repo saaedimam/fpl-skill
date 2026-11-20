@@ -1,5 +1,6 @@
 """Deterministic championship objective, FPL bonus, and horizon contracts."""
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 
@@ -78,9 +79,14 @@ def evaluate_horizon(
             continue
         value = item.get("expected_points") if isinstance(item, Mapping) else item
         try:
-            values.append(float(value))
-        except (TypeError, ValueError):
+            numeric_value = float(value)
+        except (TypeError, ValueError, OverflowError):
             missing.append(gameweek)
+            continue
+        if not isfinite(numeric_value):
+            missing.append(gameweek)
+            continue
+        values.append(numeric_value)
     if missing:
         return HorizonEvaluation("INSUFFICIENT_DATA", required, None, tuple(sorted(set(missing))))
     return HorizonEvaluation("READY", required, sum(values), ())
