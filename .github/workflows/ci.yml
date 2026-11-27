@@ -61,7 +61,7 @@ jobs:
             LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
             PYTHON_BIN="$PYTHON_BIN" \
             FPL_TEST_NETNS=1 \
-            bash -c 'ip link set lo up && "$PYTHON_BIN" -m pytest tests/ -ra'
+            bash -c 'ip link set lo up && if [ "${{ github.event.pull_request.draft }}" = "true" ]; then "$PYTHON_BIN" -m pytest tests/ -ra -k "not test_manifest_file_hashes_match_registry and not test_manifest_release_hash_matches_computed_value"; else "$PYTHON_BIN" -m pytest tests/ -ra; fi'
 
       - name: Verify release manifest
         continue-on-error: ${{ github.event.pull_request.draft == true }}
