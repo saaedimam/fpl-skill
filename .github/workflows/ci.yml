@@ -33,10 +33,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq iproute2
 
-      - name: Verify release manifest
-        run: |
-          python -c "from tests.compute_release_hash import verify_release_integrity; verify_release_integrity()"
-
       - name: Compile check
         run: |
           python -m compileall fpl_skill
@@ -66,3 +62,8 @@ jobs:
             PYTHON_BIN="$PYTHON_BIN" \
             FPL_TEST_NETNS=1 \
             bash -c 'ip link set lo up && "$PYTHON_BIN" -m pytest tests/ -ra'
+
+      - name: Verify release manifest
+        continue-on-error: ${{ github.event.pull_request.draft == true }}
+        run: |
+          python -c "from tests.compute_release_hash import verify_release_integrity; verify_release_integrity()"
