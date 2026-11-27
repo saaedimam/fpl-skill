@@ -100,6 +100,17 @@ class PredictionEngine:
                 complete_event_ids=set(complete_gameweeks),
             )
 
+        if fixture_schedules is not None:
+            fixture_schedules = dict(fixture_schedules)
+            for team in teams:
+                team_id = team.get("id")
+                if team_id is None:
+                    continue
+                schedule = fixture_schedules.get((target_gw, int(team_id)))
+                if schedule is not None:
+                    for key in (team_id, team.get("name"), team.get("short_name")):
+                        if key is not None:
+                            fixture_schedules[(target_gw, key)] = schedule
         self.fixture_schedules = fixture_schedules
         fixture_schedule_status = {}
         for team_key in blank:
