@@ -82,7 +82,7 @@ class TestCaptainBacktest:
         bt = self._make_backtest(monkeypatch)
         # Patch select_best_legal_xi to return known captain
         import fpl_skill.backtest as bmod
-        monkeypatch.setattr(bmod, "select_best_legal_xi", lambda squad, gw, fm: {
+        monkeypatch.setattr(bmod, "select_best_legal_xi", lambda squad, gw, fm, **kwargs: {
             "captain": {"player_id": 13, "web_name": "Player13", "position": "FWD"},
             "vice_captain": {"player_id": 8, "web_name": "Player8", "position": "MID"},
             "bench": [],
@@ -105,7 +105,7 @@ class TestCaptainBacktest:
             "vice_captain": {"player_id": 8, "web_name": "Player8", "position": "MID"},
             "bench": [], "formation": "4-4-2",
         })
-        monkeypatch.setattr(bmod, "calculate_player_gw_ep", lambda p, gw, fm: 8.0)
+        monkeypatch.setattr(bmod, "calculate_player_gw_ep", lambda p, gw, fm, *args, **kwargs: 8.0)
         bt.record_decision(gw=1, squad_ids=list(range(1, 16)))
         actuals = {1: {13: 12.0, 8: 8.0, 14: 6.0}}
         result = bt.compute_backtest(actuals)
