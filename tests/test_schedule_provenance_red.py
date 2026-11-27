@@ -83,3 +83,43 @@ def test_optimizer_load_rejects_one_missing_team_even_when_aggregate_ep_is_nonze
     )
     with pytest.raises(_err(), match="INSUFFICIENT_DATA|schedule|fixture"):
         optimizer.load(horizon=[10])
+
+
+@pytest.mark.parametrize("status", [
+    "FIXTURE_NOT_PUBLISHED", "FIXTURE_MISSING", "POSTPONED", "UNKNOWN",
+    "CONFLICTED", "INCOMPLETE", "UNASSIGNED",
+])
+def test_unverified_schedule_classifications_never_become_blank(status):
+    from fpl_skill.current_data import require_team_event_schedule
+
+    fm = {"__schedule_provenance__": {(10, 99): {
+        "status": status, "event": 10, "team": 99,
+        "endpoint": "/api/fixtures/", "retrieved_at": "2026-11-20T12:00:00Z",
+        "payload_hash": "a" * 64,
+    }}}
+    with pytest.raises(_err(), match="INSUFFICIENT_DATA"):
+        require_team_event_schedule(fm, 99, 10)
+
+
+def test_verified_authoritative_blank_returns_zero_ep():
+    from fpl_skill.api import calculate_player_gw_ep
+
+    fm = {"__schedule_provenance__": {(10, 99): {
+        "status": "BLANK", "event": 10, "team": 99,
+        "endpoint": "/api/fixtures/", "retrieved_at": "2026-11-20T12:00:00+00:00",
+        "payload_hash": "a" * 64,
+    }}}
+    player = {"player_id": 9999, "team": 99, "position": "MID"}
+    assert calculate_player_gw_ep(player, 10, fm) == 0.0
+
+
+def test_optimizer_gw_distribution_rejects_absent_team_schedule():
+    from fpl_skill import optimizer
+    from fpl_skill.probabilistic_ep1 import ProbabilisticEPEngine
+
+    with pytest.raises(_err(), match="INSUFFICIENT_DATA"):
+        optimizer._gw_distribution(
+            {"player_id": 9999, "team": 99, "position": "MID"},
+            10, {10: {1: [{"opp": 2, "is_home": True, "fdr": 3}]}},
+            ProbabilisticEPEngine(),
+        )
