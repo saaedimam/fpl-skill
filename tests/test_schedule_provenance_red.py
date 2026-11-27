@@ -1,6 +1,19 @@
 """Unsealed development regressions for shared schedule provenance."""
+import importlib.util
+import sys
+from pathlib import Path
+
 import pytest
-from test_release_gates import SAMPLE, _all, _err, _fm, _squad
+
+_spec = importlib.util.spec_from_file_location(
+    "test_release_gates", Path(__file__).with_name("test_release_gates.py")
+)
+_helpers = importlib.util.module_from_spec(_spec)
+sys.modules.setdefault("test_release_gates", _helpers)
+_spec.loader.exec_module(_helpers)
+SAMPLE, _all, _err, _fm, _squad = (
+    _helpers.SAMPLE, _helpers._all, _helpers._err, _helpers._fm, _helpers._squad
+)
 
 # --- shared schedule provenance red regressions ----------------------------
 
