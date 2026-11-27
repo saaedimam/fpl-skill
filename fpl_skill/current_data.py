@@ -200,7 +200,7 @@ def build_fixture_schedules(
                 team_id=team_id,
                 fixtures=tuple(rows_by_event_team.get((event_id, team_id), ())),
                 published=event_id in published_event_ids,
-                complete=(event_id in complete_event_ids and event_id in events_with_fixture_rows),
+                complete=(event_id in complete_event_ids),
                 retrieval=retrieval,
                 source=snapshot.source,
                 conflicted=team_id in unassigned_event_teams,
