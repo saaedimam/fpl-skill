@@ -281,10 +281,40 @@ def assert_projections_valid(projections: Mapping[Any, Any], context: str = "pla
 
 
 def require_team_event_schedule(
-    fixture_map: Mapping[Any, Any], team_id: Any, event_id: int
+    fixture_map: Mapping[Any, Any], team_id: Any, event_id: int,
+    fixture_schedules: Optional[Mapping[Any, Any]] = None,
 ) -> str:
-    """Validate a team's event schedule; absence alone never proves a blank."""
+    """Validate a team's event schedule; absence alone never proves a blank.
+
+    Verified FixtureSchedule evidence is authoritative for the (event, team)
+    pair. Legacy provenance mappings remain supported for compatibility.
+    """
     event_id = int(event_id)
+    schedule = None
+    if isinstance(fixture_schedules, Mapping):
+        schedule = fixture_schedules.get((event_id, int(team_id))) if str(team_id).isdigit() else fixture_schedules.get((event_id, team_id))
+        if schedule is None:
+            schedule = fixture_schedules.get(team_id)
+    if schedule is not None:
+        from datetime import timedelta
+        from fpl_skill.live_state import FixtureSchedule, FixtureStatus, classify_fixture_schedule
+        if not isinstance(schedule, FixtureSchedule):
+            raise CurrentDataError("INSUFFICIENT_DATA: schedule evidence is not a verified FixtureSchedule.")
+        record = schedule.retrieval
+        if (schedule.event_id != event_id or str(schedule.team_id) != str(team_id)
+                or record.event_id != event_id or str(record.team_id) != str(team_id)
+                or record.endpoint != "/api/fixtures/" or record.source != "official-fpl"
+                or schedule.source not in (None, "official-fpl")
+                or record.retrieved_at is None or record.retrieved_at.tzinfo is None
+                or record.retrieved_at.utcoffset() != timedelta(0)
+                or not record.payload or len(record.payload_hash) != 64):
+            raise CurrentDataError("INSUFFICIENT_DATA: FixtureSchedule provenance is incomplete or mismatched.")
+        status = classify_fixture_schedule(schedule)
+        if status is FixtureStatus.BLANK:
+            return "BLANK"
+        if status is FixtureStatus.UNKNOWN and bool(schedule.fixtures):
+            return "PLAYING"
+        raise CurrentDataError(f"INSUFFICIENT_DATA: schedule classified {status.value}.")
     event_map = fixture_map.get(event_id, {})
     fixtures = event_map.get(team_id) if isinstance(event_map, Mapping) else None
     if isinstance(fixtures, Mapping):
