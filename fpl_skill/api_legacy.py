@@ -195,6 +195,27 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
         status = _current_data.require_team_event_schedule(fixture_map, team, gw, fixture_schedules)
         if status == "BLANK":
             return 0.0
+        schedule = None
+        if isinstance(fixture_schedules, dict):
+            try:
+                team_key = int(team)
+            except (TypeError, ValueError):
+                team_key = team
+            schedule = fixture_schedules.get((int(gw), team_key) if isinstance(team_key, int) else (int(gw), team))
+            if schedule is None:
+                schedule = fixture_schedules.get(team_key)
+        if schedule is None or not getattr(schedule, "fixtures", None):
+            raise CurrentDataError("INSUFFICIENT_DATA: verified playing schedule has no usable fixture rows.")
+        fixtures = []
+        for raw in schedule.fixtures:
+            home, away = raw.get("team_h"), raw.get("team_a")
+            if home is None or away is None:
+                raise CurrentDataError("INSUFFICIENT_DATA: playing schedule fixture row is incomplete.")
+            is_home = str(home) == str(schedule.team_id)
+            if not is_home and str(away) != str(schedule.team_id):
+                raise CurrentDataError("INSUFFICIENT_DATA: fixture row does not match scheduled team.")
+            fixtures.append({"opp": away if is_home else home, "is_home": is_home,
+                            "fdr": raw.get("team_h_difficulty" if is_home else "team_a_difficulty", 3)})
 
     pos = player.get("position", "MID")
     mins = player.get("minutes", 0)
