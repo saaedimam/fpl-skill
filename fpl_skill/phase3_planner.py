@@ -68,6 +68,7 @@ def plan_multi_gw_scenarios(
     allow_hit: bool = False,
     hit_cost_points: float = 4.0,
     roll_option_value_points: float = 1.5,
+    fixture_schedules=None,
 ) -> Dict[str, Any]:
     """Compare hold/roll against best legal one-transfer scenario over up to 8 GWs.
 
@@ -88,11 +89,11 @@ def plan_multi_gw_scenarios(
     budget_squad = _selling_price_squad(current, official_picks)
     bank_m = bank_tenths / 10.0
 
-    baseline = evaluate_squad_multi_gw(current, horizon, fixture_map)
+    baseline = evaluate_squad_multi_gw(current, horizon, fixture_map, fixture_schedules=fixture_schedules)
     baseline_points = float(baseline["total_ep"])
     best = find_best_one_ft(
         budget_squad, [dict(p) for p in all_players], bank=bank_m,
-        fixture_map=fixture_map, gameweeks=horizon, events=events,
+        fixture_map=fixture_map, gameweeks=horizon, events=events, fixture_schedules=fixture_schedules,
     )
     if not best.get("player_out") or not best.get("player_in"):
         scenarios = {"HOLD": baseline_points}
@@ -107,7 +108,7 @@ def plan_multi_gw_scenarios(
             "chip_scenarios": "NOT_EVALUATED",
         }
 
-    transfer_eval = evaluate_squad_multi_gw(best["squad"], horizon, fixture_map)
+    transfer_eval = evaluate_squad_multi_gw(best["squad"], horizon, fixture_map, fixture_schedules=fixture_schedules)
     transfer_points = float(transfer_eval["total_ep"])
     ep_gain = transfer_points - baseline_points
     hit_cost = 0.0
