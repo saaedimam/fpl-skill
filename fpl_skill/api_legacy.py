@@ -170,7 +170,7 @@ def build_fixture_map(fixtures: Any, teams: Optional[List[Dict[str, Any]]] = Non
 # Phase 3: Player Expected Points & Intelligence
 # ---------------------------------------------------------------------------
 
-def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optional[Dict[int, Dict[str, Any]]] = None) -> float:
+def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optional[Dict[int, Dict[str, Any]]] = None, fixture_schedules=None) -> float:
     """Compute expected points for a player in a given gameweek.
 
     Handles:
@@ -192,7 +192,30 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     if isinstance(fixtures, dict):
         fixtures = [fixtures]
     elif not fixtures:
-        return 0.0  # BGW or unknown team — correct: 0 EP
+        status = _current_data.require_team_event_schedule(fixture_map, team, gw, fixture_schedules)
+        if status == "BLANK":
+            return 0.0
+        schedule = None
+        if isinstance(fixture_schedules, dict):
+            try:
+                team_key = int(team)
+            except (TypeError, ValueError):
+                team_key = team
+            schedule = fixture_schedules.get((int(gw), team_key) if isinstance(team_key, int) else (int(gw), team))
+            if schedule is None:
+                schedule = fixture_schedules.get(team_key)
+        if schedule is None or not getattr(schedule, "fixtures", None):
+            raise CurrentDataError("INSUFFICIENT_DATA: verified playing schedule has no usable fixture rows.")
+        fixtures = []
+        for raw in schedule.fixtures:
+            home, away = raw.get("team_h"), raw.get("team_a")
+            if home is None or away is None:
+                raise CurrentDataError("INSUFFICIENT_DATA: playing schedule fixture row is incomplete.")
+            is_home = str(home) == str(schedule.team_id)
+            if not is_home and str(away) != str(schedule.team_id):
+                raise CurrentDataError("INSUFFICIENT_DATA: fixture row does not match scheduled team.")
+            fixtures.append({"opp": away if is_home else home, "is_home": is_home,
+                            "fdr": raw.get("team_h_difficulty" if is_home else "team_a_difficulty", 3)})
 
     pos = player.get("position", "MID")
     mins = player.get("minutes", 0)
@@ -347,7 +370,7 @@ def validate_formation(xi: List[Dict[str, Any]]) -> Tuple[bool, str]:
 
 
 def select_best_legal_xi(squad_15: List[Dict[str, Any]], gw: int, fixture_map: Optional[Dict[int, Dict[str, Any]]] = None,
-         hard_xi_locks: Optional[List[int]] = None) -> Dict[str, Any]:
+         hard_xi_locks: Optional[List[int]] = None, fixture_schedules=None) -> Dict[str, Any]:
     """
     Enumerate all 7 legal FPL formations, select best players for each,
     apply attacking captain multiplier (MID/FWD only), and choose optimal legal XI.
@@ -370,7 +393,7 @@ def select_best_legal_xi(squad_15: List[Dict[str, Any]], gw: int, fixture_map: O
     squad_by_pos = {"GKP": [], "DEF": [], "MID": [], "FWD": []}
     for p in squad_15:
         p_copy = dict(p)
-        p_copy["gw_ep"] = calculate_player_gw_ep(p, gw, fixture_map)
+        p_copy["gw_ep"] = calculate_player_gw_ep(p, gw, fixture_map, fixture_schedules)
         pos = p_copy.get("position")
         if pos in squad_by_pos:
             squad_by_pos[pos].append(p_copy)
@@ -452,7 +475,7 @@ def select_best_legal_xi(squad_15: List[Dict[str, Any]], gw: int, fixture_map: O
     bench_copies = []
     for p in bench_raw:
         c = dict(p)
-        c["gw_ep"] = calculate_player_gw_ep(p, gw, fixture_map)
+        c["gw_ep"] = calculate_player_gw_ep(p, gw, fixture_map, fixture_schedules)
         bench_copies.append(c)
     bench_outfield = [p for p in bench_copies if p["position"] != "GKP"]
     bench_gkp = [p for p in bench_copies if p["position"] == "GKP"]
@@ -474,7 +497,7 @@ def select_best_legal_xi(squad_15: List[Dict[str, Any]], gw: int, fixture_map: O
 
 def evaluate_squad_multi_gw(squad_15: List[Dict[str, Any]], gws: List[int], fixture_map: Optional[Dict[int, Dict[str, Any]]] = None,
                           hard_xi_locks: Optional[List[int]] = None,
-                          hard_xi_locks_gw: Optional[int] = 3) -> Dict[str, Any]:
+                          hard_xi_locks_gw: Optional[int] = 3, fixture_schedules=None) -> Dict[str, Any]:
     """
     Evaluate 15-man squad across multiple gameweeks.
     If hard_xi_locks is non-empty, it applies ONLY to GW `hard_xi_locks_gw` (default GW 3),
@@ -485,7 +508,7 @@ def evaluate_squad_multi_gw(squad_15: List[Dict[str, Any]], gws: List[int], fixt
     total_ep = 0.0
     for gw in gws:
         locks_for_gw = hard_xi_locks if (hard_xi_locks and gw == hard_xi_locks_gw) else None
-        res = select_best_legal_xi(squad_15, gw, fixture_map, locks_for_gw)
+        res = select_best_legal_xi(squad_15, gw, fixture_map, locks_for_gw, fixture_schedules)
         gw_results[gw] = res
         total_ep += res["total_ep"]
 
@@ -611,6 +634,7 @@ def find_best_one_ft(
     fixture_map: Optional[Dict[int, Dict[str, Any]]] = None,
     gameweeks: Optional[List[int]] = None,
     events: Optional[Any] = None,
+    fixture_schedules=None,
 ) -> Dict[str, Any]:
     """
     Find best legal 1 Free Transfer move maximizing projected points over the
@@ -622,7 +646,7 @@ def find_best_one_ft(
     short = gws[:2]
     _current_data.assert_gameweeks_have_fixtures(fixture_map or {}, gws)
     assert_projections_valid(
-        {p.get("player_id"): sum(calculate_player_gw_ep(p, g, fixture_map) for g in gws) for p in current_squad},
+        {p.get("player_id"): sum(calculate_player_gw_ep(p, g, fixture_map, fixture_schedules) for g in gws) for p in current_squad},
         context=f"1-FT search over GW{gws}",
     )
     best_move = None
@@ -649,10 +673,10 @@ def find_best_one_ft(
             if any(v > 3 for v in tc.values()):
                 continue
 
-            res_full = evaluate_squad_multi_gw(new_squad, gws, fixture_map)
+            res_full = evaluate_squad_multi_gw(new_squad, gws, fixture_map, fixture_schedules=fixture_schedules)
             if res_full["total_ep"] > best_full_ep:
                 best_full_ep = res_full["total_ep"]
-                best_short_ep = evaluate_squad_multi_gw(new_squad, short, fixture_map)["total_ep"]
+                best_short_ep = evaluate_squad_multi_gw(new_squad, short, fixture_map, fixture_schedules=fixture_schedules)["total_ep"]
                 best_move = (p_out, p_in)
                 best_squad = new_squad
 
@@ -751,6 +775,7 @@ def optimize_wildcard_squad(
     hard_locks: Optional[List[int]] = None,
     gameweeks: Optional[List[int]] = None,
     events: Optional[Any] = None,
+    fixture_schedules=None,
 ) -> Dict[str, Any]:
     """
     Search for a legal 15-player Wildcard squad with high xPts over a 4-GW horizon
@@ -767,7 +792,7 @@ def optimize_wildcard_squad(
         raise CurrentDataError(f"Wildcard search needs a 4-gameweek horizon, got {gws}.")
 
     for p in all_players:
-        p["ep_gw"] = [calculate_player_gw_ep(p, gw, fixture_map) for gw in gws]
+        p["ep_gw"] = [calculate_player_gw_ep(p, gw, fixture_map, fixture_schedules) for gw in gws]
         p["ep_3_6"] = sum(p["ep_gw"])
         p["cost_int"] = p.get("now_cost") or int(p.get("cost_m", 5.0) * 10)
 
@@ -880,8 +905,8 @@ def optimize_wildcard_squad(
     if not best_squad:
         raise RuntimeError("Failed to optimize Wildcard squad within constraints")
 
-    res_3_4 = evaluate_squad_multi_gw(best_squad, gws[:2], fixture_map, hard_locks if hard_locks else None)
-    res_3_6 = evaluate_squad_multi_gw(best_squad, gws, fixture_map, hard_locks if hard_locks else None)
+    res_3_4 = evaluate_squad_multi_gw(best_squad, gws[:2], fixture_map, hard_locks if hard_locks else None, fixture_schedules=fixture_schedules)
+    res_3_6 = evaluate_squad_multi_gw(best_squad, gws, fixture_map, hard_locks if hard_locks else None, fixture_schedules=fixture_schedules)
     total_cost = sum(p.get("cost_m", 5.0) for p in best_squad)
 
     return {

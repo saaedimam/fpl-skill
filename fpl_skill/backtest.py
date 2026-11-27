@@ -113,7 +113,8 @@ class CaptainBacktest:
         if not squad:
             raise ValueError(f"No squad players found for IDs: {squad_ids}")
 
-        xi_res = select_best_legal_xi(squad, gw, self.fixture_map)
+        fixture_schedules = getattr(self, "fixture_schedules", None)
+        xi_res = select_best_legal_xi(squad, gw, self.fixture_map, fixture_schedules=fixture_schedules)
         captain = xi_res.get("captain", {})
         vice = xi_res.get("vice_captain", {})
 
@@ -124,9 +125,9 @@ class CaptainBacktest:
         cap_player = self.elements.get(captain.get("player_id", 0))
         vice_player = self.elements.get(vice.get("player_id", 0))
         if cap_player:
-            cap_ep = calculate_player_gw_ep(cap_player, gw, self.fixture_map)
+            cap_ep = calculate_player_gw_ep(cap_player, gw, self.fixture_map, fixture_schedules)
         if vice_player:
-            vice_ep = calculate_player_gw_ep(vice_player, gw, self.fixture_map)
+            vice_ep = calculate_player_gw_ep(vice_player, gw, self.fixture_map, fixture_schedules)
 
         decision = CaptainDecision(
             gw=gw,

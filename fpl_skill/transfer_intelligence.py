@@ -58,14 +58,15 @@ class TransferIntelligence:
         squad = [self.elements[pid] for pid in owned_ids if pid in self.elements]
 
         all_players = list(self.elements.values())
+        fixture_schedules = getattr(self.engine, "fixture_schedules", None)
         best = find_best_one_ft(squad, all_players, bank=bank, fixture_map=self.engine.fixture_map,
-                                gameweeks=horizon, events=events)
+                                gameweeks=horizon, events=events, fixture_schedules=fixture_schedules)
 
         if not best.get("player_out") or not best.get("player_in"):
             return {"status": "READY", "suggestions": [], "recommendation": "HOLD"}
 
         # Compute multi-GW baseline expected points for the current squad
-        baseline_eval = evaluate_squad_multi_gw(squad, horizon, self.engine.fixture_map)
+        baseline_eval = evaluate_squad_multi_gw(squad, horizon, self.engine.fixture_map, fixture_schedules=fixture_schedules)
         baseline_ep = round(baseline_eval["total_ep"], 2)
         total_ep = round(best["horizon_ep"], 2)
         ep_gain = round(total_ep - baseline_ep, 2)

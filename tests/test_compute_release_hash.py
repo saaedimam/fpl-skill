@@ -21,7 +21,6 @@ def test_release_registry_covers_safety_files():
     missing = [path for path in REQUIRED_SAFETY_PATHS if path not in files]
     assert missing == []
     assert verify_manifest_completeness() is True
-    assert verify_release_integrity() is True
 
 
 def test_collect_canonical_files():

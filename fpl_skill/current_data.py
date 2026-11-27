@@ -200,7 +200,7 @@ def build_fixture_schedules(
                 team_id=team_id,
                 fixtures=tuple(rows_by_event_team.get((event_id, team_id), ())),
                 published=event_id in published_event_ids,
-                complete=(event_id in complete_event_ids and event_id in events_with_fixture_rows),
+                complete=(event_id in complete_event_ids),
                 retrieval=retrieval,
                 source=snapshot.source,
                 conflicted=team_id in unassigned_event_teams,
@@ -278,3 +278,72 @@ def assert_projections_valid(projections: Mapping[Any, Any], context: str = "pla
         raise CurrentDataError(
             f"All {len(vals)} player projections are zero for {context}; fixtures or player data are missing."
         )
+
+
+def require_team_event_schedule(
+    fixture_map: Mapping[Any, Any], team_id: Any, event_id: int,
+    fixture_schedules: Optional[Mapping[Any, Any]] = None,
+) -> str:
+    """Validate a team's event schedule; absence alone never proves a blank.
+
+    Verified FixtureSchedule evidence is authoritative for the (event, team)
+    pair. Legacy provenance mappings remain supported for compatibility.
+    """
+    event_id = int(event_id)
+    schedule = None
+    if isinstance(fixture_schedules, Mapping):
+        schedule = fixture_schedules.get((event_id, int(team_id))) if str(team_id).isdigit() else fixture_schedules.get((event_id, team_id))
+        if schedule is None:
+            schedule = fixture_schedules.get(team_id)
+    if schedule is not None:
+        from datetime import timedelta
+        from fpl_skill.live_state import FixtureSchedule, FixtureStatus, classify_fixture_schedule
+        if not isinstance(schedule, FixtureSchedule):
+            raise CurrentDataError("INSUFFICIENT_DATA: schedule evidence is not a verified FixtureSchedule.")
+        record = schedule.retrieval
+        if (schedule.event_id != event_id or str(schedule.team_id) != str(team_id)
+                or record.event_id != event_id or str(record.team_id) != str(team_id)
+                or record.endpoint != "/api/fixtures/" or record.source != "official-fpl"
+                or schedule.source not in (None, "official-fpl")
+                or record.retrieved_at is None or record.retrieved_at.tzinfo is None
+                or record.retrieved_at.utcoffset() != timedelta(0)
+                or not record.payload or len(record.payload_hash) != 64):
+            raise CurrentDataError("INSUFFICIENT_DATA: FixtureSchedule provenance is incomplete or mismatched.")
+        status = classify_fixture_schedule(schedule)
+        if status is FixtureStatus.BLANK:
+            return "BLANK"
+        if status is FixtureStatus.UNKNOWN and bool(schedule.fixtures):
+            return "PLAYING"
+        raise CurrentDataError(f"INSUFFICIENT_DATA: schedule classified {status.value}.")
+    event_map = fixture_map.get(event_id, {})
+    fixtures = event_map.get(team_id) if isinstance(event_map, Mapping) else None
+    if isinstance(fixtures, Mapping):
+        fixtures = [fixtures]
+    if fixtures:
+        return "PLAYING"
+    evidence_map = fixture_map.get("__schedule_provenance__", {})
+    evidence = evidence_map.get((event_id, team_id)) if isinstance(evidence_map, Mapping) else None
+    if not isinstance(evidence, Mapping) or evidence.get("status") != "BLANK":
+        raise CurrentDataError(
+            f"INSUFFICIENT_DATA: no verified team schedule for event {event_id}, team {team_id}; "
+            "an absent fixture mapping cannot establish BLANK."
+        )
+    required = ("event", "team", "endpoint", "retrieved_at", "payload_hash")
+    missing = [key for key in required if evidence.get(key) in (None, "")]
+    if missing:
+        raise CurrentDataError(f"INSUFFICIENT_DATA: BLANK schedule provenance missing {missing}.")
+    if int(evidence["event"]) != event_id or str(evidence["team"]) != str(team_id):
+        raise CurrentDataError("INSUFFICIENT_DATA: BLANK schedule provenance event/team mismatch.")
+    if evidence["endpoint"] != "/api/fixtures/":
+        raise CurrentDataError("INSUFFICIENT_DATA: BLANK schedule provenance endpoint mismatch.")
+    from datetime import datetime
+    try:
+        retrieved = datetime.fromisoformat(str(evidence["retrieved_at"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CurrentDataError("INSUFFICIENT_DATA: invalid BLANK retrieval timestamp.") from exc
+    if retrieved.tzinfo is None or retrieved.utcoffset() is None:
+        raise CurrentDataError("INSUFFICIENT_DATA: BLANK retrieval timestamp must be timezone-aware.")
+    import re
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", str(evidence["payload_hash"])):
+        raise CurrentDataError("INSUFFICIENT_DATA: BLANK payload_hash must be SHA-256.")
+    return "BLANK"
