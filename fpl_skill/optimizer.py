@@ -27,11 +27,11 @@ def _distribution_for_fixture(player,gw,fix,engine,idx=0):
     )
     return engine.generate_distribution(inp)
 
-def _gw_distribution(player,gw,fm,engine):
+def _gw_distribution(player,gw,fm,engine,fixture_schedules=None):
     fixtures=_fixtures_for(fm,player.get("team",""),gw)
     if not fixtures:
         from .current_data import require_team_event_schedule
-        if require_team_event_schedule(fm, player.get("team", ""), gw) == "BLANK":
+        if require_team_event_schedule(fm, player.get("team", ""), gw, fixture_schedules) == "BLANK":
             return {"mean":0.0,"p10":0.0,"p25":0.0,"p50":0.0,"p75":0.0,"p90":0.0,"variance":0.0,"p_haul":0.0,"p_zero":1.0,"fixtures":0}
     ds=[_distribution_for_fixture(player,gw,f,engine,i) for i,f in enumerate(fixtures)]
     return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
@@ -43,7 +43,7 @@ def _live_events():
         raise CurrentDataError("Could not load live bootstrap events to resolve/validate the planning horizon.")
     return boot["events"]
 
-def load(horizon=None, allow_past: bool=False):
+def load(horizon=None, allow_past: bool=False, fixture_schedules=None):
     """Load players/projections for a planning horizon.
 
     Current-data gate: ``horizon=None`` derives the window from live bootstrap
@@ -64,8 +64,8 @@ def load(horizon=None, allow_past: bool=False):
         pid=int(p["player_id"]); p["cost_int"]=p.get("now_cost") or 0; ep[pid]={}; p["_distribution_diagnostics"]={}
         for gw in gws:
             from .current_data import require_team_event_schedule
-            require_team_event_schedule(fm, p.get("team", ""), gw)
-            diag=_gw_distribution(p,gw,fm,engine); ep[pid][gw]=diag["mean"]; p["_distribution_diagnostics"][gw]=diag
+            require_team_event_schedule(fm, p.get("team", ""), gw, fixture_schedules)
+            diag=_gw_distribution(p,gw,fm,engine,fixture_schedules); ep[pid][gw]=diag["mean"]; p["_distribution_diagnostics"][gw]=diag
     assert_projections_valid({pid:sum(v.values()) for pid,v in ep.items()},context=f"optimizer horizon GW{gws}")
     data_repr=[{"id":p["player_id"],"name":p.get("web_name"),"team":p.get("team"),"pos":p.get("position"),"cost":p.get("cost_int"),"ep_mean":round(sum(ep[p["player_id"]][g] for g in gws),6)} for p in sorted(players,key=lambda x:x["player_id"])]
     data_hash=hashlib.sha256(json.dumps(data_repr,sort_keys=True,separators=(",",":")).encode()).hexdigest()[:16]
