@@ -100,6 +100,7 @@ class PredictionEngine:
                 complete_event_ids=set(complete_gameweeks),
             )
 
+        self.fixture_schedules = fixture_schedules
         fixture_schedule_status = {}
         for team_key in blank:
             team_id = team_ids.get(team_key)
@@ -130,10 +131,10 @@ class PredictionEngine:
                 )
 
         assert_projections_valid(
-            {p["player_id"]: calculate_player_gw_ep(p, target_gw, self.fixture_map) for p in normalized_squad},
+            {p["player_id"]: calculate_player_gw_ep(p, target_gw, self.fixture_map, fixture_schedules) for p in normalized_squad},
             context=f"GW{target_gw} prediction",
         )
-        xi_res = select_best_legal_xi(normalized_squad, target_gw, self.fixture_map)
+        xi_res = select_best_legal_xi(normalized_squad, target_gw, self.fixture_map, fixture_schedules=fixture_schedules)
         xi_players = [
             {"id": p.get("player_id", p.get("id")), "name": p.get("web_name"), "ep": p.get("gw_ep", 0.0), "position": p.get("position")}
             for p in xi_res["starting_xi"]
