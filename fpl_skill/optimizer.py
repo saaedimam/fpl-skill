@@ -31,8 +31,24 @@ def _gw_distribution(player,gw,fm,engine,fixture_schedules=None):
     fixtures=_fixtures_for(fm,player.get("team",""),gw)
     if not fixtures:
         from .current_data import require_team_event_schedule
-        if require_team_event_schedule(fm, player.get("team", ""), gw, fixture_schedules) == "BLANK":
+        status = require_team_event_schedule(fm, player.get("team", ""), gw, fixture_schedules)
+        if status == "BLANK":
             return {"mean":0.0,"p10":0.0,"p25":0.0,"p50":0.0,"p75":0.0,"p90":0.0,"variance":0.0,"p_haul":0.0,"p_zero":1.0,"fixtures":0}
+        schedule = None
+        if isinstance(fixture_schedules, dict):
+            schedule = fixture_schedules.get((gw, int(player.get("team", 0)))) or fixture_schedules.get(int(player.get("team", 0)))
+        if schedule is not None:
+            for raw in schedule.fixtures:
+                home, away = raw.get("team_h"), raw.get("team_a")
+                if home is None or away is None:
+                    raise CurrentDataError("INSUFFICIENT_DATA: verified playing schedule has incomplete fixture rows.")
+                is_home = str(home) == str(schedule.team_id)
+                if not is_home and str(away) != str(schedule.team_id):
+                    raise CurrentDataError("INSUFFICIENT_DATA: fixture row does not match scheduled team.")
+                fixtures.append({"opp": away if is_home else home, "is_home": is_home,
+                                "fdr": raw.get("team_h_difficulty" if is_home else "team_a_difficulty", 3)})
+        if not fixtures:
+            raise CurrentDataError("INSUFFICIENT_DATA: playing schedule has no usable fixture projection rows.")
     ds=[_distribution_for_fixture(player,gw,f,engine,i) for i,f in enumerate(fixtures)]
     return {"mean":round(sum(d.mean for d in ds),6),"p10":round(sum(d.p10 for d in ds),6),"p25":round(sum(d.p25 for d in ds),6),"p50":round(sum(d.p50 for d in ds),6),"p75":round(sum(d.p75 for d in ds),6),"p90":round(sum(d.p90 for d in ds),6),"variance":round(sum(d.variance for d in ds),6),"p_haul":round(max(d.p_haul for d in ds),6),"p_zero":round(min(d.p_zero for d in ds),6),"fixtures":len(ds)}
 
