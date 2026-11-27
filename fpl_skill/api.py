@@ -11,7 +11,9 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     fm = fixture_map if fixture_map is not None else player.get("fixture_map", {})
     fixtures = fm.get(gw, {}).get(player.get("team"), [])
     if isinstance(fixtures, dict): fixtures = [fixtures]
-    if not fixtures: return 0.0
+    if not fixtures:
+        from .current_data import require_team_event_schedule
+        if require_team_event_schedule(fm, player.get("team"), gw) == "BLANK": return 0.0
     engine = ProbabilisticEPEngine()
     rates = normalize_player_rates(player)
     total = 0.0

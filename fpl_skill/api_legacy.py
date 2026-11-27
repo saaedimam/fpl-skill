@@ -192,7 +192,9 @@ def calculate_player_gw_ep(player: Dict[str, Any], gw: int, fixture_map: Optiona
     if isinstance(fixtures, dict):
         fixtures = [fixtures]
     elif not fixtures:
-        return 0.0  # BGW or unknown team — correct: 0 EP
+        status = _current_data.require_team_event_schedule(fixture_map, team, gw)
+        if status == "BLANK":
+            return 0.0
 
     pos = player.get("position", "MID")
     mins = player.get("minutes", 0)
